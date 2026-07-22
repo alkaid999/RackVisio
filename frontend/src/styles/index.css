@@ -187,10 +187,6 @@
   user-select: none;
   transform: translateY(-4px);
 }
-.three-label.is-rack {
-  color: #f8fafc;
-  font-size: 9px;
-}
 .three-label.is-aisle {
   color: #5eead4;
   font-size: 8.5px;
@@ -243,6 +239,21 @@
   font-weight: 500;
   color: #cbd5e1;
   max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.25;
+}
+/* 机柜名称标签：复用书签卡片风格（毛玻璃 + 3px 状态色左边框 + 圆角），仅显示机柜名 */
+.three-label.is-bookmark.is-rack-label {
+  padding: 4px 12px 4px 9px;
+}
+.three-label.is-bookmark.is-rack-label .rack-name {
+  font-size: 10px;
+  font-weight: 700;
+  color: #f8fafc;
+  letter-spacing: 0.02em;
+  max-width: 160px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

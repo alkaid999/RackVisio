@@ -1,7 +1,7 @@
 // 共享的 Three.js 引擎与工具函数。
 // 本文件为「机房3D总览 / 机柜3D详情」两个视图共用的底层：
 //   · createEngine  —— 创建渲染器 / 场景 / 相机 / 控制器 / 灯光 / 环境反射 / 标签层 / 自适应 / 释放
-//   · makeLabel     —— 创建 CSS2D 文字标签（机柜编号 / 设备名）
+//   · makeRackLabel —— 机房总览机柜名称标签（与书签同款卡片风格）
 //   · makeCanvasTexture —— 程序化 Canvas 贴图（地面瓷砖 / 穿孔板 / 导轨孔）
 //
 // 视图层只依赖这三个导出，不关心 WebGL 细节。
@@ -29,15 +29,23 @@ export function makeCanvasTexture(draw, w = 256, h = 256, repeat) {
   return tex
 }
 
-// —— CSS2D 文字标签 ——
-// 返回可直接 add 到 Object3D 的标签对象；样式由 .three-label(.is-rack|.is-device) 控制。
-export function makeLabel(text, className = '') {
+// —— 机柜名称标签（机房 3D 总览）——
+// 与设备书签同款卡片风格（毛玻璃背景 + 3px 彩色左边框 + 圆角），仅显示机柜名称，
+// 作为机柜在总览场景中的标识。CSS2DObject 天然始终正对相机、且位于 canvas 之上的
+// 独立 DOM 层（不被 3D 几何遮挡），满足「随视角自适应、不被遮挡」的需求。
+//   name            — 机柜名称
+//   opts.accentColor — 强调色（建议传入机柜状态色），驱动左边框与卡片色调
+export function makeRackLabel(name, opts = {}) {
+  const accent = opts.accentColor || '#38bdf8'
   const div = document.createElement('div')
-  div.className = 'three-label ' + (className || '')
-  div.textContent = text
+  div.className = 'three-label is-bookmark is-rack-label'
+  div.style.setProperty('--bookmark-accent-color', accent)
+  const nameLine = document.createElement('span')
+  nameLine.className = 'rack-name'
+  nameLine.textContent = name || '机柜'
+  div.appendChild(nameLine)
   const obj = new CSS2DObject(div)
-  // 避免标签被后期处理影响；保持屏幕像素清晰
-  obj.center.set(0.5, 0.5)
+  obj.center.set(0.5, 1) // 卡片底边对齐锚点（柜顶上方悬浮）
   return obj
 }
 

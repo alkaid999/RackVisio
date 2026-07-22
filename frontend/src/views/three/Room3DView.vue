@@ -320,7 +320,7 @@ import rackApi from '@/api/rack'
 import deviceApi from '@/api/device'
 import interfaceApi from '@/api/interface'
 import http from '@/api/http'
-import { createEngine, makeLabel, makeBookmarkLabel, makeCanvasTexture } from '@/utils/three-setup'
+import { createEngine, makeRackLabel, makeBookmarkLabel, makeCanvasTexture } from '@/utils/three-setup'
 import {
   buildCabinet,
   buildDevice,
@@ -791,10 +791,11 @@ function buildRoomScene() {
     rackGroups.push(g)
     worldGroup.add(g)
 
-    // 机柜顶部名称标签（仅名称，取消编号 / 物理位置 / U 数显示）
-    const label = makeLabel(rack.name, 'is-rack')
-    label.position.set(0, h + PLINTH_H + 0.9, 0)
-    g.add(label)
+    // 机柜名称标签：与设备书签同款卡片（毛玻璃 + 3px 状态色左边框 + 圆角），
+    // 悬浮于柜顶；CSS2D 始终正对相机且不被 3D 几何遮挡，随视角自适应可见。
+    const rackLabel = makeRackLabel(rack.name, { accentColor: '#' + sc.toString(16).padStart(6, '0') })
+    rackLabel.position.set(0, h + PLINTH_H + 0.45, 0)
+    g.add(rackLabel)
   })
 
   // 相机取景（拉近以放大机房整体视觉占比）
