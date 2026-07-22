@@ -151,13 +151,18 @@ class DeviceService:
         # 确保编号唯一（极小概率碰撞则重试）。
         while await self.device_repo.get_by_code(data.device_code) is not None:
             data.device_code = _gen_device_code()
-        # 全局 IP 唯一校验（设备级 IP 与接口级 IP 之间不重复）。
-        if data.ip_address:
-            data = data.model_copy(update={"ip_address": data.ip_address.strip()})
-            assert_ip_cidr(data.ip_address)
-            await assert_ip_unique(self.device_repo, self.interface_repo, data.ip_address)
-        device = await self.device_repo.create(data)
+        # 归一化 IP：空串视为未设置 → None。否则空串 '' 会被 uq_device_ip 部分唯一索引
+        # （WHERE ip_address IS NOT NULL）当作有效值强制唯一，导致第二个不填 IP 的设备
+        # 触发 UNIQUE 冲突。同时把 repo 写操作纳入 try，避免 flush 抛 IntegrityError 冒泡成 500。
+        raw_ip = (data.ip_address or "").strip()
+        if raw_ip:
+            assert_ip_cidr(raw_ip)
+            await assert_ip_unique(self.device_repo, self.interface_repo, raw_ip)
+            data = data.model_copy(update={"ip_address": raw_ip})
+        else:
+            data = data.model_copy(update={"ip_address": None})
         try:
+            device = await self.device_repo.create(data)
             await self.session.commit()
             await self.session.refresh(device)
         except IntegrityError:
@@ -263,14 +268,16 @@ class DeviceService:
                     exclude_device_id=device_id,
                 )
             data = data.model_copy(update={"ip_address": new_ip or None})
-        device = await self.device_repo.update(device, data)
-        # 同步已上架记录的占用 U 数，保证机柜 U 位图 / 占用统计与设备 U 数一致。
-        if active is not None:
-            # 防御性下界：占用 U 数恒 ≥1（schema 已约束 ge=1，此处兜底避免脏数据）。
-            active.occupied_u = max(1, data.u_height or 1)
-            await self.session.flush()
-            await self.recalculate_rack_usage(active.rack_id)
+        # 把 repo 写操作与同步 flush 纳入 try：否则 update 内部 flush 抛出的 IntegrityError
+        # 会在 try 块之外冒泡，被 FastAPI 当作 500 而非转成 409 冲突提示。
         try:
+            device = await self.device_repo.update(device, data)
+            # 同步已上架记录的占用 U 数，保证机柜 U 位图 / 占用统计与设备 U 数一致。
+            if active is not None:
+                # 防御性下界：占用 U 数恒 ≥1（schema 已约束 ge=1，此处兜底避免脏数据）。
+                active.occupied_u = max(1, data.u_height or 1)
+                await self.session.flush()
+                await self.recalculate_rack_usage(active.rack_id)
             await self.session.commit()
             await self.session.refresh(device)
         except IntegrityError:
