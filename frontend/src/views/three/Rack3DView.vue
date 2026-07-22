@@ -235,11 +235,12 @@ function buildScene() {
     setDevicePosition(dg, d.current_start_u, d.u_height, { uH: U_H, plinthH: PLINTH_H })
     worldGroup.add(dg)
 
-    // 书签式 U 位标签：贴在机柜右侧，显示 U 位 + 设备名 + 类型色条
+    // 书签式 U 位标签：贴在机柜右前侧外侧，确保从默认视角清晰可见
     const uEnd = d.u_height ? d.current_start_u + d.u_height - 1 : d.current_start_u
     const typeColor = DEVICE_TYPE_COLORS[d.device_type] || '#38bdf8'
     const bookmark = makeBookmarkLabel(d.current_start_u, d.name, { typeColor, uEnd })
-    bookmark.position.set(RACK_W / 2 + 0.06, 0, 0)
+    // 定位到设备右前方：x=右外壁外 | y=设备中心(局部原点) | z=靠前三分之一
+    bookmark.position.set(RACK_W / 2 + 0.18, 0, RACK_D * 0.35)
     dg.add(bookmark)
 
     deviceMeshes.push(dg)

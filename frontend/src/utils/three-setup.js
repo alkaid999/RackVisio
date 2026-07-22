@@ -53,7 +53,9 @@ export function makeBookmarkLabel(uPos, name, opts = {}) {
   const uEnd = opts.uEnd
   const div = document.createElement('div')
   div.className = 'three-label is-bookmark'
-  // 左侧类型色条（独立元素，便于圆角裁切）
+  // 通过 CSS 变量传递类型色给 border-left
+  div.style.setProperty('--bookmark-accent-color', typeColor)
+  // 左侧色条 DOM（保留供未来扩展；当前视觉由 CSS border-left 承担）
   const accent = document.createElement('span')
   accent.className = 'bookmark-accent'
   accent.style.backgroundColor = typeColor
