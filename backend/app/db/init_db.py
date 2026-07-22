@@ -324,6 +324,9 @@ async def seed_data(session: AsyncSession) -> None:
             display_name="系统管理员",
         )
         await session.flush()
+        # lifespan 以 `async with session` 块退出即关闭会话，未提交事务会被回滚；
+        # 必须显式 commit，否则 admin 账号不会写入数据库，登录恒报密码错误。
+        await session.commit()
 
 
 
