@@ -320,7 +320,7 @@ import rackApi from '@/api/rack'
 import deviceApi from '@/api/device'
 import interfaceApi from '@/api/interface'
 import http from '@/api/http'
-import { createEngine, makeLabel, makeCanvasTexture } from '@/utils/three-setup'
+import { createEngine, makeLabel, makeBookmarkLabel, makeCanvasTexture } from '@/utils/three-setup'
 import {
   buildCabinet,
   buildDevice,
@@ -837,10 +837,12 @@ function buildDevicesScene() {
     worldGroup.add(dg)
     deviceMeshes.push(dg)
 
-    // 设备名称标签（位于设备上方）
-    const label = makeLabel(d.name, 'is-device')
-    label.position.set(0, h / 2 + 0.3, 0)
-    dg.add(label)
+    // 书签式 U 位标签（设备上方，显示 U 位 + 名称 + 类型色条）
+    const uEnd = d.u_height ? d.current_start_u + d.u_height - 1 : d.current_start_u
+    const typeColor = DEVICE_TYPE_COLORS[d.device_type] || '#38bdf8'
+    const bookmark = makeBookmarkLabel(d.current_start_u, d.name, { typeColor, uEnd })
+    bookmark.position.set(0, h / 2 + 0.2, 0)
+    dg.add(bookmark)
   })
 
   // 在每个机柜位置放置半透明底座，标示设备所属机柜位置（不显示机柜模型与名称）

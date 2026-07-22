@@ -71,7 +71,7 @@ import { ChevronRight, ArrowLeft, RotateCcw, Cpu, Server } from 'lucide-vue-next
 import * as THREE from 'three'
 import rackApi from '@/api/rack'
 import roomApi from '@/api/room'
-import { createEngine, makeLabel } from '@/utils/three-setup'
+import { createEngine, makeLabel, makeBookmarkLabel } from '@/utils/three-setup'
 import {
   buildCabinet,
   buildDevice,
@@ -84,7 +84,7 @@ import {
 } from '@/utils/device-models'
 import RackInfoCard from '@/components/three/RackInfoCard.vue'
 import DeviceInfoCard from '@/components/three/DeviceInfoCard.vue'
-import { DEVICE_TYPE_LABELS, DEVICE_STATUS_LABELS } from '@/utils/constants'
+import { DEVICE_TYPE_LABELS, DEVICE_STATUS_LABELS, DEVICE_TYPE_COLORS } from '@/utils/constants'
 import { escapeHtml } from '@/utils/escape'
 import Button from '@/components/ui/button.vue'
 
@@ -235,9 +235,12 @@ function buildScene() {
     setDevicePosition(dg, d.current_start_u, d.u_height, { uH: U_H, plinthH: PLINTH_H })
     worldGroup.add(dg)
 
-    const label = makeLabel(d.name, 'is-device')
-    label.position.set(RACK_W / 2 + 0.3, 0, 0)
-    dg.add(label)
+    // 书签式 U 位标签：贴在机柜右侧，显示 U 位 + 设备名 + 类型色条
+    const uEnd = d.u_height ? d.current_start_u + d.u_height - 1 : d.current_start_u
+    const typeColor = DEVICE_TYPE_COLORS[d.device_type] || '#38bdf8'
+    const bookmark = makeBookmarkLabel(d.current_start_u, d.name, { typeColor, uEnd })
+    bookmark.position.set(RACK_W / 2 + 0.06, 0, 0)
+    dg.add(bookmark)
 
     deviceMeshes.push(dg)
   })

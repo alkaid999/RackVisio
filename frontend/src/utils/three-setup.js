@@ -41,6 +41,38 @@ export function makeLabel(text, className = '') {
   return obj
 }
 
+// —— 书签式 U 位标签 ——
+// 贴在机柜侧边的卡片式标注，显示 U 位（如「35U」）+ 设备名 + 类型色条。
+// 返回 CSS2DObject，样式由 .three-label.is-bookmark 控制。
+//   uPos      — 起始 U 位数字（如 35）
+//   name      — 设备名称
+//   opts.typeColor — 类型强调色 hex（可选，默认 #38bdf8）
+//   opts.uEnd     — 结束 U 位（可选，多 U 设备显示范围如「35-37U」）
+export function makeBookmarkLabel(uPos, name, opts = {}) {
+  const typeColor = opts.typeColor || '#38bdf8'
+  const uEnd = opts.uEnd
+  const div = document.createElement('div')
+  div.className = 'three-label is-bookmark'
+  // 左侧类型色条（独立元素，便于圆角裁切）
+  const accent = document.createElement('span')
+  accent.className = 'bookmark-accent'
+  accent.style.backgroundColor = typeColor
+  div.appendChild(accent)
+  // U 位行
+  const uLine = document.createElement('span')
+  uLine.className = 'bookmark-u'
+  uLine.textContent = uEnd && uEnd !== uPos ? `${uPos}-${uEnd}U` : `${uPos}U`
+  div.appendChild(uLine)
+  // 设备名行
+  const nameLine = document.createElement('span')
+  nameLine.className = 'bookmark-name'
+  nameLine.textContent = name || '—'
+  div.appendChild(nameLine)
+  const obj = new CSS2DObject(div)
+  obj.center.set(0, 0.5) // 左对齐，垂直居中
+  return obj
+}
+
 // —— 创建引擎 ——
 // 返回 { renderer, scene, camera, controls, container, setCursor, dispose }
 export function createEngine(container, opts = {}) {
