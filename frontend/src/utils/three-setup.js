@@ -48,30 +48,47 @@ export function makeLabel(text, className = '') {
 //   name      — 设备名称
 //   opts.typeColor — 类型强调色 hex（可选，默认 #38bdf8）
 //   opts.uEnd     — 结束 U 位（可选，多 U 设备显示范围如「35-37U」）
+// 书签式 U 位标签（单行）：U 位渲染为彩色徽标 + 设备名，整行不换行，
+// 缩小视图时配合右侧标签列去堆叠逻辑，避免卡片互相覆盖。
+//   uPos      — 起始 U 位数字（如 35）
+//   name      — 设备名称
+//   opts.typeColor — 类型强调色 hex（可选，默认 #38bdf8）
+//   opts.uEnd     — 结束 U 位（可选，多 U 设备显示范围如「35-37U」）
 export function makeBookmarkLabel(uPos, name, opts = {}) {
   const typeColor = opts.typeColor || '#38bdf8'
   const uEnd = opts.uEnd
   const div = document.createElement('div')
   div.className = 'three-label is-bookmark'
-  // 通过 CSS 变量传递类型色给 border-left
   div.style.setProperty('--bookmark-accent-color', typeColor)
-  // 左侧色条 DOM（保留供未来扩展；当前视觉由 CSS border-left 承担）
-  const accent = document.createElement('span')
-  accent.className = 'bookmark-accent'
-  accent.style.backgroundColor = typeColor
-  div.appendChild(accent)
-  // U 位行
+  // U 位徽标（单行首列）
   const uLine = document.createElement('span')
   uLine.className = 'bookmark-u'
   uLine.textContent = uEnd && uEnd !== uPos ? `${uPos}-${uEnd}U` : `${uPos}U`
   div.appendChild(uLine)
-  // 设备名行
+  // 设备名（单行次列，超出省略）
   const nameLine = document.createElement('span')
   nameLine.className = 'bookmark-name'
   nameLine.textContent = name || '—'
   div.appendChild(nameLine)
   const obj = new CSS2DObject(div)
   obj.center.set(0, 0.5) // 左对齐，垂直居中
+  return obj
+}
+
+// 机柜名称标签：与设备书签同款卡片组件，置于机柜头顶位置，统一整体 UI 风格。
+//   name          — 机柜名称
+//   opts.accentColor — 强调色 hex（可选，默认 #38bdf8）
+export function makeRackNameLabel(name, opts = {}) {
+  const accent = opts.accentColor || '#38bdf8'
+  const div = document.createElement('div')
+  div.className = 'three-label is-bookmark is-rack-name'
+  div.style.setProperty('--bookmark-accent-color', accent)
+  const nameLine = document.createElement('span')
+  nameLine.className = 'bookmark-name rack-name-text'
+  nameLine.textContent = name || '机柜'
+  div.appendChild(nameLine)
+  const obj = new CSS2DObject(div)
+  obj.center.set(0.5, 1) // 卡片底边对齐锚点（头顶上方）
   return obj
 }
 

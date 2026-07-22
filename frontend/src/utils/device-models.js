@@ -389,52 +389,13 @@ export function clearDeviceEmissive(group) {
   })
 }
 
-// 在设备 Group 外围生成发光描边框（LineSegments），挂到 group.parent 上随设备移动。
-// depthTest:false 使描边穿透机柜外壳始终可见，确保「明显」的高亮。
-export function attachSelectionBox(group, color = SELECT_COLOR) {
-  detachSelectionBox(group)
-  group.updateWorldMatrix(true, true)
-  const box = new THREE.Box3().setFromObject(group)
-  if (box.isEmpty()) return null
-  const size = new THREE.Vector3()
-  const center = new THREE.Vector3()
-  box.getSize(size)
-  box.getCenter(center)
-  const geo = new THREE.BoxGeometry(size.x + 0.16, size.y + 0.16, size.z + 0.16)
-  const edges = new THREE.EdgesGeometry(geo)
-  const mat = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.95, depthTest: false })
-  const box3 = new THREE.LineSegments(edges, mat)
-  box3.renderOrder = 999
-  const parent = group.parent
-  if (parent) {
-    box3.position.copy(parent.worldToLocal(center.clone()))
-  } else {
-    box3.position.copy(center)
-  }
-  box3.userData.isSelectionBox = true
-  group.userData.selectionBox = box3
-  if (parent) parent.add(box3)
-  return box3
-}
-
-export function detachSelectionBox(group) {
-  const box3 = group.userData.selectionBox
-  if (box3) {
-    if (box3.parent) box3.parent.remove(box3)
-    box3.geometry.dispose()
-    box3.material.dispose()
-    group.userData.selectionBox = null
-  }
-}
-
-// 统一「选中」视觉：琥珀色自发光 + 外围发光描边框 + 书签高亮（若挂载）。
+// 统一「选中」视觉：琥珀色自发光（设备本体光晕）+ 书签高亮（若挂载）。
+// 不再叠加金色描边框——避免与设备光晕视觉冗余，选中态仅由发光体现。
 export function setDeviceSelected(group, on, color = SELECT_COLOR) {
   if (on) {
     setDeviceEmissive(group, color, 0.7)
-    attachSelectionBox(group, color)
   } else {
     clearDeviceEmissive(group)
-    detachSelectionBox(group)
   }
   const bm = group.userData.bookmark
   if (bm && bm.element && bm.element.classList) bm.element.classList.toggle('is-selected', on)
