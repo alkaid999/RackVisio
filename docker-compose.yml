@@ -1,0 +1,110 @@
+# ============================================================
+# RackVisio 部署编排（Docker Compose）
+#
+# ✅ Docker 为本项目的正式部署方式。
+#    - 本地开发：直接 `python -m uvicorn` + 默认 SQLite（零配置，见 README）。
+#    - 服务器部署：本文件，使用 PostgreSQL 持久化，无需额外中间件。
+#
+# 快速开始：
+#   1) cp .env.example .env        # 按需修改数据库密码与 JWT 密钥
+#   2) docker compose up -d --build   # 首次自动构建镜像并按依赖顺序启动
+#
+# 详细说明见 docs/DEPLOY.md
+# ============================================================
+
+name: rackvisio
+
+services:
+  # ============ PostgreSQL 数据库（唯一持久化存储）============
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-rackvisio}
+      POSTGRES_USER: ${POSTGRES_USER:-rackvisio}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-rackvisio_pass}
+    # 提升 PG 共享内存，避免大查询时的 SysV shm 限制（生产建议）
+    shm_size: 256mb
+    volumes:
+      - pgdata:/var/lib/postgresql/data   # 数据持久化卷（容器删除不丢数据）
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-rackvisio} -d ${POSTGRES_DB:-rackvisio}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    networks:
+      - appnet
+    # 仅内网互通，不暴露宿主机端口（如需维护可临时加 ports: ["5432:5432"]）
+
+  # ============ 后端 API（FastAPI + uvicorn，单 worker）============
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      # 连接 PostgreSQL（asyncpg 异步驱动）；服务名 db 即 compose 内网主机名
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-rackvisio}:${POSTGRES_PASSWORD:-rackvisio_pass}@db:5432/${POSTGRES_DB:-rackvisio}
+      REDIS_ENABLED: "false"
+      SECRET_KEY: ${SECRET_KEY:-change-me-in-prod-rackvisio-secret-key}
+      TOKEN_EXPIRE_HOURS: "${TOKEN_EXPIRE_HOURS:-12}"
+      INITIAL_ADMIN_PASSWORD: ${INITIAL_ADMIN_PASSWORD:-admin123}
+      CACHE_TTL: "${CACHE_TTL:-30}"
+    depends_on:
+      db:
+        condition: service_healthy        # 等数据库就绪再启动，避免建表失败
+    expose:
+      - "8000"                            # 仅内网暴露，由前端 nginx 反代
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health').status==200 else 1)\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    networks:
+      - appnet
+
+  # ============ 前端（Nginx 托管构建产物 + 反代 API）============
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy        # 等后端健康再起，避免首个 API 请求 502
+    ports:
+      - "${HTTP_PORT:-8080}:80"          # 宿主机访问端口；需 80 可改为 80:80
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost/ >/dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - appnet
+
+  # ------------------------------------------------------------
+  # 可选：Redis 缓存（默认【不启用】）
+  #   当前缓存为进程内字典，单实例已满足轻量定位，无需 Redis。
+  #   仅在「多 worker / 多后端实例」部署、且已修复 RedisCache 序列化
+  #   （见 docs/DEPLOY.md 第八节）后，取消下方注释并将
+  #   .env 的 REDIS_ENABLED 置 true 才启用。
+  # ------------------------------------------------------------
+  # redis:
+  #   image: redis:7-alpine
+  #   restart: unless-stopped
+  #   command: ["redis-server", "--appendonly", "yes"]
+  #   volumes:
+  #     - redisdata:/data
+  #   networks:
+  #     - appnet
+
+volumes:
+  pgdata:                                 # 数据库数据持久化卷
+  # redisdata:                           # 启用上方 redis 时取消注释
+
+networks:
+  appnet:
+    driver: bridge

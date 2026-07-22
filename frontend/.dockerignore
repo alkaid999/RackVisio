@@ -1,0 +1,7 @@
+# 不纳入前端镜像的内容
+node_modules/
+dist/
+.env
+.env.*
+*.log
+.git/

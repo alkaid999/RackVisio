@@ -1,0 +1,131 @@
+# ============================================================
+# RackVisio — .gitignore
+# Scope: Python backend + Node/TS frontend + general tooling
+# ============================================================
+
+# ---- Python (backend) ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+develop-eggs/
+downloads/
+eggs/
+.eggs/
+lib/
+# 放行前端源码目录：上面的 lib/ 会误伤 frontend/src/lib/（shadcn 的 cn() 工具），
+# 该目录是源码、必须入库；Python 的构建产物 lib/ 仍按上方规则忽略
+!frontend/src/lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.python-version
+pip-log.txt
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+pythonenv*/
+.conda/
+
+# Testing / coverage / caches
+.pytest_cache/
+.tox/
+.nox/
+.hypothesis/
+.mypy_cache/
+.dmypy.json
+.pyre/
+.pytype/
+.coverage
+.coverage.*
+htmlcov/
+coverage/
+
+# ---- Node / frontend ----
+node_modules/
+.pnp/
+.pnp.js
+.yarn/
+.yarn-integrity
+.npm
+.next/
+.nuxt/
+.output/
+.svelte-kit/
+.vercel/
+.turbo/
+.cache/
+dist/
+dist-prod/
+build/
+out/
+*.tsbuildinfo
+.eslintcache
+.stylelintcache
+.parcel-cache/
+
+# ---- Secrets & environment ----
+.env
+.env.*
+!.env.example
+
+# ---- Databases & logs (runtime data, not source) ----
+*.db
+*.db.bak*
+*.sqlite
+*.sqlite3
+*.log
+*.log.*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ---- Local dev fixtures (含真实测试数据，禁止入库) ----
+backend/topo.json
+backend/dev.json
+backend/link.json
+
+# ---- IDE & editor ----
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# ---- OS ----
+.DS_Store
+Thumbs.db
+desktop.ini
+ehthumbs.db
+
+# ---- Tooling / assistant metadata ----
+.workbuddy/
+
+# ---- Misc junk ----
+*.bak
+*.tmp
+*.temp
+~*
+
+# ---- Vite generated temp config files ----
+# Vite compiles the ESM config (vite.config.js/ts) on the fly into a temp file
+# named "<config>.timestamp-<ms>-<hash>.mjs" next to the source. It is normally
+# removed on clean exit, but gets orphaned when the dev server is force-killed
+# (e.g. `pkill -9`). Never commit these — they are identical machine-generated
+# artifacts that differ only by timestamp/hash in the filename.
+*.timestamp-*.mjs
+
+# NOTE: 'nul' is a reserved Windows device name. It cannot be safely
+# added to or checked out from Git on Windows, so the accidental 0-byte
+# file at repo root is excluded.
+nul

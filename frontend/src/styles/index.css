@@ -1,0 +1,258 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================
+   设计令牌（HSL 通道值）：明暗双主题整站换肤。
+   暗黑模式为「柔和、环境感知型」：低饱和、略带蓝调的深色，
+   护眼节能，而非纯黑/纯白的硬切换。
+   ============================================================ */
+:root {
+  --background: 210 40% 98%;
+  --foreground: 222 32% 14%;
+  --card: 0 0% 100%;
+  --card-foreground: 222 32% 14%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 222 32% 14%;
+  --primary: 217 91% 60%;
+  --primary-foreground: 210 40% 98%;
+  --primary-muted: 217 91% 92%;
+  --secondary: 210 30% 95%;
+  --secondary-foreground: 222 32% 20%;
+  --muted: 210 32% 96%;
+  --muted-foreground: 215 16% 44%;
+  --accent: 210 32% 94%;
+  --accent-foreground: 222 32% 20%;
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 0 0% 100%;
+  --success: 142 71% 45%;
+  --success-foreground: 0 0% 100%;
+  --warning: 38 92% 50%;
+  --warning-foreground: 0 0% 100%;
+  --border: 214 22% 90%;
+  --input: 214 22% 88%;
+  --ring: 217 91% 60%;
+  --radius: 0.75rem;
+}
+
+.dark {
+  --background: 224 22% 9%;
+  --foreground: 220 20% 90%;
+  --card: 224 20% 12%;
+  --card-foreground: 220 20% 90%;
+  --popover: 224 22% 11%;
+  --popover-foreground: 220 20% 90%;
+  --primary: 217 91% 62%;
+  --primary-foreground: 224 30% 8%;
+  --primary-muted: 217 60% 22%;
+  --secondary: 223 18% 16%;
+  --secondary-foreground: 220 20% 90%;
+  --muted: 223 18% 16%;
+  --muted-foreground: 219 14% 62%;
+  --accent: 223 18% 19%;
+  --accent-foreground: 220 20% 92%;
+  --destructive: 0 70% 55%;
+  --destructive-foreground: 0 0% 100%;
+  --success: 142 64% 48%;
+  --success-foreground: 0 0% 100%;
+  --warning: 38 92% 55%;
+  --warning-foreground: 224 30% 8%;
+  --border: 223 16% 19%;
+  --input: 223 16% 20%;
+  --ring: 217 91% 62%;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-feature-settings: 'cv11', 'ss01';
+  }
+  /* 主题切换期间的平滑过渡（由 useTheme 短暂挂载 .theme-transition） */
+  html.theme-transition,
+  html.theme-transition *,
+  html.theme-transition *::before,
+  html.theme-transition *::after {
+    transition: background-color 0.4s ease, border-color 0.4s ease, color 0.4s ease,
+      fill 0.4s ease, stroke 0.4s ease !important;
+  }
+  /* 选中态配色跟随主题 */
+  ::selection {
+    background: hsl(var(--primary) / 0.22);
+  }
+}
+
+@layer components {
+  /* ---------- 页面级布局（无边框 / 留白 / 分层） ---------- */
+  .page-wrap {
+    @apply min-h-screen bg-background;
+  }
+  .page-pad {
+    @apply p-4 sm:p-6 lg:p-8;
+  }
+  .page-head {
+    @apply flex flex-wrap items-start justify-between gap-3 mb-5;
+  }
+  .page-title {
+    @apply text-xl sm:text-2xl font-semibold tracking-tight text-foreground;
+  }
+  .page-sub {
+    @apply mt-1 text-sm text-muted-foreground;
+  }
+  /* 卡片：极轻边框 + 柔和阴影，去硬框感；hover 微抬升 */
+  .card-soft {
+    @apply bg-card text-card-foreground rounded-xl border border-border/70 shadow-soft
+           transition-all duration-300 ease-out;
+  }
+  .section-title {
+    @apply text-base font-semibold text-foreground flex items-center gap-2;
+  }
+  .toolbar {
+    @apply bg-card/80 backdrop-blur rounded-xl border border-border/60 shadow-soft p-4 mb-5;
+  }
+  /* KPI 指标卡 */
+  .kpi-grid {
+    @apply grid grid-cols-2 md:grid-cols-4 gap-4;
+  }
+  .kpi-card {
+    @apply card-soft p-5 flex flex-col gap-1 relative overflow-hidden;
+  }
+  .kpi-value {
+    @apply text-3xl font-bold text-foreground tabular-nums tracking-tight;
+  }
+  .kpi-label {
+    @apply text-sm text-muted-foreground;
+  }
+  .grid-cards {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  }
+  .link-quiet {
+    @apply text-primary hover:opacity-80 font-medium transition-opacity;
+    text-decoration: none;
+  }
+  /* 滚动条（贴合主题） */
+  .scroll-thin {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted-foreground) / 0.35) transparent;
+  }
+  .scroll-thin::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .scroll-thin::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted-foreground) / 0.3);
+    border-radius: 9999px;
+  }
+  .scroll-thin::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.5);
+  }
+}
+
+/* ============================================================
+   3D 机房可视化模块（Three.js + CSS2D 标签 / 悬浮提示 / 玻璃面板）
+   ============================================================ */
+.three-canvas-wrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-radius: 16px;
+  background: radial-gradient(120% 120% at 50% 0%, #16203a 0%, #0b1220 55%, #070b14 100%);
+}
+.three-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #64748b;
+  font-size: 14px;
+  letter-spacing: 0.05em;
+}
+.three-label {
+  font-size: 8px;
+  line-height: 1.2;
+  font-weight: 600;
+  color: #e2e8f0;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
+  white-space: nowrap;
+  pointer-events: none;
+  user-select: none;
+  transform: translateY(-4px);
+}
+.three-label.is-rack {
+  color: #f8fafc;
+  font-size: 9px;
+}
+.three-label.is-aisle {
+  color: #5eead4;
+  font-size: 8.5px;
+  background: rgba(5, 30, 30, 0.55);
+  border: 1px solid rgba(94, 234, 212, 0.35);
+  border-radius: 9999px;
+  padding: 3px 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+  transform: translateY(-6px);
+}
+.three-label.is-aisle::after {
+  content: ' ›››';
+  letter-spacing: 2px;
+  opacity: 0.9;
+}
+.three-tooltip {
+  position: fixed;
+  z-index: 50;
+  pointer-events: none;
+  background: rgba(15, 23, 42, 0.92);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  color: #e2e8f0;
+  font-size: 11px;
+  line-height: 1.5;
+  padding: 8px 11px;
+  border-radius: 10px;
+  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(6px);
+  max-width: 240px;
+  transition: opacity 0.12s ease;
+}
+.glass-panel {
+  background: rgba(15, 23, 42, 0.55);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 16px;
+  box-shadow: 0 20px 50px -20px rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(14px);
+  color: #e2e8f0;
+}
+.glass-panel .gp-title {
+  color: #f8fafc;
+  font-weight: 700;
+}
+.glass-panel .gp-sub {
+  color: #94a3b8;
+}
+
+/* 路由切换页面过渡（配合 <router-view v-slot> + Transition）
+   不使用 out-in 模式：避免大屏等全屏浮层在 leave 阶段阻塞 enter 的挂载握手，
+   从而导致后续所有页面静默空白（历史已两次出现该 wedge）。
+   改为纯透明度交叉淡入淡出；离场元素绝对定位覆盖，避免新旧视图同时入流导致布局跳动。 */
+.page-enter-active,
+.page-leave-active {
+  transition: opacity 0.22s ease;
+}
+.page-enter-from,
+.page-leave-to {
+  opacity: 0;
+}
+.page-leave-active {
+  position: absolute;
+  inset: 0;
+  padding: inherit;
+  pointer-events: none;
+}

@@ -1,0 +1,12 @@
+# 不纳入后端镜像的内容
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.db
+*.db.bak*
+server.log
+.pytest_cache/
+.env
+.env.*
+.git/

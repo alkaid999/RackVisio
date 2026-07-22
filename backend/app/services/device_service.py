@@ -1,0 +1,366 @@
+"""设备业务逻辑（不含位置；位置由上架记录表管理）。
+
+职责：
+- 设备 CRUD（仅固有属性）。
+- U 位冲突检测（基于有效上架记录）。
+- 删除守卫：已上架（存在有效上架记录）设备禁止删除，须先下架。
+- 响应时附带「当前位置」派生字段（有效上架记录的位置）。
+"""
+
+from __future__ import annotations
+
+import uuid
+from typing import Optional, Tuple
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.cache import Cache
+from app.core.database import utcnow
+from app.core.enums import DeviceStatus, MountRecordStatus
+from app.core.exceptions import ConflictError, NotFoundError, ValidationError
+from app.core.ip_conflict import assert_ip_cidr, assert_ip_unique
+from sqlalchemy.exc import IntegrityError
+from app.models.device import Device
+from app.models.mount_record import MountRecord
+from app.repositories.device_repo import DeviceRepository
+from app.repositories.interface_repo import InterfaceRepository
+from app.repositories.mount_record_repo import MountRecordRepository
+from app.repositories.rack_repo import RackRepository
+from app.repositories.room_repo import RoomRepository
+from app.schemas.device import DeviceCreate, DeviceOut, DeviceUpdate
+from app.schemas.mount_record import MountRecordUpdate
+
+
+def _conflict_message(conflict: dict) -> str:
+    """将 check_u_conflict 的结果转换为可读错误信息。"""
+    if conflict.get("error"):
+        return str(conflict["error"])
+    return (
+        f"U 位冲突：U{conflict['conflict_u']} 已被设备「{conflict['conflict_device']}」占用"
+    )
+
+
+def _gen_device_code() -> str:
+    """生成全局唯一设备编号（DEV- + 8 位十六进制）。"""
+    return "DEV-" + uuid.uuid4().hex[:8].upper()
+
+
+class DeviceService:
+    """设备相关业务逻辑：CRUD / U 位冲突 / 当前位置派生。"""
+
+    def __init__(self, session: AsyncSession, cache: Optional[Cache] = None) -> None:
+        self.session = session
+        self.cache = cache or Cache()
+        self.device_repo = DeviceRepository(session)
+        self.mount_repo = MountRecordRepository(session)
+        self.rack_repo = RackRepository(session)
+        self.room_repo = RoomRepository(session)
+        self.interface_repo = InterfaceRepository(session)
+
+    # ----------------------------------------------------- 当前位置派生
+    def _build_out(self, device: Device, active: Optional[MountRecord]) -> DeviceOut:
+        """组装 DeviceOut，填充当前有效上架记录的位置（若有）。"""
+        data = DeviceOut.model_validate(device)
+        if active is not None:
+            data.current_room_id = active.room_id
+            data.current_rack_id = active.rack_id
+            data.current_start_u = active.start_u
+        return data
+
+    async def _to_out(
+        self,
+        device: Device,
+        *,
+        interface_count: Optional[int] = None,
+        active: Optional[MountRecord] = None,
+        rack=None,
+        room=None,
+    ) -> DeviceOut:
+        # 列表场景：active/rack/room 已批量预取并传入，避免逐设备查库的 N+1。
+        # 其余调用方（get_device 等）不传，则按需单查。
+        if active is None:
+            active = await self.mount_repo.get_active_by_device(device.id)
+        # 回填机柜 / 机房名称（仅用于展示，机房用于设备列表「所属机房」列）。
+        out = self._build_out(device, active)
+        if active is not None:
+            if rack is None:
+                rack = await self.rack_repo.get(active.rack_id)
+            out.current_rack_name = rack.name if rack else None
+            if room is None:
+                room = await self.room_repo.get(active.room_id)
+            out.current_room_name = room.name if room else None
+        # 派生接口总数（链路资格判定：已上架且含接口方可建链）。
+        out.interface_count = (
+            interface_count
+            if interface_count is not None
+            else await self.interface_repo.count_by_device(device.id)
+        )
+        return out
+
+    # ------------------------------------------------------------ U 位冲突
+    async def check_u_conflict(
+        self,
+        rack_id: str,
+        start_u: int,
+        size_u: int,
+        exclude_device_id: Optional[str] = None,
+    ) -> dict:
+        """检测 U 位冲突（基于机柜内有效上架记录）。
+
+        Returns:
+            无冲突：``{"conflict": False}``
+            有重叠：``{"conflict": True, "conflict_u": [...], "conflict_device": str}``
+            越界：``{"conflict": True, "error": str}``
+        """
+        if start_u < 1 or size_u < 1:
+            return {"conflict": True, "error": "起始 U 位必须 ≥1 且占用 U 位数 ≥1"}
+        rack = await self.rack_repo.get(rack_id)
+        if rack is None:
+            return {"conflict": True, "error": "机柜不存在"}
+        mounts = await self.mount_repo.list_active_in_rack(rack_id)
+        target_range = set(range(start_u, start_u + size_u))
+        for record, name, _, _ in mounts:
+            if exclude_device_id and record.device_id == exclude_device_id:
+                continue
+            existing_range = set(
+                range(record.start_u, record.start_u + record.occupied_u)
+            )
+            overlap = target_range & existing_range
+            if overlap:
+                return {
+                    "conflict": True,
+                    "conflict_u": sorted(overlap),
+                    "conflict_device": name,
+                }
+        if (start_u + size_u - 1) > rack.total_u:
+            return {"conflict": True, "error": f"超出机柜 U 位范围（1~{rack.total_u}）"}
+        return {"conflict": False}
+
+    async def recalculate_rack_usage(self, rack_id: str) -> None:
+        """委托 RackService 实现 used_u 重算。"""
+        from app.services.rack_service import RackService
+
+        await RackService(self.session, self.cache).recalculate_rack_usage(rack_id)
+
+    # --------------------------------------------------------------- CRUD
+    async def create_device(self, data: DeviceCreate) -> DeviceOut:
+        # 设备编号留空时自动生成全局唯一编号。
+        if not data.device_code:
+            data.device_code = _gen_device_code()
+        # 确保编号唯一（极小概率碰撞则重试）。
+        while await self.device_repo.get_by_code(data.device_code) is not None:
+            data.device_code = _gen_device_code()
+        # 全局 IP 唯一校验（设备级 IP 与接口级 IP 之间不重复）。
+        if data.ip_address:
+            data = data.model_copy(update={"ip_address": data.ip_address.strip()})
+            assert_ip_cidr(data.ip_address)
+            await assert_ip_unique(self.device_repo, self.interface_repo, data.ip_address)
+        device = await self.device_repo.create(data)
+        try:
+            await self.session.commit()
+            await self.session.refresh(device)
+        except IntegrityError:
+            await self.session.rollback()
+            raise ConflictError("IP 地址冲突：该地址已被占用（可能由并发写入导致）")
+        return await self._to_out(device)
+
+    async def get_device(self, device_id: str) -> DeviceOut:
+        device = await self.device_repo.get(device_id)
+        if device is None:
+            raise NotFoundError("设备不存在")
+        return await self._to_out(device)
+
+    async def get_device_obj(self, device_id: str) -> Optional[Device]:
+        """返回原始 Device 模型（不含派生位置），供需要固有字段的场景使用。"""
+        return await self.device_repo.get(device_id)
+
+    async def list_devices(
+        self,
+        *,
+        page: int = 1,
+        size: int = 50,
+        rack_id: Optional[str] = None,
+        device_type: Optional[str] = None,
+        status: Optional[str] = None,
+        room_id: Optional[str] = None,
+        keyword: Optional[str] = None,
+    ) -> Tuple[list[DeviceOut], int]:
+        # 当前位置过滤（机柜 / 机房）→ 经上架记录表得到设备 id 集合。
+        device_ids: Optional[list[str]] = None
+        if rack_id:
+            device_ids = await self.mount_repo.list_device_ids_by_rack(rack_id)
+        if room_id:
+            room_ids = await self.mount_repo.list_device_ids_by_room(room_id)
+            device_ids = (
+                list(set(device_ids) & set(room_ids))
+                if device_ids is not None
+                else room_ids
+            )
+        devices, total = await self.device_repo.list(
+            page=page,
+            size=size,
+            device_ids=device_ids,
+            device_type=device_type,
+            status=status,
+            keyword=keyword,
+        )
+        # 批量预取：有效上架记录 + 关联机柜/机房名 + 接口数，将 N+1 降为常量级查询。
+        device_ids_all = [d.id for d in devices]
+        active_map = await self.mount_repo.get_active_by_devices(device_ids_all)
+        rack_ids = {a.rack_id for a in active_map.values()}
+        room_ids = {a.room_id for a in active_map.values()}
+        racks = (
+            {r.id: r for r in await self.rack_repo.get_many(list(rack_ids))}
+            if rack_ids
+            else {}
+        )
+        rooms = (
+            {r.id: r for r in await self.room_repo.get_many(list(room_ids))}
+            if room_ids
+            else {}
+        )
+        counts = await self.interface_repo.count_by_device_ids(device_ids_all)
+        outs = []
+        for d in devices:
+            a = active_map.get(d.id)
+            outs.append(
+                await self._to_out(
+                    d,
+                    interface_count=counts.get(d.id, 0),
+                    active=a,
+                    rack=racks.get(a.rack_id) if a else None,
+                    room=rooms.get(a.room_id) if a else None,
+                )
+            )
+        return outs, total
+
+    async def update_device(self, device_id: str, data: DeviceUpdate) -> DeviceOut:
+        device = await self.device_repo.get(device_id)
+        if device is None:
+            raise NotFoundError("设备不存在")
+        # 若改编号，校验唯一（非空时）。
+        if data.device_code and data.device_code != device.device_code:
+            if await self.device_repo.get_by_code(data.device_code) is not None:
+                raise ConflictError(f"设备编号「{data.device_code}」已存在")
+        # 改 U 数且设备已上架：仅同步已上架记录的占用 U 数，保证机柜占用统计一致。
+        # 说明：架上设备「调整 U 位 / U 数」能力已移除（统一通过下架后重新上架完成），
+        # 故此处不再做重叠拦截，避免「偶尔允许 / 偶尔拒绝」的混乱提示；重叠由 2D 视图可视化告警。
+        active = None
+        if data.u_height is not None and data.u_height != (device.u_height or 1):
+            active = await self.mount_repo.get_active_by_device(device_id)
+        # 全局 IP 唯一校验（设备级 IP 与接口级 IP 之间不重复）。清空（空串）跳过。
+        if data.ip_address is not None:
+            new_ip = data.ip_address.strip()
+            # 仅当 IP 发生变化时才校验 CIDR 格式，避免历史无前缀数据（如种子设备）无法编辑。
+            if new_ip and new_ip != (device.ip_address or ""):
+                assert_ip_cidr(new_ip)
+            if new_ip:
+                await assert_ip_unique(
+                    self.device_repo,
+                    self.interface_repo,
+                    new_ip,
+                    exclude_device_id=device_id,
+                )
+            data = data.model_copy(update={"ip_address": new_ip or None})
+        device = await self.device_repo.update(device, data)
+        # 同步已上架记录的占用 U 数，保证机柜 U 位图 / 占用统计与设备 U 数一致。
+        if active is not None:
+            # 防御性下界：占用 U 数恒 ≥1（schema 已约束 ge=1，此处兜底避免脏数据）。
+            active.occupied_u = max(1, data.u_height or 1)
+            await self.session.flush()
+            await self.recalculate_rack_usage(active.rack_id)
+        try:
+            await self.session.commit()
+            await self.session.refresh(device)
+        except IntegrityError:
+            await self.session.rollback()
+            raise ConflictError("IP 地址冲突：该地址已被占用（可能由并发写入导致）")
+        return await self._to_out(device)
+
+    async def delete_device(self, device_id: str) -> None:
+        device = await self.device_repo.get(device_id)
+        if device is None:
+            raise NotFoundError("设备不存在")
+        # 删除守卫：已上架（存在有效上架记录）设备禁止删除，须先下架。
+        active = await self.mount_repo.get_active_by_device(device_id)
+        if active is not None:
+            raise ConflictError("设备已上架，请先下架再删除")
+        await self.device_repo.delete_device(device_id)
+        await self.session.commit()
+
+    # --------------------------------------------------- 上下架操作流水
+    async def get_mount_history(self, device_id: str) -> list[dict]:
+        """返回设备上下架操作流水。
+
+        每条上架记录展开为「上架」事件（mounted_at / mounted_by）；若记录已下架，再
+        展开一条「下架」事件（unmounted_at / unmounted_by）。全部事件按操作时间倒序，
+        供设备详情「上下架记录」表展示。
+        """
+        device = await self.device_repo.get(device_id)
+        if device is None:
+            raise NotFoundError("设备不存在")
+        rows = await self.mount_repo.list_by_device(device_id)
+        events: list[dict] = []
+        for record, rack_name, room_name in rows:
+            base = {
+                "id": record.id,
+                "rack_id": record.rack_id,
+                "rack_name": rack_name,
+                "room_name": room_name,
+                "start_u": record.start_u,
+                "occupied_u": record.occupied_u,
+                "record_status": record.record_status,
+            }
+            events.append(
+                {
+                    **base,
+                    "event_type": "上架",
+                    "operated_at": record.mounted_at,
+                    "operator": record.mounted_by,
+                }
+            )
+            # 已下架的记录补充一条「下架」事件。
+            if record.record_status == MountRecordStatus.UNMOUNTED.value:
+                events.append(
+                    {
+                        **base,
+                        "event_type": "下架",
+                        "operated_at": record.unmounted_at,
+                        "operator": record.unmounted_by,
+                    }
+                )
+        # 按操作时间倒序（active 记录无 unmounted_at，置为最小时间）。
+        events.sort(
+            key=lambda e: e["operated_at"].timestamp() if e["operated_at"] else 0,
+            reverse=True,
+        )
+        return events
+
+    # --------------------------------------------------- 上架记录编辑 / 删除
+    async def update_mount_record(self, record_id: int, data: MountRecordUpdate) -> int:
+        """编辑上架记录（仅操作人等追溯字段）。返回记录 id。"""
+        record = await self.mount_repo.get_by_id(record_id)
+        if record is None:
+            raise NotFoundError("上架记录不存在")
+        await self.mount_repo.update(record, data)
+        await self.session.commit()
+        return record.id
+
+    async def delete_mount_record(self, record_id: int) -> None:
+        """删除一条上架记录（含历史追溯）。
+
+        若该记录为当前有效上架记录，删除后设备失去位置 → 退回「在库」并重算机柜
+        used_u，避免设备状态与位置派生不一致的脏数据。删除非有效（已下架）记录为
+        纯历史清理。
+        """
+        record = await self.mount_repo.get_by_id(record_id)
+        if record is None:
+            raise NotFoundError("上架记录不存在")
+        was_active = record.record_status == MountRecordStatus.ACTIVE.value
+        device = await self.device_repo.get(record.device_id)
+        await self.mount_repo.delete(record)
+        if was_active and device is not None:
+            device.status = DeviceStatus.IN_STOCK.value
+            await self.session.flush()
+            await self.recalculate_rack_usage(record.rack_id)
+        await self.session.commit()
