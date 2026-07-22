@@ -40,11 +40,23 @@
         </div>
         <div class="flex flex-col gap-1">
           <Label>起始时间</Label>
-          <Input v-model="filter.startTime" type="datetime-local" class="w-44" @change="reload" />
+          <Input
+            v-model="filter.startTime"
+            type="datetime-local"
+            class="w-56 cursor-pointer"
+            @change="reload"
+            @click="openPicker($event)"
+          />
         </div>
         <div class="flex flex-col gap-1">
           <Label>截止时间</Label>
-          <Input v-model="filter.endTime" type="datetime-local" class="w-44" @change="reload" />
+          <Input
+            v-model="filter.endTime"
+            type="datetime-local"
+            class="w-56 cursor-pointer"
+            @change="reload"
+            @click="openPicker($event)"
+          />
         </div>
         <div class="flex items-center gap-2 pb-1">
           <Button @click="load"><Filter class="h-4 w-4" />查询</Button>
@@ -127,6 +139,19 @@ const { filter, clear } = usePersistentFilter(
   'MountRecordList',
   () => ({ deviceName: '', deviceCode: '', opType: SELECT_ALL, startTime: '', endTime: '' })
 )
+
+// 点击时间输入框任意位置即弹出原生日期时间面板（不仅限右侧图标）。
+// 用 $event.target 直接拿原生 input 元素调用 showPicker()（HTML 标准 API，Chrome/Edge/Firefox 支持）。
+function openPicker(e) {
+  const el = e.target
+  if (el && typeof el.showPicker === 'function') {
+    try {
+      el.showPicker()
+    } catch {
+      // 已打开或浏览器不支持时忽略。
+    }
+  }
+}
 
 const items = ref([])
 const total = ref(0)
