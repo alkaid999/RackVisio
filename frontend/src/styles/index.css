@@ -248,17 +248,6 @@
   white-space: nowrap;
   line-height: 1.25;
 }
-/* 机柜名称标签：与设备书签同款卡片，置于机柜头顶 */
-.three-label.is-bookmark.is-rack-name {
-  border-left-width: 4px;
-  padding: 5px 12px 5px 9px;
-}
-.three-label.is-bookmark.is-rack-name .rack-name-text {
-  font-size: 11px;
-  font-weight: 700;
-  color: #f8fafc;
-  letter-spacing: 0.03em;
-}
 /* 选中态书签：琥珀描边 + 外发光，与 3D 设备发光风格统一 */
 .three-label.is-bookmark.is-selected {
   border-color: #fbbf24;

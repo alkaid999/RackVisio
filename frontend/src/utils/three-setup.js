@@ -75,23 +75,6 @@ export function makeBookmarkLabel(uPos, name, opts = {}) {
   return obj
 }
 
-// 机柜名称标签：与设备书签同款卡片组件，置于机柜头顶位置，统一整体 UI 风格。
-//   name          — 机柜名称
-//   opts.accentColor — 强调色 hex（可选，默认 #38bdf8）
-export function makeRackNameLabel(name, opts = {}) {
-  const accent = opts.accentColor || '#38bdf8'
-  const div = document.createElement('div')
-  div.className = 'three-label is-bookmark is-rack-name'
-  div.style.setProperty('--bookmark-accent-color', accent)
-  const nameLine = document.createElement('span')
-  nameLine.className = 'bookmark-name rack-name-text'
-  nameLine.textContent = name || '机柜'
-  div.appendChild(nameLine)
-  const obj = new CSS2DObject(div)
-  obj.center.set(0.5, 1) // 卡片底边对齐锚点（头顶上方）
-  return obj
-}
-
 // —— 创建引擎 ——
 // 返回 { renderer, scene, camera, controls, container, setCursor, dispose }
 export function createEngine(container, opts = {}) {

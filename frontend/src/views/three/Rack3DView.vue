@@ -71,7 +71,7 @@ import { ChevronRight, ArrowLeft, RotateCcw, Cpu, Server } from 'lucide-vue-next
 import * as THREE from 'three'
 import rackApi from '@/api/rack'
 import roomApi from '@/api/room'
-import { createEngine, makeBookmarkLabel, makeRackNameLabel } from '@/utils/three-setup'
+import { createEngine, makeBookmarkLabel } from '@/utils/three-setup'
 import {
   buildCabinet,
   buildDevice,
@@ -236,12 +236,8 @@ function buildScene() {
     deviceMeshes.push(dg)
   })
 
-  // 机柜名称标签：头顶位置，与设备标签同款卡片组件，统一整体 UI 风格
-  const rackNameLabel = makeRackNameLabel(rack.value.name || '机柜', { accentColor: '#38bdf8' })
-  rackNameLabel.position.set(0, PLINTH_H + rackH + 0.55, 0)
-  worldGroup.add(rackNameLabel)
-
-  // 设备标签：右侧标签列 + 引线引出 + 「}」归纳分组，单行去堆叠
+  // 设备标签：右侧标签列 + 引线引出，单行去堆叠。机柜名标签仅在机房总览视图显示，
+  // 机柜详情视图不再叠加头顶机柜名标签，以保持界面简洁。
   buildDeviceLabels(mdevs, worldGroup)
 
   // 相机取景：按机柜实际尺寸自动适配，确保完整内容单屏可见
@@ -267,15 +263,13 @@ function makeLine(points, color, opacity) {
 }
 
 // 设备标签布局：统一置于机柜右侧标签列（xLabel），从设备右前缘以引线引出，
-// 多个设备以「}」归纳括号跨接汇总，单行去堆叠避免缩小视图时标签互相覆盖。
+// 单行去堆叠避免缩小视图时标签互相覆盖。
 //   mdevs  — 已上架设备信息数组（{ dg, uPos, uEnd, typeColor, name, yMid }）
 //   parent — 标签/引线挂载的父 Group（worldGroup）
 function buildDeviceLabels(mdevs, parent) {
   if (!mdevs.length) return
   const zFront = RACK_D * 0.35
   const xLabel = RACK_W / 2 + 0.5 // 标签卡片左缘锚定列
-  const xBrace = RACK_W / 2 + 0.95 // 归纳括号所在列（标签右侧）
-  const bow = 0.16 // 括号向右凸出量
 
   // 1) 单行去堆叠：按设备中心高度排序，施加最小竖直间距，再整体居中回移贴近设备
   const sorted = [...mdevs].sort((a, b) => a.yMid - b.yMid)
@@ -289,32 +283,16 @@ function buildDeviceLabels(mdevs, parent) {
   const shift = meanOrig - meanAdj
   sorted.forEach((m, i) => (m.labelY = labelY[i] + shift))
 
-  // 2) 引线：设备右前缘 → 归纳括号列（斜向，体现设备归属连线）
+  // 2) 引线：设备右前缘 → 标签左缘，直观体现设备与标签的归属连线
   sorted.forEach((m) => {
     const pts = [
       new THREE.Vector3(RACK_W / 2 + 0.02, m.yMid, zFront),
-      new THREE.Vector3(xBrace, m.labelY, zFront),
+      new THREE.Vector3(xLabel, m.labelY, zFront),
     ]
-    parent.add(makeLine(pts, m.typeColor, 0.5))
+    parent.add(makeLine(pts, m.typeColor, 0.55))
   })
 
-  // 3) 归纳括号「}」：跨所有设备，向右凸出，清晰呈现设备分组归属
-  if (sorted.length >= 2) {
-    const yTop = sorted[sorted.length - 1].labelY
-    const yBot = sorted[0].labelY
-    const span = yTop - yBot
-    const ctrl = [
-      new THREE.Vector3(xBrace, yTop, zFront),
-      new THREE.Vector3(xBrace + bow, yTop - span * 0.22, zFront),
-      new THREE.Vector3(xBrace + bow, (yTop + yBot) / 2, zFront),
-      new THREE.Vector3(xBrace + bow, yBot + span * 0.22, zFront),
-      new THREE.Vector3(xBrace, yBot, zFront),
-    ]
-    const curve = new THREE.CatmullRomCurve3(ctrl)
-    parent.add(makeLine(curve.getPoints(24), 0x94a3b8, 0.85))
-  }
-
-  // 4) 标签卡片（单行）：左对齐锚定在标签列，并挂回设备 Group 供选中高亮联动
+  // 3) 标签卡片（单行）：左对齐锚定在标签列，并挂回设备 Group 供选中高亮联动
   sorted.forEach((m) => {
     const label = makeBookmarkLabel(m.uPos, m.name, { typeColor: m.typeColor, uEnd: m.uEnd })
     label.position.set(xLabel, m.labelY, zFront)
@@ -328,7 +306,7 @@ function buildDeviceLabels(mdevs, parent) {
 function frameRackView() {
   if (!engine || !rack.value) return
   const rackH = (rack.value.total_u || 42) * U_H
-  // 包围盒半尺寸：X 含右侧标签列 + 归纳括号余量；Y 含底座→柜顶+顶部机柜名标签；Z=机柜深
+  // 包围盒半尺寸：X 含右侧标签列余量；Y 含底座→柜顶；Z=机柜深
   const halfW = RACK_W / 2 + 1.2
   const halfH = (PLINTH_H + rackH + 1.4) / 2
   const halfD = (RACK_D * 1.5) / 2
