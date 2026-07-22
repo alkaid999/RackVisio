@@ -77,6 +77,9 @@ import {
   buildDevice,
   setDevicePosition,
   findDeviceGroup,
+  setDeviceSelected,
+  setDeviceEmissive,
+  clearDeviceEmissive,
   RACK_W,
   RACK_D,
   U_H,
@@ -151,31 +154,12 @@ async function load() {
   }
 }
 
-function setEmissive(group, hex, intensity) {
-  const m = group.userData.pickMesh
-  if (!m) return
-  const mat = m.material
-  if (mat.__base === undefined) mat.__base = mat.emissive ? mat.emissive.getHex() : 0x000000
-  if (mat.emissive) {
-    mat.emissive.setHex(hex)
-    mat.emissiveIntensity = intensity
-  }
-}
-function clearEmissive(group) {
-  const m = group.userData.pickMesh
-  if (!m) return
-  const mat = m.material
-  if (mat.__base !== undefined && mat.emissive) {
-    mat.emissive.setHex(mat.__base)
-    mat.emissiveIntensity = 1
-  }
-}
-// 统一刷新高亮：选中 > 悬停 > 还原。
+// 统一刷新高亮：选中（琥珀描边 + 自发光）> 悬停（蓝色）> 还原。
 function refreshHighlights() {
   deviceMeshes.forEach((g) => {
-    if (g === selectedMesh) setEmissive(g, 0x22d3ee, 0.85)
-    else if (g === hoveredMesh) setEmissive(g, 0x38bdf8, 0.6)
-    else clearEmissive(g)
+    if (g === selectedMesh) setDeviceSelected(g, true)
+    else if (g === hoveredMesh) setDeviceEmissive(g, 0x38bdf8, 0.5)
+    else setDeviceSelected(g, false)
   })
 }
 
@@ -242,6 +226,7 @@ function buildScene() {
     // 定位到设备右前方：x=右外壁外 | y=设备中心(局部原点) | z=靠前三分之一
     bookmark.position.set(RACK_W / 2 + 0.18, 0, RACK_D * 0.35)
     dg.add(bookmark)
+    dg.userData.bookmark = bookmark
 
     deviceMeshes.push(dg)
   })

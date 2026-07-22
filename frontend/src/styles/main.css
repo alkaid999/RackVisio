@@ -167,6 +167,15 @@ html, body {
   text-overflow: ellipsis;
   line-height: 1.25;
 }
+/* 选中态书签：琥珀描边 + 外发光，与 3D 描边框风格统一 */
+.three-label.is-bookmark.is-selected {
+  border-color: #fbbf24;
+  border-left-color: #fbbf24;
+  box-shadow: 0 0 0 1px rgba(251, 191, 36, 0.65), 0 6px 22px -4px rgba(251, 191, 36, 0.6);
+}
+.three-label.is-bookmark.is-selected .bookmark-u {
+  color: #fbbf24;
+}
 /* 跟随指针的悬浮提示 */
 .three-tooltip {
   position: fixed;

@@ -329,6 +329,9 @@ import {
   restoreCabinet,
   findCabinetGroup,
   findDeviceGroup,
+  setDeviceSelected,
+  setDeviceEmissive,
+  clearDeviceEmissive,
   RACK_W,
   RACK_D,
   U_H,
@@ -664,6 +667,13 @@ function buildScene() {
   if (viewMode.value === 'devices') buildDevicesScene()
   else buildRoomScene()
 
+  // 重建后恢复已选中设备的高亮（描边 + 自发光 + 书签高亮），避免切换场景后丢失
+  if (selectedDeviceId.value) {
+    const g = deviceMeshes.find((m) => m.userData.id === selectedDeviceId.value)
+    if (g) setDeviceSelected(g, true)
+    else selectedDeviceId.value = null // 设备已不在当前场景，清除脏选中态
+  }
+
   // 若当前已选中设备，重建其关联链路 3D 线缆
   if (selectedDeviceId.value && selectedDeviceDetail.value) buildCables()
 }
@@ -774,6 +784,8 @@ function buildRoomScene() {
       })
       setDevicePosition(dg, d.current_start_u, d.u_height, { uH: U_H, plinthH: PLINTH_H })
       g.add(dg)
+      // 同时登记到 deviceMeshes，使总览模式下的设备悬停 / 选中高亮可定位（与设备总览模式共用同一注册表）
+      deviceMeshes.push(dg)
     })
 
     rackGroups.push(g)
@@ -843,6 +855,7 @@ function buildDevicesScene() {
     const bookmark = makeBookmarkLabel(d.current_start_u, d.name, { typeColor, uEnd })
     bookmark.position.set(0, h / 2 + 0.2, 0)
     dg.add(bookmark)
+    dg.userData.bookmark = bookmark
   })
 
   // 在每个机柜位置放置半透明底座，标示设备所属机柜位置（不显示机柜模型与名称）
@@ -944,14 +957,21 @@ function onPointerMove(e) {
     const hits = raycaster.intersectObjects(deviceMeshes, true)
     if (hits.length) {
       const g = findDeviceGroup(hits[0].object)
-      if (g && hoveredDeviceMesh !== g) {
-        if (hoveredDeviceMesh) clearDeviceEmissive(hoveredDeviceMesh)
-        hoveredDeviceMesh = g
-        setDeviceEmissive(g, 0x38bdf8, 0.6)
+      if (g) {
+        // 选中设备保持琥珀高亮，hover 不覆盖；其余悬停设备给蓝色反馈
+        const isSel = g.userData.id === selectedDeviceId.value
+        if (hoveredDeviceMesh !== g) {
+          if (hoveredDeviceMesh) clearDeviceEmissive(hoveredDeviceMesh)
+          if (isSel) hoveredDeviceMesh = null
+          else {
+            hoveredDeviceMesh = g
+            setDeviceEmissive(g, 0x38bdf8, 0.5)
+          }
+        }
+        engine.setCursor('pointer')
+        hoveredDeviceId.value = g.userData.id
+        showDeviceTooltip(e, g.userData.device)
       }
-      engine.setCursor('pointer')
-      hoveredDeviceId.value = g?.userData?.id || null
-      if (g) showDeviceTooltip(e, g.userData.device)
     } else {
       if (hoveredDeviceMesh) {
         clearDeviceEmissive(hoveredDeviceMesh)
@@ -973,14 +993,19 @@ function onPointerMove(e) {
       }
     }
     if (devGroup) {
+      // 选中设备保持琥珀高亮，hover 不覆盖；其余悬停设备给蓝色反馈
+      const isSel = devGroup.userData.id === selectedDeviceId.value
       if (hoveredDeviceMesh !== devGroup) {
         if (hoveredDeviceMesh) clearDeviceEmissive(hoveredDeviceMesh)
         if (hoveredGroup) {
           restoreCabinet(hoveredGroup)
           hoveredGroup = null
         }
-        hoveredDeviceMesh = devGroup
-        setDeviceEmissive(devGroup, 0x38bdf8, 0.6)
+        if (isSel) hoveredDeviceMesh = null
+        else {
+          hoveredDeviceMesh = devGroup
+          setDeviceEmissive(devGroup, 0x38bdf8, 0.5)
+        }
       }
       engine.setCursor('pointer')
       hoveredDeviceId.value = devGroup.userData.id
@@ -1057,29 +1082,7 @@ function onPointerUp(e) {
   }
 }
 
-// 设备高亮（复用 Rack3DView 思路：缓存原始 emissive）
-function setDeviceEmissive(group, hex, intensity) {
-  const m = group.userData.pickMesh
-  if (!m) return
-  const mat = m.material
-  if (mat.__baseEmissive === undefined) {
-    mat.__baseEmissive = mat.emissive ? mat.emissive.getHex() : 0x000000
-    mat.__baseIntensity = mat.emissiveIntensity ?? 1
-  }
-  if (mat.emissive) {
-    mat.emissive.setHex(hex)
-    mat.emissiveIntensity = intensity
-  }
-}
-function clearDeviceEmissive(group) {
-  const m = group.userData.pickMesh
-  if (!m) return
-  const mat = m.material
-  if (mat.__baseEmissive !== undefined && mat.emissive) {
-    mat.emissive.setHex(mat.__baseEmissive)
-    mat.emissiveIntensity = mat.__baseIntensity
-  }
-}
+// 设备高亮（setDeviceEmissive / clearDeviceEmissive / setDeviceSelected 已统一在 device-models.js 实现）
 
 function showRackTooltip(e, rack) {
   const dc = deviceCountCache.value[rack.id]
@@ -1139,34 +1142,46 @@ function hoverRoster(id, on) {
 }
 
 function hoverDeviceFromList(id, on) {
+  // 选中态优先：悬停不改变已选中设备的外观（避免蓝色 hover 覆盖琥珀选中高亮）
+  if (selectedDeviceId.value === id) return
   hoveredDeviceId.value = on ? id : hoveredDeviceId.value === id ? null : hoveredDeviceId.value
   const g = deviceMeshes.find((m) => m.userData.id === id)
   if (!g) return
   if (on) {
     if (hoveredDeviceMesh && hoveredDeviceMesh !== g) clearDeviceEmissive(hoveredDeviceMesh)
     hoveredDeviceMesh = g
-    setDeviceEmissive(g, 0x38bdf8, 0.6)
+    setDeviceEmissive(g, 0x38bdf8, 0.5)
   } else if (hoveredDeviceMesh === g) {
     clearDeviceEmissive(hoveredDeviceMesh)
     hoveredDeviceMesh = null
   }
 }
 
-// 列表 / 3D 场景点击设备：高亮定位 + 拉取详情（接口、关联链路）并绘制 3D 动态线缆
+// 列表 / 3D 场景点击设备：明显的琥珀选中高亮（描边 + 自发光）+ 拉取详情并绘制 3D 动态线缆
 function selectDeviceFromList(id) {
   if (selectedDeviceId.value === id) {
     clearDeviceSelection()
     return
   }
-  if (selectedDeviceId.value) hoverDeviceFromList(selectedDeviceId.value, false)
+  // 还原上一个选中设备
+  if (selectedDeviceId.value) {
+    const prev = deviceMeshes.find((m) => m.userData.id === selectedDeviceId.value)
+    if (prev) setDeviceSelected(prev, false)
+    if (hoveredDeviceMesh === prev) hoveredDeviceMesh = null
+  }
   selectedDeviceId.value = id
-  hoverDeviceFromList(id, true)
+  const g = deviceMeshes.find((m) => m.userData.id === id)
+  if (g) setDeviceSelected(g, true)
   fetchDeviceDetail(id)
 }
 
 // 清空设备选中态：取消高亮 + 移除详情面板与 3D 线缆
 function clearDeviceSelection() {
-  if (selectedDeviceId.value) hoverDeviceFromList(selectedDeviceId.value, false)
+  if (selectedDeviceId.value) {
+    const g = deviceMeshes.find((m) => m.userData.id === selectedDeviceId.value)
+    if (g) setDeviceSelected(g, false)
+  }
+  if (hoveredDeviceMesh && hoveredDeviceMesh.userData.id === selectedDeviceId.value) hoveredDeviceMesh = null
   selectedDeviceId.value = null
   selectedDeviceDetail.value = null
   clearCables()

@@ -349,6 +349,90 @@ export function restoreCabinet(group) {
   })
 }
 
+// ====== 设备选中高亮（机房总览 / 机柜详情 共用统一风格）======
+
+// 选中态统一强调色：琥珀金——与场景蓝调 hover 形成强对比，从任意视角都醒目。
+export const SELECT_COLOR = 0xfbbf24
+
+// 缓存材质原始 emissive（仅首次），供还原使用。
+function ensureBaseEmissive(mat) {
+  if (mat.__baseEmissive === undefined) {
+    mat.__baseEmissive = mat.emissive ? mat.emissive.getHex() : 0x000000
+    mat.__baseIntensity = mat.emissiveIntensity ?? 1
+  }
+}
+
+// 仅修改设备拾取网格（pickMesh）的自发光，悬停反馈复用。
+export function setDeviceEmissive(group, hex, intensity) {
+  const m = group.userData.pickMesh
+  if (!m || !m.material) return
+  ensureBaseEmissive(m.material)
+  if (m.material.emissive) {
+    m.material.emissive.setHex(hex)
+    m.material.emissiveIntensity = intensity
+  }
+}
+
+export function clearDeviceEmissive(group) {
+  const m = group.userData.pickMesh
+  if (!m || !m.material) return
+  if (m.material.__baseEmissive !== undefined && m.material.emissive) {
+    m.material.emissive.setHex(m.material.__baseEmissive)
+    m.material.emissiveIntensity = m.material.__baseIntensity
+  }
+}
+
+// 在设备 Group 外围生成发光描边框（LineSegments），挂到 group.parent 上随设备移动。
+// depthTest:false 使描边穿透机柜外壳始终可见，确保「明显」的高亮。
+export function attachSelectionBox(group, color = SELECT_COLOR) {
+  detachSelectionBox(group)
+  group.updateWorldMatrix(true, true)
+  const box = new THREE.Box3().setFromObject(group)
+  if (box.isEmpty()) return null
+  const size = new THREE.Vector3()
+  const center = new THREE.Vector3()
+  box.getSize(size)
+  box.getCenter(center)
+  const geo = new THREE.BoxGeometry(size.x + 0.16, size.y + 0.16, size.z + 0.16)
+  const edges = new THREE.EdgesGeometry(geo)
+  const mat = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.95, depthTest: false })
+  const box3 = new THREE.LineSegments(edges, mat)
+  box3.renderOrder = 999
+  const parent = group.parent
+  if (parent) {
+    box3.position.copy(parent.worldToLocal(center.clone()))
+  } else {
+    box3.position.copy(center)
+  }
+  box3.userData.isSelectionBox = true
+  group.userData.selectionBox = box3
+  if (parent) parent.add(box3)
+  return box3
+}
+
+export function detachSelectionBox(group) {
+  const box3 = group.userData.selectionBox
+  if (box3) {
+    if (box3.parent) box3.parent.remove(box3)
+    box3.geometry.dispose()
+    box3.material.dispose()
+    group.userData.selectionBox = null
+  }
+}
+
+// 统一「选中」视觉：琥珀色自发光 + 外围发光描边框 + 书签高亮（若挂载）。
+export function setDeviceSelected(group, on, color = SELECT_COLOR) {
+  if (on) {
+    setDeviceEmissive(group, color, 0.55)
+    attachSelectionBox(group, color)
+  } else {
+    clearDeviceEmissive(group)
+    detachSelectionBox(group)
+  }
+  const bm = group.userData.bookmark
+  if (bm && bm.element && bm.element.classList) bm.element.classList.toggle('is-selected', on)
+}
+
 // 从任意子对象回溯到机柜 Group（用于射线拾取）。
 export function findCabinetGroup(obj) {
   let o = obj
