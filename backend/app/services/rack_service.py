@@ -76,17 +76,13 @@ class RackService:
         if data.column_code in {r.column_code for r in other}:
             ridx = col_codes.index(data.column_code)
             members = [r for r in other if r.column_code == data.column_code]
-            max_col = max(
-                (r.grid_col or 0) for r in members if r.grid_col is not None
-            )
+            cols = [r.grid_col for r in members if r.grid_col is not None]
+            max_col = max(cols) if cols else -1
             rack.grid_row = ridx
             rack.grid_col = max_col + 1
         else:
-            max_row = (
-                max((r.grid_row or 0) for r in other if r.grid_row is not None)
-                if other
-                else -1
-            )
+            rows = [r.grid_row for r in other if r.grid_row is not None]
+            max_row = max(rows) if rows else -1
             rack.grid_row = max_row + 1
             rack.grid_col = 0
 
