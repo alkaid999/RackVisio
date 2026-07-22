@@ -2,7 +2,7 @@
   <div class="space-y-3">
     <div class="flex items-center justify-between gap-2">
       <div class="min-w-0">
-        <div class="text-base font-semibold text-slate-800 truncate">{{ rack.name }}</div>
+        <div class="text-base font-semibold text-slate-100 truncate">{{ rack.name }}</div>
         <div class="text-xs text-slate-400 mt-0.5">{{ rack.code }}</div>
       </div>
       <StatusBadge type="rack" :value="rack.status" />

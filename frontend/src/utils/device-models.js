@@ -362,24 +362,31 @@ function ensureBaseEmissive(mat) {
   }
 }
 
-// 仅修改设备拾取网格（pickMesh）的自发光，悬停反馈复用。
+// 对设备 Group 全部 mesh 施加/还原自发光，使选中时光晕覆盖整个设备本体
+// （而非仅 chassis——前面板会遮挡 chassis，导致此前仅描边框可见、本体无光晕）。
 export function setDeviceEmissive(group, hex, intensity) {
-  const m = group.userData.pickMesh
-  if (!m || !m.material) return
-  ensureBaseEmissive(m.material)
-  if (m.material.emissive) {
-    m.material.emissive.setHex(hex)
-    m.material.emissiveIntensity = intensity
-  }
+  group.traverse((obj) => {
+    const mats = obj.material ? (Array.isArray(obj.material) ? obj.material : [obj.material]) : []
+    mats.forEach((m) => {
+      ensureBaseEmissive(m)
+      if (m.emissive) {
+        m.emissive.setHex(hex)
+        m.emissiveIntensity = intensity
+      }
+    })
+  })
 }
 
 export function clearDeviceEmissive(group) {
-  const m = group.userData.pickMesh
-  if (!m || !m.material) return
-  if (m.material.__baseEmissive !== undefined && m.material.emissive) {
-    m.material.emissive.setHex(m.material.__baseEmissive)
-    m.material.emissiveIntensity = m.material.__baseIntensity
-  }
+  group.traverse((obj) => {
+    const mats = obj.material ? (Array.isArray(obj.material) ? obj.material : [obj.material]) : []
+    mats.forEach((m) => {
+      if (m.__baseEmissive !== undefined && m.emissive) {
+        m.emissive.setHex(m.__baseEmissive)
+        m.emissiveIntensity = m.__baseIntensity
+      }
+    })
+  })
 }
 
 // 在设备 Group 外围生成发光描边框（LineSegments），挂到 group.parent 上随设备移动。
@@ -423,7 +430,7 @@ export function detachSelectionBox(group) {
 // 统一「选中」视觉：琥珀色自发光 + 外围发光描边框 + 书签高亮（若挂载）。
 export function setDeviceSelected(group, on, color = SELECT_COLOR) {
   if (on) {
-    setDeviceEmissive(group, color, 0.55)
+    setDeviceEmissive(group, color, 0.7)
     attachSelectionBox(group, color)
   } else {
     clearDeviceEmissive(group)
