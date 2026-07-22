@@ -20,6 +20,7 @@ from sqlalchemy import inspect, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.database import utcnow
 from app.core.security import hash_password
 from app.models.user import User
 from app.repositories.user_repo import UserRepository
