@@ -67,6 +67,12 @@ const routes = [
     meta: { title: '设备详情', requiresAuth: true, permission: 'device:view' },
   },
   {
+    path: '/mount-records',
+    name: 'MountRecordList',
+    component: () => import('@/views/device/MountRecordList.vue'),
+    meta: { title: '上下架记录', requiresAuth: true, permission: 'device:view' },
+  },
+  {
     path: '/links',
     name: 'LinkList',
     component: () => import('@/views/link/LinkList.vue'),

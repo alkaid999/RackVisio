@@ -194,3 +194,35 @@ class MountRecordRepository:
         )
         rows = (await self.session.execute(stmt)).all()
         return [(r[0], r[1], r[2]) for r in rows]
+
+    async def list_all_with_device(
+        self,
+        *,
+        device_name: Optional[str] = None,
+        device_code: Optional[str] = None,
+        start_time: Optional[datetime] = None,
+        end_time: Optional[datetime] = None,
+    ) -> list[tuple[MountRecord, str, str, str, str]]:
+        """全局上下架记录（跨设备），附带机柜名 / 机房名 / 设备编号 / 设备名称。
+
+        用于「上下架记录」集中管理页：支持按设备名称（模糊）、设备编号（模糊）、
+        上架时间范围过滤。下架时间范围过滤在服务层展开事件后处理（因一条记录可能
+        产生上架 / 下架两个事件，时间字段不同）。按上架时间倒序。
+        """
+        stmt = (
+            select(MountRecord, Rack.name, Room.name, Device.device_code, Device.name)
+            .join(Rack, MountRecord.rack_id == Rack.id)
+            .join(Room, MountRecord.room_id == Room.id)
+            .join(Device, MountRecord.device_id == Device.id)
+        )
+        if device_name:
+            stmt = stmt.where(Device.name.ilike(f"%{device_name}%"))
+        if device_code:
+            stmt = stmt.where(Device.device_code.ilike(f"%{device_code}%"))
+        if start_time:
+            stmt = stmt.where(MountRecord.mounted_at >= start_time)
+        if end_time:
+            stmt = stmt.where(MountRecord.mounted_at <= end_time)
+        stmt = stmt.order_by(MountRecord.mounted_at.desc())
+        rows = (await self.session.execute(stmt)).all()
+        return [(r[0], r[1], r[2], r[3], r[4]) for r in rows]

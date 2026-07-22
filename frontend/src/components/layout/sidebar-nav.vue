@@ -15,6 +15,7 @@ import {
   Settings,
   UserCog,
   Package,
+  History,
 } from 'lucide-vue-next'
 
 const props = defineProps({ collapsed: { type: Boolean, default: false } })
@@ -42,6 +43,7 @@ const nav = [
     icon: Cpu,
     children: [
       { to: '/devices', label: '设备列表', icon: Cpu, permission: 'device:view' },
+      { to: '/mount-records', label: '上下架记录', icon: History, permission: 'device:view' },
       { to: '/links', label: '链路管理', icon: Share2, permission: 'link:view' },
       { to: '/consumables', label: '耗材列表', icon: Package, permission: 'consumable:view' },
     ],

@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 from typing import Optional, Tuple
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -330,6 +331,84 @@ class DeviceService:
                     }
                 )
         # 按操作时间倒序（active 记录无 unmounted_at，置为最小时间）。
+        events.sort(
+            key=lambda e: e["operated_at"].timestamp() if e["operated_at"] else 0,
+            reverse=True,
+        )
+        return events
+
+    # --------------------------------------------------- 全局上下架记录（集中管理页）
+    async def list_mount_events(
+        self,
+        *,
+        device_name: Optional[str] = None,
+        device_code: Optional[str] = None,
+        op_type: Optional[str] = None,
+        start_time: Optional[datetime] = None,
+        end_time: Optional[datetime] = None,
+    ) -> list[dict]:
+        """全局上下架操作流水（跨设备），供「上下架记录」集中管理页展示与导出。
+
+        复用与设备详情页完全一致的事件展开逻辑：每条 MountRecord 展开为「上架」事件
+        （mounted_at / mounted_by），若已下架再展开一条「下架」事件（unmounted_at /
+        unmounted_by）。因此两处数据同源，不会出现重复或分歧。
+
+        筛选：
+        - device_name / device_code：按设备名称 / 编号模糊匹配（下推到 SQL）。
+        - op_type：上架 / 下架（事件级，展开后过滤）。
+        - start_time / end_time：按事件操作时间范围过滤（上架或下架时间落入区间即命中）。
+        """
+        rows = await self.mount_repo.list_all_with_device(
+            device_name=device_name,
+            device_code=device_code,
+            start_time=start_time,
+            end_time=end_time,
+        )
+        events: list[dict] = []
+        for record, rack_name, room_name, device_code_val, device_name_val in rows:
+            base = {
+                "id": record.id,
+                "device_id": record.device_id,
+                "device_name": device_name_val,
+                "device_code": device_code_val,
+                "rack_id": record.rack_id,
+                "rack_name": rack_name,
+                "room_name": room_name,
+                "start_u": record.start_u,
+                "occupied_u": record.occupied_u,
+                "record_status": record.record_status,
+                "position": f"{room_name} / {rack_name} · {record.start_u}U~{record.start_u + record.occupied_u - 1}U（{record.occupied_u}U）",
+            }
+            # 上架事件。
+            mount_event = {
+                **base,
+                "event_type": "上架",
+                "operated_at": record.mounted_at,
+                "operator": record.mounted_by,
+            }
+            # 下架事件（仅已下架记录）。
+            unmount_event = None
+            if record.record_status == MountRecordStatus.UNMOUNTED.value:
+                unmount_event = {
+                    **base,
+                    "event_type": "下架",
+                    "operated_at": record.unmounted_at,
+                    "operator": record.unmounted_by,
+                }
+            for ev in (mount_event, unmount_event):
+                if ev is None:
+                    continue
+                # 操作类型筛选。
+                if op_type and ev["event_type"] != op_type:
+                    continue
+                # 时间范围筛选（基于事件自身操作时间）。
+                op_at = ev["operated_at"]
+                if start_time and (op_at is None or op_at < start_time):
+                    continue
+                if end_time and (op_at is None or op_at > end_time):
+                    continue
+                events.append(ev)
+        # 按操作时间倒序。
         events.sort(
             key=lambda e: e["operated_at"].timestamp() if e["operated_at"] else 0,
             reverse=True,
