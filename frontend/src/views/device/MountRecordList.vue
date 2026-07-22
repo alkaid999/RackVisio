@@ -130,6 +130,9 @@ import EmptyState from '@/components/ui/empty-state.vue'
 import Spinner from '@/components/ui/spinner.vue'
 import ListPager from '@/components/common/ListPager.vue'
 import { useToast } from '@/composables/useToast'
+import { formatDateTime } from '@/utils/datetime'
+
+const formatTime = formatDateTime
 
 const router = useRouter()
 const { error } = useToast()
@@ -214,14 +217,6 @@ function resetFilter() {
 
 function goDevice(id) {
   router.push(`/devices/${id}`)
-}
-
-function formatTime(t) {
-  if (!t) return '—'
-  const d = new Date(t)
-  if (isNaN(d.getTime())) return '—'
-  const pad = (n) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
 }
 
 // 导出：拉取全量匹配记录 → ExcelJS 生成 .xlsx。

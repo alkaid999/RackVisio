@@ -99,14 +99,9 @@ function goPage(p) {
   if (props.item) loadRecords(props.item.id, p)
 }
 
-// 时间格式化：ISO(含 Z) → 本地 "YYYY-MM-DD HH:mm"。
-function formatTime(iso) {
-  if (!iso) return '—'
-  const d = new Date(iso)
-  if (isNaN(d.getTime())) return iso
-  const p = (n) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
-}
+// 时间格式化统一委托给全局工具（上海时区呈现）。
+import { formatDateTime } from '@/utils/datetime'
+const formatTime = formatDateTime
 // 数量展示符号：入库 +、领用/报废 -、盘点 =。
 function qtyText(r) {
   if (r.operation_type === '入库') return `+${r.quantity}`

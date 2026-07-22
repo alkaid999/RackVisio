@@ -8,7 +8,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 from sqlalchemy import func, select
@@ -209,6 +209,20 @@ class MountRecordRepository:
         上架时间范围过滤。下架时间范围过滤在服务层展开事件后处理（因一条记录可能
         产生上架 / 下架两个事件，时间字段不同）。按上架时间倒序。
         """
+        # 前端 datetime-local 提交的是上海本地时间（naive）。约定按上海时区解释，
+        # 转成 UTC naive 再与库内 UTC 时间比较，避免「选今天 00:00」被当成 UTC 00:00
+        # （即上海 08:00）的 8 小时偏差。
+        _shanghai = timezone(timedelta(hours=8))
+        _utc = timezone.utc
+        if start_time is not None:
+            if start_time.tzinfo is None:
+                start_time = start_time.replace(tzinfo=_shanghai)
+            start_time = start_time.astimezone(_utc).replace(tzinfo=None)
+        if end_time is not None:
+            if end_time.tzinfo is None:
+                end_time = end_time.replace(tzinfo=_shanghai)
+            end_time = end_time.astimezone(_utc).replace(tzinfo=None)
+
         stmt = (
             select(MountRecord, Rack.name, Room.name, Device.device_code, Device.name)
             .join(Rack, MountRecord.rack_id == Rack.id)

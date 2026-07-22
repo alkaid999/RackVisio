@@ -127,7 +127,11 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="RackVisio 机柜 3D 可视化", version="1.0.0", lifespan=lifespan)
+app = FastAPI(
+    title="RackVisio 机柜 3D 可视化",
+    version="1.0.0",
+    lifespan=lifespan,
+)
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):

@@ -266,6 +266,7 @@ import { useAuthStore } from '@/stores/auth'
 import deviceApi from '@/api/device'
 import rackApi from '@/api/rack'
 import interfaceApi from '@/api/interface'
+import { formatDateTime } from '@/utils/datetime'
 import InterfaceList from '@/components/device/InterfaceList.vue'
 import InterfaceFrontPanel from '@/components/device/InterfaceFrontPanel.vue'
 import InterfaceFormModal from '@/components/device/InterfaceFormModal.vue'
@@ -370,9 +371,7 @@ const unmountPaged = computed(() => {
   const start = (unmountPage.value - 1) * HISTORY_PAGE_SIZE
   return unmountList.value.slice(start, start + HISTORY_PAGE_SIZE)
 })
-function formatTime(t) {
-  return t ? new Date(t).toLocaleString() : '—'
-}
+const formatTime = formatDateTime
 
 function goRack() {
   router.push(`/racks/${device.value.current_rack_id}`)
