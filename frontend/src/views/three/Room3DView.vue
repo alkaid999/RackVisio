@@ -1079,6 +1079,9 @@ function onPointerUp(e) {
     } else if (hits.length) {
       const g = findCabinetGroup(hits[0].object)
       if (g) goRack(g.userData.rack)
+    } else {
+      // 点击空白处取消设备选中（保留画图/旋转由 OrbitControls 处理，仅 click 不 drag 时触发）
+      clearDeviceSelection()
     }
   }
 }
@@ -1173,6 +1176,10 @@ function selectDeviceFromList(id) {
   selectedDeviceId.value = id
   const g = deviceMeshes.find((m) => m.userData.id === id)
   if (g) setDeviceSelected(g, true)
+  // 选中后不再把该设备视为悬停目标：否则鼠标移开时 onPointerMove 的清理逻辑
+  // 会误将选中设备的琥珀高亮一并 clearDeviceEmissive 掉，导致高亮消失。
+  if (hoveredDeviceMesh === g) hoveredDeviceMesh = null
+  if (hoveredDeviceId.value === id) hoveredDeviceId.value = null
   fetchDeviceDetail(id)
 }
 
