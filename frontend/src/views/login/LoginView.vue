@@ -9,8 +9,8 @@
 
     <div class="login-card glass">
       <div class="brand">
-        <div class="brand-logo">RV</div>
-        <h1 class="brand-title">RackVisio 机柜 3D 可视化</h1>
+        <div class="brand-logo"><RackLogo class="h-7 w-7" /></div>
+        <h1 class="brand-title">RackVisio</h1>
         <p class="brand-sub">RackVisio · 机房机柜三维可视化与资产管理</p>
       </div>
 
@@ -77,6 +77,7 @@ import Button from '@/components/ui/button.vue'
 import Input from '@/components/ui/input.vue'
 import Label from '@/components/ui/label.vue'
 import Spinner from '@/components/ui/spinner.vue'
+import RackLogo from '@/components/RackLogo.vue'
 
 const route = useRoute()
 const router = useRouter()

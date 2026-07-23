@@ -17,11 +17,11 @@
             :class="collapsed ? 'justify-center px-0' : 'px-5'"
           >
             <div
-              class="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-primary/70 text-sm font-bold text-white shadow-glow"
+              class="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-primary/70 text-white shadow-glow"
             >
-              RV
+              <RackLogo class="h-5 w-5" />
             </div>
-            <span v-if="!collapsed" class="text-[15px] font-semibold tracking-wide">RackVisio 机柜 3D 可视化</span>
+            <span v-if="!collapsed" class="text-[15px] font-semibold tracking-wide">RackVisio</span>
           </div>
 
           <SidebarNav :collapsed="collapsed" class="flex-1 overflow-y-auto scroll-thin" @expand="collapsed = false" />
@@ -106,8 +106,10 @@
     <Sheet v-model="mobileOpen" side="left" title="导航">
       <div class="flex h-full flex-col">
         <div class="mb-2 flex items-center gap-2.5 px-1">
-          <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-primary/70 text-sm font-bold text-white">RV</div>
-          <span class="text-[15px] font-semibold">RackVisio 机柜 3D 可视化</span>
+          <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-primary/70 text-white">
+            <RackLogo class="h-5 w-5" />
+          </div>
+          <span class="text-[15px] font-semibold">RackVisio</span>
         </div>
         <SidebarNav :collapsed="false" class="flex-1 overflow-y-auto scroll-thin" @expand="mobileOpen = false" />
       </div>
@@ -131,6 +133,7 @@ import Breadcrumb from '@/components/common/Breadcrumb.vue'
 import ThemeToggle from '@/components/ui/theme-toggle.vue'
 import Button from '@/components/ui/button.vue'
 import Avatar from '@/components/ui/avatar.vue'
+import RackLogo from '@/components/RackLogo.vue'
 import DropdownMenu from '@/components/ui/dropdown-menu.vue'
 import DropdownMenuContent from '@/components/ui/dropdown-menu-content.vue'
 import DropdownMenuItem from '@/components/ui/dropdown-menu-item.vue'

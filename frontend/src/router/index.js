@@ -139,7 +139,7 @@ router.beforeEach(async (to) => {
 })
 
 router.afterEach((to) => {
-  document.title = to.meta?.title ? `${to.meta.title} | RackVisio 机柜 3D 可视化` : 'RackVisio 机柜 3D 可视化'
+  document.title = to.meta?.title ? `${to.meta.title} | RackVisio` : 'RackVisio'
 })
 
 export default router
