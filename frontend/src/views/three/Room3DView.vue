@@ -5,22 +5,9 @@
       <div v-if="loading" class="three-loading">正在加载机房三维场景…</div>
     </div>
 
-    <!-- 顶部：居中图标控制条（机房总览 / 选中机房 / 大屏(退出) / 视角重置） -->
+    <!-- 顶部：居中图标控制条（选中机房 / 大屏(退出) / 视角重置） -->
     <div class="absolute top-3 left-1/2 -translate-x-1/2 z-30 pointer-events-auto">
       <div class="glass-panel flex items-center gap-1 rounded-2xl px-1.5 py-1.5 shadow-lg shadow-black/20">
-        <!-- 机房总览 -->
-        <Tooltip side="bottom">
-          <template #trigger>
-            <button
-              type="button"
-              class="flex h-9 w-9 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:text-foreground hover:bg-accent bg-brand-500 text-white shadow"
-            ><Boxes class="h-5 w-5" /></button>
-          </template>
-          机房总览
-        </Tooltip>
-
-        <div class="mx-1 h-5 w-px bg-border/50"></div>
-
         <!-- 选中机房 -->
         <Select v-model="roomId" class="w-[150px]" @update:model-value="onRoomChange">
           <SelectTrigger placeholder="选中机房" />
@@ -298,7 +285,7 @@
 import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useTheme } from '@/composables/useTheme'
-import { RotateCcw, Crosshair, Cpu, ChevronRight, ChevronDown, Monitor, Boxes, ArrowLeft, X, Network, Cable } from 'lucide-vue-next'
+import { RotateCcw, Crosshair, Cpu, ChevronRight, ChevronDown, Monitor, ArrowLeft, X, Network, Cable } from 'lucide-vue-next'
 import * as THREE from 'three'
 import { Line2 } from 'three/examples/jsm/lines/Line2.js'
 import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js'
