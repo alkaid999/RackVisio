@@ -2,7 +2,9 @@
 // 直接使用 draw.io 自带的「机架图形」stencil：
 //   - 机柜：mxgraph.rackGeneral.rackCabinet3（childLayout=rack，自动按 U 绘制刻度）
 //   - 交换机：HPE Aruba 机架 stencil（用户指定，按 U 高分层：<5U=Aruba 6300M，≥5U=Aruba CX 6410）
-//   - 其他设备：mxgraph.rack.dell.* / mxgraph.rack.f5.* 真实机架设备图形（≤4U 真实硬件外观）
+//   - 服务器：Dell PowerEdge（1U/2U/4U 真实硬件图；≥5U=Oracle Netra CT900 刀片机箱）
+//   - 路由器：Cisco（<5U=7603；≥5U=ASR 9006）
+//   - 安全设备：F5（1-2U=ARX 500；3-4U=BIG-IP 110x0；≥5U=VIPRION 4400）
 //   - 多 U 框式/刀片设备（≥5U）：自定义内联机箱图形（矢量 SVG，按槽位高度缩放，含模块槽位装饰），避免真实硬件图被拉伸变形
 // 设备标签为彩色文本框（沿用类型配色），仅含设备名称 + 当前 U 位（如 U3 或 U3-5）；
 // 机柜名称文本框居中显示于机柜顶部；机房名称居中显示于机房正上方。
@@ -10,18 +12,14 @@
 const DEVICE_TYPE_COLORS = {
   server: '#409EFF',
   switch: '#67C23A',
-  firewall: '#F97316',
   router: '#13C2C2',
-  waf: '#EB4895',
   security: '#E6A23C',
   other: '#909399',
 }
 const DEVICE_TYPE_LABELS = {
   server: '服务器',
   switch: '交换机',
-  firewall: '防火墙',
   router: '路由器',
-  waf: 'WAF',
   security: '安全设备',
   other: '其他',
 }
@@ -43,22 +41,26 @@ const ROOM_TITLE_H = 40
 //   3) 高度感知兜底：≥5U 框式/刀片 → 自定义内联机箱图形；≤4U → 真实固定 U 硬件图形
 // 返回：stencil ID 字符串，或 '__chassis__'（自定义内联机箱图形标记）
 
-// ≤4U：draw.io 真实固定 U 硬件图形
-function realisticStencil(type, uH) {
-  const dell = {
-    1: 'mxgraph.rack.dell.dell_poweredge_1u',
-    2: 'mxgraph.rack.dell.dell_poweredge_2u',
-    4: 'mxgraph.rack.dell.dell_poweredge_4u',
-  }
-  const dellShape = dell[uH] || (uH >= 3 ? dell[4] : dell[2])
-  const f5 = uH <= 2 ? 'mxgraph.rack.f5.big_ip_2x00' : 'mxgraph.rack.f5.viprion_4800'
+// 各类型按 U 高的精确图形映射（用户指定）：
+//   服务器  1U=dell_poweredge_1u / 2U=dell_poweredge_2u / 3-4U=dell_poweredge_4u / ≥5U=oracle.netra_ct900_atca_blade_server
+//   路由器  <5U=cisco_7603_router / ≥5U=cisco_asr_9006
+//   安全设备 1-2U=f5.arx_500 / 3-4U=f5.big_ip_110x0 / ≥5U=f5.viprion_4400
+//   其它/未知 → 自定义内联机箱图形（__chassis__）
+function typeStencil(type, uH) {
   switch (type) {
-    case 'firewall':
-    case 'waf':
+    case 'server':
+      if (uH === 1) return 'mxgraph.rack.dell.dell_poweredge_1u'
+      if (uH === 2) return 'mxgraph.rack.dell.dell_poweredge_2u'
+      if (uH <= 4) return 'mxgraph.rack.dell.dell_poweredge_4u'
+      return 'mxgraph.rack.oracle.netra_ct900_atca_blade_server'
+    case 'router':
+      return uH >= 5 ? 'mxgraph.rack.cisco.cisco_asr_9006' : 'mxgraph.rack.cisco.cisco_7603_router'
     case 'security':
-      return f5
+      if (uH <= 2) return 'mxgraph.rack.f5.arx_500'
+      if (uH <= 4) return 'mxgraph.rack.f5.big_ip_110x0'
+      return 'mxgraph.rack.f5.viprion_4400'
     default:
-      return dellShape
+      return '__chassis__'
   }
 }
 
@@ -70,7 +72,6 @@ const MODEL_STENCIL_MAP = [
   { test: /nexus\s*7|nexus\s*9|ce128|s12500|cloudengine|框式|刀片|chassis|qsfp|机箱|srx[0-9]000/i, kind: 'chassis' },
   // 具体型号 → 精确通用图形（draw.io 自带，可扩展更多）
   { test: /nexus\s*[23]|catalyst\s*9|s[567]\d{3}/i, kind: 'stencil', id: 'mxgraph.rack.switch' },
-  { test: /isr|asr|mx\d{3,}|cr\d|框式路由/i, kind: 'stencil', id: 'mxgraph.rack.router' },
   { test: /netapp|emc|unity|storeeasy|存储阵列|array/i, kind: 'stencil', id: 'mxgraph.rack.storage' },
   { test: /patch|配线架|patchpanel/i, kind: 'stencil', id: 'mxgraph.rack.patchPanel' },
   { test: /ups|不间断电源/i, kind: 'stencil', id: 'mxgraph.rack.ups' },
@@ -135,10 +136,8 @@ function stencilFor(d) {
   // 3) 型号映射表
   const hit = matchModel(d.model)
   if (hit) return hit.kind === 'chassis' ? '__chassis__' : hit.id
-  // 4) 高度感知：≥5U 框式/刀片 → 自定义机箱图形
-  if ((d.u_height || 1) >= 5) return '__chassis__'
-  // 5) ≤4U → 真实固定 U 硬件图形
-  return realisticStencil(d.device_type, d.u_height || 1)
+  // 4) 按类型的精确 U 高映射
+  return typeStencil(d.device_type, d.u_height || 1)
 }
 
 // XML 转义（& < > "），保证生成的 mxGraphModel 属性合法。
