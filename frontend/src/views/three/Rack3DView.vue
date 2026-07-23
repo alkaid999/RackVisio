@@ -181,7 +181,7 @@ async function load() {
   }
 }
 
-// 统一刷新高亮：选中（琥珀描边 + 自发光）> 悬停（蓝色）> 还原。
+// 统一刷新高亮：选中（红色自发光 + 面板红色顶条）> 悬停（蓝色）> 还原。
 function refreshHighlights() {
   deviceMeshes.forEach((g) => {
     if (g === selectedMesh) setDeviceSelected(g, true)

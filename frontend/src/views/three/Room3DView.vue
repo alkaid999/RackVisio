@@ -1012,7 +1012,7 @@ function onPointerMove(e) {
       }
     }
     if (devGroup) {
-      // 选中设备保持琥珀高亮，hover 不覆盖；其余悬停设备给蓝色反馈
+      // 选中设备保持红色高亮，hover 不覆盖；其余悬停设备给蓝色反馈
       const isSel = devGroup.userData.id === selectedDeviceId.value
       if (hoveredDeviceMesh !== devGroup) {
         if (hoveredDeviceMesh) clearDeviceEmissive(hoveredDeviceMesh)
@@ -1166,7 +1166,7 @@ function hoverRoster(id, on) {
 }
 
 function hoverDeviceFromList(id, on) {
-  // 选中态优先：悬停不改变已选中设备的外观（避免蓝色 hover 覆盖琥珀选中高亮）
+  // 选中态优先：悬停不改变已选中设备的外观（避免蓝色 hover 覆盖红色选中高亮）
   if (selectedDeviceId.value === id) return
   hoveredDeviceId.value = on ? id : hoveredDeviceId.value === id ? null : hoveredDeviceId.value
   const g = deviceMeshes.find((m) => m.userData.id === id)
@@ -1181,7 +1181,7 @@ function hoverDeviceFromList(id, on) {
   }
 }
 
-// 列表 / 3D 场景点击设备：明显的琥珀选中高亮（描边 + 自发光）+ 拉取详情并绘制 3D 动态线缆
+// 列表 / 3D 场景点击设备：明显的红色选中高亮（自发光 + 面板红色顶条）+ 拉取详情并绘制 3D 动态线缆
 function selectDeviceFromList(id) {
   if (selectedDeviceId.value === id) {
     clearDeviceSelection()
@@ -1197,7 +1197,7 @@ function selectDeviceFromList(id) {
   const g = deviceMeshes.find((m) => m.userData.id === id)
   if (g) setDeviceSelected(g, true)
   // 选中后不再把该设备视为悬停目标：否则鼠标移开时 onPointerMove 的清理逻辑
-  // 会误将选中设备的琥珀高亮一并 clearDeviceEmissive 掉，导致高亮消失。
+  // 会误将选中设备的红色高亮一并 clearDeviceEmissive 掉，导致高亮消失。
   if (hoveredDeviceMesh === g) hoveredDeviceMesh = null
   if (hoveredDeviceId.value === id) hoveredDeviceId.value = null
   fetchDeviceDetail(id)
