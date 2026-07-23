@@ -1,17 +1,9 @@
 // 机房拓扑导出为 draw.io（diagrams.net）格式：生成一段 mxGraphModel XML。
-// 布局采用「平面列表式」：机房标题 → 按 grid_col/grid_row 排序的机柜分组，
-// 每组机柜表头 + 其下设备列表；每台设备用「类型专属 SVG 图标 + 信息标签」渲染，
-// 双击 .drawio 即可在 diagrams.net 中打开并继续编辑。
-// 设备类型配色/标签自包含（与 constants.js 同源，避免导出工具依赖 vue reactive 常量）。
-const DEVICE_TYPE_COLORS = {
-  server: '#409EFF',
-  switch: '#67C23A',
-  firewall: '#F97316',
-  router: '#13C2C2',
-  waf: '#EB4895',
-  security: '#E6A23C',
-  other: '#909399',
-}
+// 直接使用 draw.io 自带的「机架图形」stencil，无需自绘 SVG：
+//   - 机柜：mxgraph.rackGeneral.rackCabinet3（含 childLayout=rack，自动按 U 绘制刻度）
+//   - 设备：mxgraph.rack.dell.* / mxgraph.rack.f5.* 等真实机架设备图形，按 U 位精确落位
+// 双击 .drawio 即可在 diagrams.net 中打开，设备图形可继续编辑/替换。
+// 设备类型标签自包含（与 constants.js 同源，避免导出工具依赖 vue reactive 常量）。
 const DEVICE_TYPE_LABELS = {
   server: '服务器',
   switch: '交换机',
@@ -22,63 +14,35 @@ const DEVICE_TYPE_LABELS = {
   other: '其他',
 }
 
-// —— 设备类型 SVG 图标（内联 data URI，打开即得、跨版本稳定）——
-function svgWrap(inner) {
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">${inner}</svg>`
-}
-function iconSvg(type) {
-  const c = DEVICE_TYPE_COLORS[type] || DEVICE_TYPE_COLORS.other
-  switch (type) {
-    case 'server':
-      return svgWrap(
-        `<rect x="4" y="4" width="24" height="24" rx="2" fill="${c}"/>` +
-          `<rect x="7" y="8" width="18" height="3" rx="1" fill="#fff" opacity="0.85"/>` +
-          `<rect x="7" y="14" width="18" height="3" rx="1" fill="#fff" opacity="0.85"/>` +
-          `<circle cx="9" cy="22" r="1.6" fill="#fff"/>` +
-          `<rect x="13" y="20.5" width="12" height="3" rx="1" fill="#fff" opacity="0.6"/>`
-      )
-    case 'switch':
-      return svgWrap(
-        `<rect x="4" y="6" width="24" height="20" rx="2" fill="${c}"/>` +
-          Array.from({ length: 6 })
-            .map((_, i) => `<rect x="${6 + i * 4}" y="10" width="2.4" height="6" fill="#fff" opacity="0.85"/>`)
-            .join('') +
-          `<rect x="6" y="20" width="20" height="2.4" rx="1" fill="#fff" opacity="0.5"/>`
-      )
-    case 'firewall':
-      return svgWrap(
-        `<rect x="4" y="5" width="24" height="22" rx="2" fill="${c}"/>` +
-          `<path d="M4 11h24M4 17h24M10 5v22M17 5v22M24 5v22" stroke="#fff" stroke-width="1.4" opacity="0.7"/>`
-      )
-    case 'router':
-      return svgWrap(
-        `<rect x="5" y="12" width="22" height="12" rx="2" fill="${c}"/>` +
-          `<path d="M16 12V6" stroke="${c}" stroke-width="2"/>` +
-          `<circle cx="16" cy="5" r="2" fill="${c}"/>` +
-          `<circle cx="10" cy="18" r="1.6" fill="#fff"/>` +
-          `<circle cx="16" cy="18" r="1.6" fill="#fff"/>` +
-          `<circle cx="22" cy="18" r="1.6" fill="#fff"/>`
-      )
-    case 'waf':
-      return svgWrap(
-        `<path d="M16 3l11 4v7c0 7-5 11-11 14C10 25 5 21 5 14V7z" fill="${c}"/>` +
-          `<text x="16" y="18" font-size="7" fill="#fff" text-anchor="middle" font-family="Arial">WAF</text>`
-      )
-    case 'security':
-      return svgWrap(
-        `<path d="M16 3l11 4v7c0 7-5 11-11 14C10 25 5 21 5 14V7z" fill="${c}"/>` +
-          `<path d="M11 15l3.5 3.5L22 11" stroke="#fff" stroke-width="2" fill="none"/>`
-      )
-    default:
-      return svgWrap(
-        `<rect x="5" y="7" width="22" height="18" rx="2" fill="${c}"/>` +
-          `<rect x="8" y="11" width="16" height="3" rx="1" fill="#fff" opacity="0.7"/>` +
-          `<circle cx="10" cy="20" r="1.5" fill="#fff"/>`
-      )
+// draw.io 机架 stencil 几何参数（与示例文件一致）
+const RACK_W = 204
+const RACK_UNIT = 14.8 // 每 U 像素高
+const M = { top: 21, bottom: 22, left: 33, right: 9 }
+const INNER_W = RACK_W - M.left - M.right // 162
+const GAP = 56
+const COLS = 5
+const TITLE_H = 26
+const ROOM_TITLE_H = 40
+
+// 设备类型 → draw.io 内置机架设备 stencil：
+//   server/router/switch/other → Dell PowerEdge 系列（1U/2U/4U 变体）
+//   firewall/waf/security      → F5 安全设备系列（真实机架外观）
+function stencilFor(type, uH) {
+  const dell = {
+    1: 'mxgraph.rack.dell.dell_poweredge_1u',
+    2: 'mxgraph.rack.dell.dell_poweredge_2u',
+    4: 'mxgraph.rack.dell.dell_poweredge_4u',
   }
-}
-function iconDataUri(type) {
-  return 'data:image/svg+xml,' + encodeURIComponent(iconSvg(type))
+  const dellShape = dell[uH] || (uH >= 3 ? dell[4] : dell[2])
+  const f5 = uH <= 2 ? 'mxgraph.rack.f5.big_ip_2x00' : 'mxgraph.rack.f5.viprion_4800'
+  switch (type) {
+    case 'firewall':
+    case 'waf':
+    case 'security':
+      return f5
+    default:
+      return dellShape
+  }
 }
 
 // XML 转义（& < > "），保证 value 内的 HTML 与用户文本不会破坏 mxGraphModel 结构。
@@ -90,42 +54,33 @@ function escapeXml(s) {
     .replace(/"/g, '&quot;')
 }
 
-function deviceValue(d) {
-  const type = d.device_type
-  const c = DEVICE_TYPE_COLORS[type] || DEVICE_TYPE_COLORS.other
-  const label = DEVICE_TYPE_LABELS[type] || type
-  const uri = iconDataUri(type)
-  const lines = []
-  lines.push(`<div style='font-weight:700;font-size:13px;color:${c};'>${d.name || '未命名设备'}</div>`)
-  lines.push(`<div style='font-size:11px;color:#475569;'>${label}${d.model ? ' · ' + d.model : ''}</div>`)
-  if (d.ip_address) {
-    lines.push(`<div style='font-size:11px;color:#475569;'>IP ${d.ip_address}</div>`)
-  }
-  const meta = []
-  if (d.device_code) meta.push('编码 ' + d.device_code)
-  if (d.sn) meta.push('SN ' + d.sn)
-  if (d.power_status) meta.push(d.power_status)
-  if (meta.length) {
-    lines.push(`<div style='font-size:10px;color:#94a3b8;'>${meta.join(' · ')}</div>`)
-  }
-  return (
-    `<div style='display:flex;align-items:center;gap:8px;padding:4px;'>` +
-    `<img src='${uri}' style='width:34px;height:34px;flex:0 0 auto;'/>` +
-    `<div style='min-width:0;'>${lines.join('')}</div></div>`
-  )
-}
-
-function deviceStyle(d) {
-  const c = DEVICE_TYPE_COLORS[d.device_type] || DEVICE_TYPE_COLORS.other
-  return `rounded=1;whiteSpace=wrap;html=1;fillColor=#F8FAFC;strokeColor=${c};strokeWidth=1.5;verticalAlign=middle;shadow=0;`
+// 多行文本：逐行转义后以 <br> 连接（style 含 html=1，draw.io 加载后按 HTML 渲染）。
+function textBlock(lines) {
+  return lines.filter(Boolean).map(escapeXml).join('<br>')
 }
 
 function cell(id, value, style, x, y, w, h, parent) {
-  // 整段 value 统一 XML 转义一次：内含的 HTML 标签(<div>/<img>)会被转义存储，
-  // draw.io 加载时反转义并作为 HTML 渲染（style 含 html=1）。
   return (
     `<mxCell id="${id}" value="${escapeXml(value)}" style="${style}" vertex="1" parent="${parent || '1'}">` +
     `<mxGeometry x="${x}" y="${y}" width="${w}" height="${h}" as="geometry"/></mxCell>`
+  )
+}
+
+function cabinetStyle(totalU) {
+  return (
+    'strokeColor=#666666;html=1;verticalLabelPosition=bottom;labelBackgroundColor=#ffffff;' +
+    'verticalAlign=top;outlineConnect=0;shadow=0;dashed=0;' +
+    'shape=mxgraph.rackGeneral.rackCabinet3;rackUnitSize=' + RACK_UNIT + ';fillColor2=#f4f4f4;' +
+    'container=1;collapsible=0;childLayout=rack;allowGaps=1;' +
+    'marginLeft=' + M.left + ';marginRight=' + M.right + ';marginTop=' + M.top + ';marginBottom=' + M.bottom + ';' +
+    'textColor=#666666;numDisp=ascend;'
+  )
+}
+
+function deviceStyle(stencil) {
+  return (
+    'strokeColor=#666666;html=1;labelPosition=right;align=left;spacingLeft=15;shadow=0;' +
+    'dashed=0;outlineConnect=0;shape=' + stencil + ';'
   )
 }
 
@@ -138,80 +93,84 @@ export function buildRoomDrawioXml({ room, racks, rackDevices }) {
   const nid = () => `n${++seq}`
   const cells = ['<mxCell id="0"/>', '<mxCell id="1" parent="0"/>']
 
-  const X = 20
-  const COL_W = 320
-  let y = 20
+  const ordered = [...(racks || [])].sort(
+    (a, b) => (a.grid_row ?? 0) - (b.grid_row ?? 0) || (a.grid_col ?? 0) - (b.grid_col ?? 0)
+  )
+
+  // 先算每台机柜高度与最大高度，用于网格排版
+  const layout = ordered.map((rack, i) => {
+    const totalU = rack.total_u || 42
+    const cabH = M.top + totalU * RACK_UNIT + M.bottom
+    return { rack, col: i % COLS, row: Math.floor(i / COLS), totalU, cabH }
+  })
+  const maxCabH = layout.reduce((m, l) => Math.max(m, l.cabH), 0)
+  const strideX = RACK_W + GAP
+  const strideY = maxCabH + TITLE_H + GAP
 
   // 机房标题
-  const title = room?.name || '机房'
   cells.push(
     cell(
       nid(),
-      `<div style='font-weight:700;font-size:18px;'>${title}</div>` +
-        `<div style='font-size:12px;color:#64748b;'>机柜 ${racks.length} 台 · 导出自 RackVisio</div>`,
-      'text;html=1;fillColor=none;strokeColor=none;verticalAlign=middle;',
-      X,
-      y,
-      COL_W,
-      44
+      textBlock([
+        `<b>${room?.name || '机房'}</b>`,
+        `机柜 ${racks?.length || 0} 台 · 导出自 RackVisio`,
+      ]),
+      'text;html=1;fillColor=none;strokeColor=none;verticalAlign=middle;fontSize=18;',
+      20,
+      0,
+      400,
+      ROOM_TITLE_H
     )
   )
-  y += 44 + 14
 
-  // 机柜按 grid_col / grid_row 排序，保持与 3D 总览一致的空间次序
-  const ordered = [...(racks || [])].sort(
-    (a, b) => (a.grid_col ?? 0) - (b.grid_col ?? 0) || (a.grid_row ?? 0) - (b.grid_row ?? 0)
-  )
+  for (const { rack, col, row, totalU, cabH } of layout) {
+    const cabX = 20 + col * strideX
+    const cabY = ROOM_TITLE_H + TITLE_H + row * strideY
+    const titleY = ROOM_TITLE_H + row * strideY
 
-  for (const rack of ordered) {
+    // 机柜标题（名称 / 编号 / 已用U）
     const used = rack.used_u ?? 0
-    const total = rack.total_u ?? 0
-    const headerVal =
-      `<div style='font-weight:700;font-size:13px;color:#fff;'>${rack.name || '机柜'}</div>` +
-      `<div style='font-size:11px;color:#cbd5e1;'>${rack.code || ''}${
-        total ? ' · ' + used + '/' + total + 'U' : ''
-      }</div>`
     cells.push(
       cell(
         nid(),
-        headerVal,
-        'rounded=1;whiteSpace=wrap;html=1;fillColor=#1E293B;strokeColor=#334155;verticalAlign=middle;shadow=0;',
-        X,
-        y,
-        COL_W,
-        36
+        textBlock([
+          `<b>${escapeXml(rack.name || '机柜')}</b>`,
+          `${escapeXml(rack.code || '')}${totalU ? ' · ' + used + '/' + totalU + 'U' : ''}`,
+        ]),
+        'text;html=1;fillColor=none;strokeColor=none;verticalAlign=middle;align=left;fontSize=12;',
+        cabX,
+        titleY,
+        RACK_W,
+        TITLE_H
       )
     )
-    y += 36 + 8
 
+    // 机柜本体（draw.io 内置机架图形）
+    const cabId = nid()
+    cells.push(cell(cabId, '', cabinetStyle(totalU), cabX, cabY, RACK_W, cabH))
+
+    // 设备：按 U 位精确落位（U1 在底，numDisp=ascend 向上递增）
     const devs = (rackDevices?.[rack.id] || [])
       .filter((d) => d.current_start_u != null)
       .sort((a, b) => b.current_start_u - a.current_start_u)
-    if (!devs.length) {
-      cells.push(
-        cell(
-          nid(),
-          `<div style='font-size:11px;color:#94a3b8;padding:4px;'>（无上架设备）</div>`,
-          'rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#E2E8F0;dashed=1;verticalAlign=middle;',
-          X,
-          y,
-          COL_W,
-          28
-        )
-      )
-      y += 28 + 6
-    } else {
-      for (const d of devs) {
-        cells.push(cell(nid(), deviceValue(d), deviceStyle(d), X, y, COL_W, 64))
-        y += 64 + 6
-      }
+    for (const d of devs) {
+      const uH = d.u_height || 1
+      const startU = d.current_start_u
+      const topU = startU + uH - 1
+      // 子图形坐标相对机柜本体（parent=cabId）
+      const y = M.top + (totalU - topU) * RACK_UNIT
+      const h = uH * RACK_UNIT
+      const label = DEVICE_TYPE_LABELS[d.device_type] || d.device_type || ''
+      const lines = [`<b>${d.name || '未命名设备'}</b>`]
+      if (label || d.model) lines.push(`${label}${d.model ? ' · ' + d.model : ''}`)
+      if (d.ip_address) lines.push('IP ' + d.ip_address)
+      cells.push(cell(nid(), textBlock(lines), deviceStyle(stencilFor(d.device_type, uH)), M.left, y, INNER_W, h, cabId))
     }
-    y += 14 // 机柜之间留白
   }
 
   return (
     `<?xml version="1.0" encoding="UTF-8"?>\n` +
-    `<mxGraphModel dx="800" dy="600" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="0" pageScale="1" pageWidth="850" pageHeight="1200" math="0" shadow="0">\n` +
+    `<mxGraphModel dx="800" dy="600" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="0" pageScale="1" pageWidth="1200" pageHeight="1600" math="0" shadow="0">\n` +
     `  <root>\n    ${cells.join('\n    ')}\n  </root>\n</mxGraphModel>`
   )
 }
