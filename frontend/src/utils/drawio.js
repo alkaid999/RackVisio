@@ -1,7 +1,8 @@
 // 机房拓扑导出为 draw.io（diagrams.net）格式：生成一段 mxGraphModel XML。
 // 直接使用 draw.io 自带的「机架图形」stencil：
 //   - 机柜：mxgraph.rackGeneral.rackCabinet3（childLayout=rack，自动按 U 绘制刻度）
-//   - 设备：mxgraph.rack.dell.* / mxgraph.rack.f5.* 真实机架设备图形，按 U 位精确落位
+//   - 设备：mxgraph.rack.dell.* / mxgraph.rack.f5.* 真实机架设备图形（≤4U 真实硬件外观）
+//   - 多 U 框式/刀片设备（≥5U）：自定义内联机箱图形（矢量 SVG，按槽位高度缩放，含模块槽位装饰），避免真实硬件图被拉伸变形
 // 设备标签为彩色文本框（沿用类型配色），仅含设备名称 + 当前 U 位（如 U3 或 U3-5）；
 // 机柜名称文本框居中显示于机柜顶部；机房名称居中显示于机房正上方。
 // 设备类型配色/标签自包含（与 constants.js 同源，避免导出工具依赖 vue reactive 常量）。
@@ -35,10 +36,14 @@ const COLS = 5
 const TITLE_H = 26
 const ROOM_TITLE_H = 40
 
-// 设备类型 → draw.io 内置机架设备 stencil：
-//   server/router/switch/other → Dell PowerEdge 系列（1U/2U/4U 变体）
-//   firewall/waf/security      → F5 安全设备系列（真实机架外观）
-function stencilFor(type, uH) {
+// 设备图形选择（分层，精确到具体图形）：
+//   1) 逐设备精确指定：数据携带 stencil 字段 → 直接作为 draw.io 机架 stencil ID 使用
+//   2) 型号映射表：按 model 命中 MODEL_STENCIL_MAP（前端可自由扩展）
+//   3) 高度感知兜底：≥5U 框式/刀片 → 自定义内联机箱图形；≤4U → 真实固定 U 硬件图形
+// 返回：stencil ID 字符串，或 '__chassis__'（自定义内联机箱图形标记）
+
+// ≤4U：draw.io 真实固定 U 硬件图形
+function realisticStencil(type, uH) {
   const dell = {
     1: 'mxgraph.rack.dell.dell_poweredge_1u',
     2: 'mxgraph.rack.dell.dell_poweredge_2u',
@@ -54,6 +59,73 @@ function stencilFor(type, uH) {
     default:
       return dellShape
   }
+}
+
+// 前端型号 → 图形映射表（按 model 不区分大小写命中，可自由增删）。
+//   kind:'chassis' → 自定义内联机箱图形（多 U 框式/刀片/机箱级设备，避免真实硬件图被拉伸）
+//   kind:'stencil' → 直接使用指定 draw.io 通用机架设备图形 ID（mxgraph.rack.*，为缩放设计）
+const MODEL_STENCIL_MAP = [
+  // 框式/刀片 数据中心级交换机、机箱级设备 → 自定义机箱图形
+  { test: /nexus\s*7|nexus\s*9|ce128|s12500|cloudengine|框式|刀片|chassis|qsfp|机箱|srx[0-9]000/i, kind: 'chassis' },
+  // 具体型号 → 精确通用图形（draw.io 自带，可扩展更多）
+  { test: /nexus\s*[23]|catalyst\s*9|s[567]\d{3}/i, kind: 'stencil', id: 'mxgraph.rack.switch' },
+  { test: /isr|asr|mx\d{3,}|cr\d|框式路由/i, kind: 'stencil', id: 'mxgraph.rack.router' },
+  { test: /netapp|emc|unity|storeeasy|存储阵列|array/i, kind: 'stencil', id: 'mxgraph.rack.storage' },
+  { test: /patch|配线架|patchpanel/i, kind: 'stencil', id: 'mxgraph.rack.patchPanel' },
+  { test: /ups|不间断电源/i, kind: 'stencil', id: 'mxgraph.rack.ups' },
+  { test: /pdu|电源分配/i, kind: 'stencil', id: 'mxgraph.rack.pdu' },
+  { test: /kvm/i, kind: 'stencil', id: 'mxgraph.rack.kvm' },
+]
+
+function matchModel(model) {
+  if (!model) return null
+  const m = String(model)
+  for (const e of MODEL_STENCIL_MAP) {
+    if (e.test.test(m)) return e
+  }
+  return null
+}
+
+// 自定义内联机箱图形：矢量 SVG（按设备类型配色），含顶部把手条 + 模块槽位装饰，
+// 用 data:image/svg+xml 内联，draw.io 以 shape=image 渲染并按槽位高度缩放，不被拉伸变形。
+function chassisSvg(type, uH) {
+  const c = DEVICE_TYPE_COLORS[type] || DEVICE_TYPE_COLORS.other
+  const W = 162
+  const H = 100
+  const slots = Math.max(3, Math.min(8, Math.round(uH / 2)))
+  const top = 22
+  const gap = (H - top - 6) / slots
+  let lines = ''
+  for (let i = 0; i < slots; i++) {
+    const y = top + 4 + i * gap
+    lines +=
+      `<rect x='8' y='${y.toFixed(1)}' width='${W - 16}' height='${(gap * 0.55).toFixed(1)}' rx='2' fill='#000000' fill-opacity='0.14'/>`
+  }
+  const svg =
+    `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 ${W} ${H}' preserveAspectRatio='none'>` +
+    `<rect x='1.5' y='1.5' width='${W - 3}' height='${H - 3}' rx='7' fill='${c}' stroke='#000000' stroke-opacity='0.4' stroke-width='1.5'/>` +
+    `<rect x='1.5' y='1.5' width='${W - 3}' height='18' rx='7' fill='#000000' fill-opacity='0.2'/>` +
+    `<circle cx='16' cy='10.5' r='3' fill='#ffffff' fill-opacity='0.65'/>` +
+    `<circle cx='28' cy='10.5' r='3' fill='#ffffff' fill-opacity='0.65'/>` +
+    lines +
+    `</svg>`
+  return 'data:image/svg+xml,' + encodeURIComponent(svg)
+}
+
+function chassisStyle(type, uH) {
+  return 'shape=image;image=' + chassisSvg(type, uH) + ';html=1;labelPosition=right;align=left;spacingLeft=8;shadow=0;'
+}
+
+function stencilFor(d) {
+  // 1) 逐设备精确指定（数据携带 stencil 字段时优先）
+  if (d.stencil) return d.stencil
+  // 2) 型号映射表
+  const hit = matchModel(d.model)
+  if (hit) return hit.kind === 'chassis' ? '__chassis__' : hit.id
+  // 3) 高度感知：≥5U 框式/刀片 → 自定义机箱图形
+  if ((d.u_height || 1) >= 5) return '__chassis__'
+  // 4) ≤4U → 真实固定 U 硬件图形
+  return realisticStencil(d.device_type, d.u_height || 1)
 }
 
 // XML 转义（& < > "），保证生成的 mxGraphModel 属性合法。
@@ -202,7 +274,10 @@ export function buildRoomDrawioXml({ room, racks, rackDevices }) {
         `<div style='background:${c};color:#fff;border-radius:4px;padding:2px 8px;` +
         `font-size:11px;font-weight:600;white-space:nowrap;display:inline-block;'>` +
         `${esc(d.name || '未命名设备')} · ${uRange}</div>`
-      cells.push(cell(nid(), labelHtml, deviceStyle(stencilFor(d.device_type, uH)), M.left, y, INNER_W, h, cabId))
+      // 图形：自定义机箱图形(__chassis__) 或 draw.io 机架 stencil（含逐设备精确指定/型号映射/高度兜底）
+      const sf = stencilFor(d)
+      const devStyle = sf === '__chassis__' ? chassisStyle(d.device_type, uH) : deviceStyle(sf)
+      cells.push(cell(nid(), labelHtml, devStyle, M.left, y, INNER_W, h, cabId))
     }
   }
 
