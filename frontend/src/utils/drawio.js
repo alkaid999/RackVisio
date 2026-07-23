@@ -1,9 +1,19 @@
 // 机房拓扑导出为 draw.io（diagrams.net）格式：生成一段 mxGraphModel XML。
-// 直接使用 draw.io 自带的「机架图形」stencil，无需自绘 SVG：
-//   - 机柜：mxgraph.rackGeneral.rackCabinet3（含 childLayout=rack，自动按 U 绘制刻度）
-//   - 设备：mxgraph.rack.dell.* / mxgraph.rack.f5.* 等真实机架设备图形，按 U 位精确落位
-// 双击 .drawio 即可在 diagrams.net 中打开，设备图形可继续编辑/替换。
-// 设备类型标签自包含（与 constants.js 同源，避免导出工具依赖 vue reactive 常量）。
+// 直接使用 draw.io 自带的「机架图形」stencil：
+//   - 机柜：mxgraph.rackGeneral.rackCabinet3（childLayout=rack，自动按 U 绘制刻度）
+//   - 设备：mxgraph.rack.dell.* / mxgraph.rack.f5.* 真实机架设备图形，按 U 位精确落位
+// 设备标签为彩色文本框（沿用类型配色），仅含设备名称 + U 数量；
+// 机柜名称文本框居中显示于机柜顶部；机房名称居中显示于机房正上方。
+// 设备类型配色/标签自包含（与 constants.js 同源，避免导出工具依赖 vue reactive 常量）。
+const DEVICE_TYPE_COLORS = {
+  server: '#409EFF',
+  switch: '#67C23A',
+  firewall: '#F97316',
+  router: '#13C2C2',
+  waf: '#EB4895',
+  security: '#E6A23C',
+  other: '#909399',
+}
 const DEVICE_TYPE_LABELS = {
   server: '服务器',
   switch: '交换机',
@@ -45,7 +55,7 @@ function stencilFor(type, uH) {
   }
 }
 
-// XML 转义（& < > "），保证 value 内的 HTML 与用户文本不会破坏 mxGraphModel 结构。
+// XML 转义（& < > "），保证生成的 mxGraphModel 属性合法。
 function escapeXml(s) {
   return String(s ?? '')
     .replace(/&/g, '&amp;')
@@ -53,10 +63,16 @@ function escapeXml(s) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
 }
+const esc = escapeXml
 
-// 多行文本：逐行转义后以 <br> 连接（style 含 html=1，draw.io 加载后按 HTML 渲染）。
+// 转义规则（关键，避免 draw.io 显示原始 HTML 标签）：
+//   1) 调用方负责把「用户文本」用 esc() 转义；
+//   2) 结构标签（<b> / <br>）以【真实标签】形式拼入（不参与 esc）；
+//   3) cell() 对整段 value 再做【一次】escapeXml —— 全程仅转义一次。
+// draw.io 加载时反转义一次，即得到 <b>..</b><br>.. 并当 HTML 渲染（style 含 html=1）。
+// textBlock 仅用 <br> 连接已准备好的成品 HTML 行，自身不再转义。
 function textBlock(lines) {
-  return lines.filter(Boolean).map(escapeXml).join('<br>')
+  return lines.filter(Boolean).join('<br>')
 }
 
 function cell(id, value, style, x, y, w, h, parent) {
@@ -79,7 +95,7 @@ function cabinetStyle(totalU) {
 
 function deviceStyle(stencil) {
   return (
-    'strokeColor=#666666;html=1;labelPosition=right;align=left;spacingLeft=15;shadow=0;' +
+    'strokeColor=#666666;html=1;labelPosition=right;align=left;spacingLeft=8;shadow=0;' +
     'dashed=0;outlineConnect=0;shape=' + stencil + ';'
   )
 }
@@ -106,19 +122,21 @@ export function buildRoomDrawioXml({ room, racks, rackDevices }) {
   const maxCabH = layout.reduce((m, l) => Math.max(m, l.cabH), 0)
   const strideX = RACK_W + GAP
   const strideY = maxCabH + TITLE_H + GAP
+  const colCount = Math.min(ordered.length || 1, COLS)
+  const diagramW = colCount * RACK_W + (colCount - 1) * GAP
 
-  // 机房标题
+  // 机房名称：居中显示于机房正上方（y=0 顶部，不遮挡下方机柜）
   cells.push(
     cell(
       nid(),
       textBlock([
-        `<b>${room?.name || '机房'}</b>`,
+        `<b>${esc(room?.name || '机房')}</b>`,
         `机柜 ${racks?.length || 0} 台 · 导出自 RackVisio`,
       ]),
-      'text;html=1;fillColor=none;strokeColor=none;verticalAlign=middle;fontSize=18;',
+      'text;html=1;align=center;verticalAlign=middle;fontSize=18;',
       20,
       0,
-      400,
+      diagramW,
       ROOM_TITLE_H
     )
   )
@@ -128,16 +146,16 @@ export function buildRoomDrawioXml({ room, racks, rackDevices }) {
     const cabY = ROOM_TITLE_H + TITLE_H + row * strideY
     const titleY = ROOM_TITLE_H + row * strideY
 
-    // 机柜标题（名称 / 编号 / 已用U）
+    // 机柜名称文本框：居中显示于机柜顶部，与机柜作为一个整体
     const used = rack.used_u ?? 0
+    const rackNameBits = [esc(rack.name || '机柜')]
+    if (rack.code) rackNameBits.push(esc(rack.code))
+    if (totalU) rackNameBits.push(`${used}/${totalU}U`)
     cells.push(
       cell(
         nid(),
-        textBlock([
-          `<b>${escapeXml(rack.name || '机柜')}</b>`,
-          `${escapeXml(rack.code || '')}${totalU ? ' · ' + used + '/' + totalU + 'U' : ''}`,
-        ]),
-        'text;html=1;fillColor=none;strokeColor=none;verticalAlign=middle;align=left;fontSize=12;',
+        rackNameBits.join(' · '),
+        'text;html=1;align=center;verticalAlign=middle;rounded=1;fillColor=#1E293B;strokeColor=#334155;fontColor=#F8FAFC;fontSize=12;',
         cabX,
         titleY,
         RACK_W,
@@ -160,11 +178,13 @@ export function buildRoomDrawioXml({ room, racks, rackDevices }) {
       // 子图形坐标相对机柜本体（parent=cabId）
       const y = M.top + (totalU - topU) * RACK_UNIT
       const h = uH * RACK_UNIT
-      const label = DEVICE_TYPE_LABELS[d.device_type] || d.device_type || ''
-      const lines = [`<b>${d.name || '未命名设备'}</b>`]
-      if (label || d.model) lines.push(`${label}${d.model ? ' · ' + d.model : ''}`)
-      if (d.ip_address) lines.push('IP ' + d.ip_address)
-      cells.push(cell(nid(), textBlock(lines), deviceStyle(stencilFor(d.device_type, uH)), M.left, y, INNER_W, h, cabId))
+      const c = DEVICE_TYPE_COLORS[d.device_type] || DEVICE_TYPE_COLORS.other
+      // 设备标签＝彩色文本框（沿用类型配色），仅显示设备名称 + U 数量
+      const labelHtml =
+        `<div style='background:${c};color:#fff;border-radius:4px;padding:2px 8px;` +
+        `font-size:11px;font-weight:600;white-space:nowrap;display:inline-block;'>` +
+        `${esc(d.name || '未命名设备')} · ${uH}U</div>`
+      cells.push(cell(nid(), labelHtml, deviceStyle(stencilFor(d.device_type, uH)), M.left, y, INNER_W, h, cabId))
     }
   }
 
