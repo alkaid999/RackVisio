@@ -623,8 +623,10 @@ async function exportExcel() {
         noteLines.push(`占用：${uBottom}U–${uTop}U（${d.u_height}U）`)
         mCell.note = noteLines.join('\n')
         if (uBottom !== uTop) {
-          const topRow = row - (uTop - uBottom)
-          const botRow = row
+          // 循环自上而下写：uTop 写在当前行 row，uBottom 写在 row + (uTop - uBottom)。
+          // 合并区间须向下覆盖设备自身占用的全部 U 行，而非向上并入更高 U 的空行。
+          const topRow = row
+          const botRow = row + (uTop - uBottom)
           if (canRectMerge(topRow, devCol, botRow, devCol)) {
             ws.mergeCells({ top: topRow, left: devCol, bottom: botRow, right: devCol })
           }
