@@ -422,99 +422,174 @@ export function findCabinetGroup(obj) {
 
 // ====== 独立设备建模 ======
 
-// 服务器前面板：左侧通风栅，右侧硬盘托架阵列。
-function addServerFront(g, w, h, d, sizeU, accentHex, statusHex) {
+// 统一前面板渲染：根据 style 描述符绘制端口阵列 / 硬盘托架 / 通风栅 / 指示灯。
+// 取代原先 type 分支的 addServerFront/addSwitchFront/addGenericFront，结构与 drawio 一致。
+function addPanelFromStyle(g, style, w, h, d, accentHex, statusHex, sizeU) {
   const frontZ = d / 2 + 0.02
-  const ventW = w * 0.36
-  const ventH = h * 0.78
-  const ventMat = new THREE.MeshStandardMaterial({ color: 0x080c12, metalness: 0.3, roughness: 0.85 })
-  const vent = new THREE.Mesh(new THREE.BoxGeometry(ventW, ventH, 0.02), ventMat)
-  vent.position.set(-w * 0.22, 0, frontZ)
-  g.add(vent)
+  const p = style.panel || 'generic'
 
-  // 横向栅条
-  const slatMat = new THREE.MeshStandardMaterial({ color: 0x252d3d, metalness: 0.5, roughness: 0.5 })
-  const n = 6
-  for (let i = 0; i < n; i++) {
-    const slat = new THREE.Mesh(new THREE.BoxGeometry(ventW * 0.9, h * 0.015, 0.03), slatMat)
-    slat.position.set(-w * 0.22, -ventH / 2 + (i + 0.5) * (ventH / n), frontZ + 0.02)
-    g.add(slat)
-  }
-
-  // 右侧硬盘托架
-  const rows = Math.max(2, Math.round(sizeU * 1.5))
-  const cols = 3
-  const bayW = w * 0.36
-  const bayH = h * 0.78
-  const bayMat = new THREE.MeshStandardMaterial({ color: 0x121820, metalness: 0.4, roughness: 0.55 })
-  const ledMat = new THREE.MeshStandardMaterial({ color: 0x22c55e, emissive: 0x22c55e, emissiveIntensity: 1.2 })
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      const bx = w * 0.18 + (c - (cols - 1) / 2) * (bayW / cols)
-      const by = -bayH / 2 + (r + 0.5) * (bayH / rows)
-      const drive = new THREE.Mesh(new THREE.BoxGeometry((bayW / cols) * 0.78, (bayH / rows) * 0.65, 0.03), bayMat)
-      drive.position.set(bx, by, frontZ + 0.015)
-      g.add(drive)
-      const led = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.025, 0.015), ledMat)
-      led.position.set(bx + (bayW / cols) * 0.3, by, frontZ + 0.035)
-      g.add(led)
+  // 端口阵列（switch / router / security）
+  if ((p === 'switch' || p === 'router' || p === 'security') && style.ports) {
+    const { rows, cols, led } = style.ports
+    const portW = (w * 0.62) / cols
+    const portH = (h * 0.4) / rows
+    const portMat = new THREE.MeshStandardMaterial({ color: 0x05070a, metalness: 0.2, roughness: 0.8 })
+    const ledMat = new THREE.MeshStandardMaterial({ color: accentHex, emissive: accentHex, emissiveIntensity: 1.5 })
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const px = -w * 0.3 + (c + 0.5) * portW
+        const py = -h * 0.06 + (r - (rows - 1) / 2) * (portH + 0.02)
+        const port = new THREE.Mesh(new THREE.BoxGeometry(portW * 0.7, portH * 0.6, 0.03), portMat)
+        port.position.set(px, py, frontZ + 0.015)
+        g.add(port)
+        if (led) {
+          const ledMesh = new THREE.Mesh(new THREE.BoxGeometry(portW * 0.22, 0.02, 0.012), ledMat)
+          ledMesh.position.set(px + portW * 0.2, py + portH * 0.42, frontZ + 0.035)
+          g.add(ledMesh)
+        }
+      }
+    }
+    // Console / 管理口（位于左上，区别于端口阵列）
+    if (style.console) {
+      const consMat = new THREE.MeshStandardMaterial({ color: 0x111826, metalness: 0.4, roughness: 0.6 })
+      const cons = new THREE.Mesh(new THREE.BoxGeometry(w * 0.08, h * 0.12, 0.03), consMat)
+      cons.position.set(-w * 0.42, h * 0.08, frontZ + 0.02)
+      g.add(cons)
     }
   }
 
-  // 状态灯（电源 / 运行）
-  const ledMat2 = new THREE.MeshStandardMaterial({ color: statusHex, emissive: statusHex, emissiveIntensity: 2 })
-  const led1 = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.05, 0.02), ledMat2)
-  led1.position.set(w * 0.42, h * 0.33, frontZ + 0.03)
-  g.add(led1)
-}
+  // 服务器：左侧通风栅 + 右侧硬盘托架阵列
+  if (p === 'server') {
+    const bay = style.drive || { rows: Math.max(2, Math.round(sizeU * 1.5)), cols: 3 }
+    const ventW = w * 0.34
+    const ventH = h * 0.78
+    const ventMat = new THREE.MeshStandardMaterial({ color: 0x080c12, metalness: 0.3, roughness: 0.85 })
+    const vent = new THREE.Mesh(new THREE.BoxGeometry(ventW, ventH, 0.02), ventMat)
+    vent.position.set(-w * 0.22, 0, frontZ)
+    g.add(vent)
+    const slatMat = new THREE.MeshStandardMaterial({ color: 0x252d3d, metalness: 0.5, roughness: 0.5 })
+    const n = style.vents || 6
+    for (let i = 0; i < n; i++) {
+      const slat = new THREE.Mesh(new THREE.BoxGeometry(ventW * 0.9, h * 0.015, 0.03), slatMat)
+      slat.position.set(-w * 0.22, -ventH / 2 + (i + 0.5) * (ventH / n), frontZ + 0.02)
+      g.add(slat)
+    }
+    const rows = bay.rows
+    const cols = bay.cols
+    const bayW = w * 0.36
+    const bayH = h * 0.78
+    const bayMat = new THREE.MeshStandardMaterial({ color: 0x121820, metalness: 0.4, roughness: 0.55 })
+    const drvLedMat = new THREE.MeshStandardMaterial({ color: 0x22c55e, emissive: 0x22c55e, emissiveIntensity: 1.2 })
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const bx = w * 0.18 + (c - (cols - 1) / 2) * (bayW / cols)
+        const by = -bayH / 2 + (r + 0.5) * (bayH / rows)
+        const drive = new THREE.Mesh(new THREE.BoxGeometry((bayW / cols) * 0.78, (bayH / rows) * 0.65, 0.03), bayMat)
+        drive.position.set(bx, by, frontZ + 0.015)
+        g.add(drive)
+        const ledMesh = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.025, 0.015), drvLedMat)
+        ledMesh.position.set(bx + (bayW / cols) * 0.3, by, frontZ + 0.035)
+        g.add(ledMesh)
+      }
+    }
+  }
 
-// 交换机前面板：多行多列端口 + 状态灯。
-function addSwitchFront(g, w, h, d, accentHex, statusHex, isRouter = false) {
-  const frontZ = d / 2 + 0.02
-  const cols = isRouter ? 6 : 12
-  const rows = 2
-  const portW = (w * 0.62) / cols
-  const portH = (h * 0.42) / rows
-  const portMat = new THREE.MeshStandardMaterial({ color: 0x05070a, metalness: 0.2, roughness: 0.8 })
-  const ledMat = new THREE.MeshStandardMaterial({ color: accentHex, emissive: accentHex, emissiveIntensity: 1.5 })
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      const px = -w * 0.3 + (c + 0.5) * portW
-      const py = -h * 0.05 + (r - (rows - 1) / 2) * (portH + 0.02)
-      const port = new THREE.Mesh(new THREE.BoxGeometry(portW * 0.7, portH * 0.6, 0.03), portMat)
-      port.position.set(px, py, frontZ + 0.015)
+  // 通用设备（generic）：少量端口 + 指示灯列
+  if (p === 'generic') {
+    const portMat = new THREE.MeshStandardMaterial({ color: accentHex, metalness: 0.3, roughness: 0.5 })
+    const count = style.ports ? style.ports.cols : 6
+    for (let i = 0; i < count; i++) {
+      const port = new THREE.Mesh(new THREE.BoxGeometry(w * 0.06, h * 0.18, 0.03), portMat)
+      port.position.set(-w * 0.3 + i * w * 0.09, h * 0.02, frontZ + 0.02)
       g.add(port)
-      const led = new THREE.Mesh(new THREE.BoxGeometry(portW * 0.22, 0.02, 0.012), ledMat)
-      led.position.set(px + portW * 0.2, py + portH * 0.42, frontZ + 0.035)
-      g.add(led)
     }
   }
-  // Console / 管理口
-  const consMat = new THREE.MeshStandardMaterial({ color: 0x111826, metalness: 0.4, roughness: 0.6 })
-  const cons = new THREE.Mesh(new THREE.BoxGeometry(w * 0.08, h * 0.12, 0.03), consMat)
-  cons.position.set(-w * 0.42, h * 0.08, frontZ + 0.02)
-  g.add(cons)
 
-  // 状态灯
-  const ledMat2 = new THREE.MeshStandardMaterial({ color: statusHex, emissive: statusHex, emissiveIntensity: 2 })
-  const led1 = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.05, 0.02), ledMat2)
-  led1.position.set(w * 0.42, h * 0.33, frontZ + 0.03)
-  g.add(led1)
+  // 状态灯（电源 / 运行）统一绘制于右上
+  const stLedMat = new THREE.MeshStandardMaterial({ color: statusHex, emissive: statusHex, emissiveIntensity: 2 })
+  const stLed = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.05, 0.02), stLedMat)
+  stLed.position.set(w * 0.42, h * 0.33, frontZ + 0.03)
+  g.add(stLed)
 }
 
-// 通用设备（防火墙/其他）：少量端口 + 指示灯列。
-function addGenericFront(g, w, h, d, accentHex, statusHex) {
-  const frontZ = d / 2 + 0.02
-  const portMat = new THREE.MeshStandardMaterial({ color: accentHex, metalness: 0.3, roughness: 0.5 })
-  for (let i = 0; i < 6; i++) {
-    const port = new THREE.Mesh(new THREE.BoxGeometry(w * 0.06, h * 0.18, 0.03), portMat)
-    port.position.set(-w * 0.3 + i * w * 0.09, h * 0.02, frontZ + 0.02)
-    g.add(port)
+// ====== 数据驱动的「前面板样式」注册表（镜像 drawio 的 MODEL_STENCIL_MAP 思路）======
+//
+// 设计目标：把「某类型/某型号/某 U 高 设备长什么样前面板」从硬编码的 if/else 抽离成
+// 一张可扩展的描述符表，使 3D 建模与 drawio 导出共用同一套「型号→外观」心智模型。
+//
+// 解析顺序（与 drawio.stencilFor 对齐）：
+//   1) 型号精确命中 MODEL_PANEL_MAP（regex 不区分大小写，可自由增删）
+//   2) 类型 + U 高兜底  resolveTypePanel(type, uH)
+//
+// 描述符字段（均为相对比例，0~1，乘以 w/h 得到实际尺寸；坐标以前面板几何中心为原点）：
+//   panel:   'server' | 'switch' | 'router' | 'security' | 'generic'
+//            —— 决定整体布局模板（通风栅/硬盘区 vs 端口阵列 vs 端口簇）
+//   drive:   { rows, cols }          —— server 模板的硬盘托架阵列（省略则按 U 高自适应）
+//   driveBays: number                —— 与上等价，仅写总数时按 cols=3 推算 rows
+//   ports:   { rows, cols, led }     —— 端口阵列（switch/router/security）
+//   console: boolean                 —— 是否绘制独立 Console/管理口
+//   vents:   number                  —— 左侧通风栅条数（server 模板，省略则 6）
+//   brand:   string                  —— 型号名牌上的品牌/系列字（渲染为贴图）
+//   accentSide: 'left' | 'right'     —— 强调条/端口区的主侧（部分机型端口偏置）
+//
+// 说明：本表只描述「前面板装饰」，机箱本体/挂耳/顶部色条/名牌底板仍由 buildDevice 统一绘制。
+
+// 型号 → 面板样式（前端可自由扩展；test 命中即采用，命中顺序即优先级）。
+const MODEL_PANEL_MAP = [
+  // 戴尔 PowerEdge 服务器：1U=前 8 盘 / 2U=前 12 盘 / 多 U=前部大托架
+  { test: /poweredge|r[0-9]4[0-9]x|r[0-9]5[0-9]x|r[0-9]6[0-9]x|r[0-9]7[0-9]x/i, panel: 'server', brand: 'DELL' },
+  // HPE ProLiant / Apollo
+  { test: /proliant|apollo|dl[0-9]80|dl[0-9]60|ml[0-9]0/i, panel: 'server', brand: 'HPE' },
+  // 联想 ThinkSystem
+  { test: /thinksystem|sr[0-9]50|sr[0-9]30/i, panel: 'server', brand: 'LENOVО' },
+  // 华为 TaiShan / FusionServer
+  { test: /taishan|fusionserver|2288|2488|rh[0-9]2[0-9]0/i, panel: 'server', brand: 'HUAWEI' },
+  // 浪潮 Inspur
+  { test: /inspur|nf[0-9]8[0-9]0|sa[0-9]2[0-9]0/i, panel: 'server', brand: 'INSPUR' },
+  // 框式/刀片交换机 → 端口簇偏置到右侧，名牌标 chassis
+  { test: /nexus\s*7|nexus\s*9|ce128|s12500|cloudengine|框式|刀片|chassis|qsfp|srx[0-9]000/i, panel: 'switch', ports: { rows: 3, cols: 14, led: true }, console: true, brand: 'CHASSIS' },
+  // 具体交换机型号 → 48 口 + 4 SFP+
+  { test: /nexus\s*[23]|catalyst\s*9|s[567]\d{3}|aruba|6300|6410|48\s*port|48p/i, panel: 'switch', ports: { rows: 2, cols: 12, led: true }, console: true, brand: 'SW' },
+  // 路由器（Cisco/Juniper/MikroTik）
+  { test: /cisco|asr|760[0-9]|juniper|mx[0-9]|srx|mikrotik|routeros|ccr/i, panel: 'router', ports: { rows: 2, cols: 6, led: true }, console: true, brand: 'ROUTER' },
+  // 安全设备（F5 / 山石 / 深信服 / 防火墙）
+  { test: /f5|big-?ip|viprion|arx|hillstone|stoneos|sangfor|深信服|防火墙|firewall|waf|网闸/i, panel: 'security', ports: { rows: 2, cols: 5, led: true }, console: true, brand: 'SEC' },
+  // UPS / PDU / KVM / 配线架 → 通用面板（多端口或指示灯列）
+  { test: /ups|不间断电源/i, panel: 'generic', brand: 'UPS' },
+  { test: /pdu|电源分配/i, panel: 'generic', brand: 'PDU' },
+  { test: /patch|配线架|patchpanel/i, panel: 'generic', brand: 'PATCH' },
+]
+
+// 类型 + U 高兜底面板样式（未命中型号表时使用）。
+function resolveTypePanel(type, uH) {
+  switch (type) {
+    case 'server':
+      // 1U 盘位少、2U 12 盘、≥3U 按 U 高放大
+      if (uH === 1) return { panel: 'server', drive: { rows: 2, cols: 4 }, vents: 4, brand: 'SERVER' }
+      if (uH === 2) return { panel: 'server', drive: { rows: 3, cols: 4 }, vents: 6, brand: 'SERVER' }
+      return { panel: 'server', drive: { rows: Math.max(4, Math.round(uH * 1.5)), cols: 3 }, vents: 8, brand: 'SERVER' }
+    case 'switch':
+      if (uH >= 5) return { panel: 'switch', ports: { rows: 3, cols: 14, led: true }, console: true, brand: 'CHASSIS' }
+      return { panel: 'switch', ports: { rows: 2, cols: 12, led: true }, console: true, brand: 'SW' }
+    case 'router':
+      return { panel: 'router', ports: { rows: 2, cols: 6, led: true }, console: true, brand: 'ROUTER' }
+    case 'security':
+      return { panel: 'security', ports: { rows: 2, cols: 5, led: true }, console: true, brand: 'SEC' }
+    default:
+      return { panel: 'generic', brand: 'DEV' }
   }
-  const ledMat = new THREE.MeshStandardMaterial({ color: statusHex, emissive: statusHex, emissiveIntensity: 2 })
-  const led1 = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.05, 0.02), ledMat)
-  led1.position.set(w * 0.42, h * 0.33, frontZ + 0.03)
-  g.add(led1)
+}
+
+// 解析某设备的面板样式描述符：先型号表，后类型兜底。
+function resolvePanelStyle(device) {
+  const model = device.model
+  if (model) {
+    const m = String(model)
+    for (const e of MODEL_PANEL_MAP) {
+      if (e.test.test(m)) return e
+    }
+  }
+  return resolveTypePanel(device.device_type || 'other', device.u_height || 1)
 }
 
 // 构建单个设备（返回以自身几何中心为原点的独立 Group）。
@@ -558,11 +633,9 @@ export function buildDevice(device, opts = {}) {
     g.add(ear)
   })
 
-  // 类型化前面板细节
-  if (type === 'server') addServerFront(g, width, height, depth, sizeU, accentHex, statusHex)
-  else if (type === 'switch') addSwitchFront(g, width, height, depth, accentHex, statusHex, false)
-  else if (type === 'router') addSwitchFront(g, width, height, depth, accentHex, statusHex, true)
-  else addGenericFront(g, width, height, depth, accentHex, statusHex)
+  // 数据驱动前面板细节（型号/类型 → 样式描述符 → 统一渲染）
+  const style = resolvePanelStyle(device)
+  addPanelFromStyle(g, style, width, height, depth, accentHex, statusHex, sizeU)
 
   // 类型色条（顶部，便于快速识别类型）
   const bar = new THREE.Mesh(
