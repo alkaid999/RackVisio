@@ -744,18 +744,6 @@ function buildRoomScene() {
   mkWall(wallT, floorD, -floorW / 2, 0)
   mkWall(wallT, floorD, floorW / 2, 0)
 
-  // 顶部桥架 + 线缆束
-  const trayMat = new THREE.MeshStandardMaterial({ color: 0x1b2740, metalness: 0.4, roughness: 0.6 })
-  const tray = new THREE.Mesh(new THREE.BoxGeometry(floorW - 2, 0.22, 0.45), trayMat)
-  tray.position.set(0, WALL_H - 0.2, -floorD / 2 + 0.5)
-  worldGroup.add(tray)
-  const cableMat = new THREE.MeshStandardMaterial({ color: 0x0a1018, roughness: 0.85 })
-  for (let i = 0; i < 3; i++) {
-    const cable = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, floorW - 2.4, 8), cableMat)
-    cable.rotation.z = Math.PI / 2
-    cable.position.set(0, WALL_H - 0.35 - i * 0.16, -floorD / 2 + 0.5)
-    worldGroup.add(cable)
-  }
 
   // 机柜：正面无门（直视内部设备），左右/后面为穿孔板遮挡；内部挂载设备；列内无间隙、正面朝走廊。
   ra.forEach((rack) => {
