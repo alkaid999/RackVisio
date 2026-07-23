@@ -10,22 +10,7 @@
       <div class="flex flex-col">
         <div class="mb-2 flex items-center justify-between">
           <h3 class="text-sm font-semibold text-foreground">耗材类型</h3>
-          <Button size="sm" variant="outline" @click="startTypeCreate"><Plus class="h-3.5 w-3.5" />新建</Button>
-        </div>
-
-        <!-- 类型内联表单 -->
-        <div v-if="typeDraft.mode !== 'none'" class="mb-2 space-y-2 rounded-lg border border-border bg-muted/40 p-2.5">
-          <Input v-model="typeDraft.name" placeholder="类型名称（如：网线）" />
-          <textarea
-            v-model="typeDraft.description"
-            rows="2"
-            placeholder="说明（可选）"
-            class="w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary/30"
-          ></textarea>
-          <div class="flex justify-end gap-2">
-            <Button size="sm" :loading="typeSaving" @click="saveType">保存</Button>
-            <Button size="sm" variant="outline" @click="cancelType">取消</Button>
-          </div>
+          <Button size="sm" variant="outline" @click="openTypeCreate"><Plus class="h-3.5 w-3.5" />新建</Button>
         </div>
 
         <div class="max-h-80 space-y-1 overflow-auto pr-1">
@@ -44,7 +29,7 @@
               </div>
             </div>
             <div class="flex gap-0.5" @click.stop>
-              <Button size="sm" variant="ghost" @click="startTypeEdit(t)"><Pencil class="h-3.5 w-3.5" /></Button>
+              <Button size="sm" variant="ghost" @click="openTypeEdit(t)"><Pencil class="h-3.5 w-3.5" /></Button>
               <Button size="sm" variant="ghost" class="text-destructive hover:bg-destructive/10" @click="removeType(t)"><Trash2 class="h-3.5 w-3.5" /></Button>
             </div>
           </div>
@@ -58,28 +43,13 @@
           <h3 class="text-sm font-semibold text-foreground">
             分类<span v-if="selectedType" class="ml-1 text-xs font-normal text-muted-foreground">· {{ selectedType.name }}</span>
           </h3>
-          <Button size="sm" variant="outline" :disabled="!selectedTypeId" @click="startCatCreate"><Plus class="h-3.5 w-3.5" />新建</Button>
+          <Button size="sm" variant="outline" :disabled="!selectedTypeId" @click="openCatCreate"><Plus class="h-3.5 w-3.5" />新建</Button>
         </div>
 
         <div v-if="!selectedTypeId" class="flex flex-1 items-center justify-center py-10 text-sm text-muted-foreground">
           请选择左侧类型
         </div>
         <template v-else>
-          <!-- 分类内联表单 -->
-          <div v-if="catDraft.mode !== 'none'" class="mb-2 space-y-2 rounded-lg border border-border bg-muted/40 p-2.5">
-            <Input v-model="catDraft.name" placeholder="分类名称（如：六类跳线）" />
-            <textarea
-              v-model="catDraft.description"
-              rows="2"
-              placeholder="说明（可选）"
-              class="w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary/30"
-            ></textarea>
-            <div class="flex justify-end gap-2">
-              <Button size="sm" :loading="catSaving" @click="saveCat">保存</Button>
-              <Button size="sm" variant="outline" @click="cancelCat">取消</Button>
-            </div>
-          </div>
-
           <div class="max-h-80 space-y-1 overflow-auto pr-1">
             <div
               v-for="c in store.categories"
@@ -91,7 +61,7 @@
                 <div class="text-xs text-muted-foreground">{{ c.item_count }} 项</div>
               </div>
               <div class="flex gap-0.5">
-                <Button size="sm" variant="ghost" @click="startCatEdit(c)"><Pencil class="h-3.5 w-3.5" /></Button>
+                <Button size="sm" variant="ghost" @click="openCatEdit(c)"><Pencil class="h-3.5 w-3.5" /></Button>
                 <Button size="sm" variant="ghost" class="text-destructive hover:bg-destructive/10" @click="removeCat(c)"><Trash2 class="h-3.5 w-3.5" /></Button>
               </div>
             </div>
@@ -100,6 +70,68 @@
         </template>
       </div>
     </div>
+
+    <!-- 类型新建/编辑弹窗（需求#4：统一弹窗卡片操作，非内联） -->
+    <Dialog
+      v-model="typeDialogVisible"
+      :title="typeDraft.mode === 'edit' ? '编辑耗材类型' : '新建耗材类型'"
+      :z-index="'z-[60]'"
+      :dismissible="false"
+      class="max-w-md"
+    >
+      <div class="space-y-3">
+        <div>
+          <label class="mb-1 block text-sm font-medium text-foreground">类型名称</label>
+          <Input v-model="typeDraft.name" placeholder="类型名称（如：网线）" />
+        </div>
+        <div>
+          <label class="mb-1 block text-sm font-medium text-foreground">说明</label>
+          <textarea
+            v-model="typeDraft.description"
+            rows="3"
+            placeholder="说明（可选）"
+            class="w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary/30"
+          ></textarea>
+        </div>
+      </div>
+      <template #footer>
+        <div class="flex justify-end gap-2">
+          <Button size="sm" variant="outline" @click="closeTypeDialog">取消</Button>
+          <Button size="sm" :loading="typeSaving" @click="saveType">保存</Button>
+        </div>
+      </template>
+    </Dialog>
+
+    <!-- 分类新建/编辑弹窗 -->
+    <Dialog
+      v-model="catDialogVisible"
+      :title="catDraft.mode === 'edit' ? '编辑分类' : '新建分类'"
+      :z-index="'z-[60]'"
+      :dismissible="false"
+      class="max-w-md"
+    >
+      <div class="space-y-3">
+        <div>
+          <label class="mb-1 block text-sm font-medium text-foreground">分类名称</label>
+          <Input v-model="catDraft.name" placeholder="分类名称（如：六类跳线）" />
+        </div>
+        <div>
+          <label class="mb-1 block text-sm font-medium text-foreground">说明</label>
+          <textarea
+            v-model="catDraft.description"
+            rows="3"
+            placeholder="说明（可选）"
+            class="w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary/30"
+          ></textarea>
+        </div>
+      </div>
+      <template #footer>
+        <div class="flex justify-end gap-2">
+          <Button size="sm" variant="outline" @click="closeCatDialog">取消</Button>
+          <Button size="sm" :loading="catSaving" @click="saveCat">保存</Button>
+        </div>
+      </template>
+    </Dialog>
 
     <template #footer>
       <div class="flex justify-end">
@@ -134,8 +166,11 @@ const selectedType = computed(() => store.types.find((t) => t.id === selectedTyp
 
 const typeDraft = reactive({ mode: 'none', id: '', name: '', description: '' })
 const typeSaving = ref(false)
+const typeDialogVisible = ref(false)
+
 const catDraft = reactive({ mode: 'none', id: '', name: '', description: '' })
 const catSaving = ref(false)
+const catDialogVisible = ref(false)
 
 async function loadTypes() {
   await store.fetchTypes()
@@ -147,19 +182,20 @@ async function loadTypes() {
 
 async function selectType(id) {
   selectedTypeId.value = id
-  catDraft.mode = 'none'
   await store.fetchCategories(id)
 }
 
 // ===== 类型 =====
-function startTypeCreate() {
-  catDraft.mode = 'none'
+function openTypeCreate() {
   Object.assign(typeDraft, { mode: 'create', id: '', name: '', description: '' })
+  typeDialogVisible.value = true
 }
-function startTypeEdit(t) {
+function openTypeEdit(t) {
   Object.assign(typeDraft, { mode: 'edit', id: t.id, name: t.name, description: t.description || '' })
+  typeDialogVisible.value = true
 }
-function cancelType() {
+function closeTypeDialog() {
+  typeDialogVisible.value = false
   typeDraft.mode = 'none'
 }
 async function saveType() {
@@ -171,14 +207,20 @@ async function saveType() {
   typeSaving.value = true
   try {
     const payload = { name, description: typeDraft.description.trim() || undefined }
+    let targetId = typeDraft.id
     if (typeDraft.mode === 'create') {
-      await store.createType(payload)
+      const created = await store.createType(payload)
+      targetId = created.id
     } else {
       await store.updateType(typeDraft.id, payload)
     }
     success(typeDraft.mode === 'create' ? '类型已创建' : '类型已更新')
+    typeDialogVisible.value = false
     typeDraft.mode = 'none'
+    // 需求#3：保存后选中当前创建的类型，并让列表按「新增置顶」刷新。
+    selectedTypeId.value = targetId
     await loadTypes()
+    await selectType(targetId)
     emit('changed')
   } finally {
     typeSaving.value = false
@@ -204,14 +246,17 @@ async function removeType(t) {
 }
 
 // ===== 分类 =====
-function startCatCreate() {
+function openCatCreate() {
   if (!selectedTypeId.value) return
   Object.assign(catDraft, { mode: 'create', id: '', name: '', description: '' })
+  catDialogVisible.value = true
 }
-function startCatEdit(c) {
+function openCatEdit(c) {
   Object.assign(catDraft, { mode: 'edit', id: c.id, name: c.name, description: c.description || '' })
+  catDialogVisible.value = true
 }
-function cancelCat() {
+function closeCatDialog() {
+  catDialogVisible.value = false
   catDraft.mode = 'none'
 }
 async function saveCat() {
@@ -229,7 +274,9 @@ async function saveCat() {
       await store.updateCategory(catDraft.id, payload)
     }
     success(catDraft.mode === 'create' ? '分类已创建' : '分类已更新')
+    catDialogVisible.value = false
     catDraft.mode = 'none'
+    // 需求#2：新增分类后立即同步分类列表（无需重新点类型）。
     await store.fetchCategories(selectedTypeId.value)
     await store.fetchTypes() // 同步类型下的分类计数
     emit('changed')
@@ -259,7 +306,14 @@ async function removeCat(c) {
 watch(
   () => props.visible,
   async (v) => {
-    if (!v) return
+    if (!v) {
+      // 主弹窗关闭时一并收起嵌套弹窗，避免残留。
+      typeDialogVisible.value = false
+      catDialogVisible.value = false
+      typeDraft.mode = 'none'
+      catDraft.mode = 'none'
+      return
+    }
     await loadTypes()
   },
   { immediate: false }

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Optional, Tuple
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.consumable import (
@@ -50,7 +50,8 @@ class ConsumableTypeRepository:
         return list(
             (
                 await self.session.execute(
-                    select(ConsumableType).order_by(ConsumableType.name)
+                    # 按创建时间倒序：新增的类型置顶（需求#3「新增的就在最上」）。
+                select(ConsumableType).order_by(ConsumableType.created_at.desc())
                 )
             ).scalars().all()
         )
@@ -107,9 +108,10 @@ class ConsumableCategoryRepository:
         return list(
             (
                 await self.session.execute(
-                    select(ConsumableCategory)
-                    .where(ConsumableCategory.type_id == type_id)
-                    .order_by(ConsumableCategory.name)
+                # 按创建时间倒序：新增的分类置顶（与类型一致，需求#3）。
+                select(ConsumableCategory)
+                .where(ConsumableCategory.type_id == type_id)
+                .order_by(ConsumableCategory.created_at.desc())
                 )
             ).scalars().all()
         )

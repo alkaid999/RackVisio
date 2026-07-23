@@ -16,13 +16,20 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
+
 from sqlalchemy import inspect, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import utcnow
 from app.core.security import hash_password
+from app.models.consumable import ConsumableCategory, ConsumableType
 from app.models.user import User
+from app.repositories.consumable_repo import (
+    ConsumableCategoryRepository,
+    ConsumableTypeRepository,
+)
 from app.repositories.user_repo import UserRepository
 
 
@@ -328,8 +335,63 @@ async def seed_data(session: AsyncSession) -> None:
         # 必须显式 commit，否则 admin 账号不会写入数据库，登录恒报密码错误。
         await session.commit()
 
+    # —— 默认耗材类型与分类（幂等，仅当库内无任何类型时创建）——
+    # 让「创建耗材」下拉恒有可选项，避免用户因缺类型而提交失败（需求#1）。
+    await seed_consumable_types(session)
 
 
+
+
+
+async def seed_consumable_types(session: AsyncSession) -> None:
+    """种子默认耗材类型与分类（幂等）。
+
+    仅当 ``consumable_types`` 表为空时创建，绝不覆盖用户已有数据。
+    交付/生产库初始即带这些默认类型，确保用户创建耗材时类型/分类下拉恒有可选项，
+    不会因「无类型」而提交失败（需求#1）。
+
+    顺序：列表按 ``created_at DESC`` 排序（新增置顶，需求#3），故此处在倒序创建之外，
+    显式指定 ``created_at`` 以保证默认类型的展示顺序确定：
+    类型从上往下为 光纤 → 网线 → 光模块 → 电源线；每类下分类亦按定义顺序从上往下。
+    """
+    type_repo = ConsumableTypeRepository(session)
+    if await type_repo.list():
+        return  # 已有类型，跳过（幂等，不覆盖用户数据）
+
+    cat_repo = ConsumableCategoryRepository(session)
+
+    # (类型名, 说明, [分类名...])，按展示顺序（索引越小越靠上）。
+    type_defs = [
+        ("光纤", "光通信纤芯介质，用于长距离 / 高带宽传输", ["单模光纤", "多模光纤", "皮线光缆"]),
+        ("网线", "铜缆双绞线，用于短距离以太网接入", ["超五类网线", "六类网线", "超六类网线"]),
+        ("光模块", "光电转换模块，插于设备 SFP 插槽", ["1G SFP", "10G SFP+", "25G SFP28"]),
+        ("电源线", "设备供电线缆，按制式区分", ["国标电源线", "美标电源线", "欧标电源线"]),
+    ]
+    base = utcnow()
+    n_types = len(type_defs)
+    for i, (tname, tdesc, cats) in enumerate(type_defs):
+        # 展示序靠前的类型 → created_at 更晚（DESC 置顶）。
+        t_created = base + timedelta(seconds=(n_types - 1 - i) * 10)
+        t_obj = ConsumableType(
+            name=tname, description=tdesc, created_at=t_created, updated_at=t_created
+        )
+        session.add(t_obj)
+        await session.flush()  # 拿到 t_obj.id 供分类外键使用
+        n_cats = len(cats)
+        for j, cname in enumerate(cats):
+            # 同类下首个分类 → created_at 更晚（DESC 置顶）。
+            c_created = t_created + timedelta(seconds=(n_cats - 1 - j) * 1)
+            session.add(
+                ConsumableCategory(
+                    type_id=t_obj.id,
+                    name=cname,
+                    created_at=c_created,
+                    updated_at=c_created,
+                )
+            )
+        await session.flush()
+    # 种子数据须显式提交（同 seed_data：async with session 块退出即关闭，未提交被回滚）。
+    await session.commit()
 
 
 # 版本化迁移注册表：未来新增迁移追加于此即可，已应用版本自动跳过（见 migrate()）。
