@@ -10,7 +10,7 @@
       <nav class="glass-panel px-4 py-2 text-sm flex items-center gap-2 pointer-events-auto">
         <button type="button" class="link-quiet" @click="goRoom">机房：{{ roomName || '—' }}</button>
         <ChevronRight class="w-4 h-4 gp-sub" />
-        <span class="text-slate-100 font-medium">{{ rack?.name || '机柜' }}</span>
+        <span class="text-foreground font-medium">{{ rack?.name || '机柜' }}</span>
         <template v-if="selectedDevice">
           <ChevronRight class="w-4 h-4 gp-sub" />
           <span class="text-brand-300 font-medium">{{ selectedDevice.name }}</span>
@@ -65,10 +65,11 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ChevronRight, ArrowLeft, RotateCcw, Cpu, Server } from 'lucide-vue-next'
 import * as THREE from 'three'
+import { useTheme } from '@/composables/useTheme'
 import rackApi from '@/api/rack'
 import roomApi from '@/api/room'
 import { createEngine, makeBookmarkLabel } from '@/utils/three-setup'
@@ -107,6 +108,32 @@ const tooltipStyle = ref({ left: '0px', top: '0px' })
 
 const selectedDeviceId = ref(null)
 const selectedDevice = computed(() => devices.value.find((d) => d.id === selectedDeviceId.value) || null)
+
+const { isDark } = useTheme()
+
+// 主题敏感材质与灯光引用（buildScene 中赋值，供 apply3DTheme 复用，避免重建场景）
+let themeRefs = null // { groundMat, hemisphere, ambient, key, fill }
+
+// 浅色/深色模式适配：仅调整「环境」（背景 / 地面 / 灯光 / 画布渐变），
+// 机柜与设备为真实金属/类型色，保持固定（如机房总览一致做法）。
+function apply3DTheme(dark) {
+  if (!engine) return
+  const scene = engine.scene
+  scene.background.setHex(dark ? 0x0b1220 : 0xe8ecf4)
+  if (themeRefs) {
+    if (themeRefs.groundMat) themeRefs.groundMat.color.setHex(dark ? 0x0c1422 : 0xf0f2f5)
+    const { hemisphere, ambient, key, fill } = themeRefs
+    if (hemisphere) hemisphere.intensity = dark ? 0.55 : 0.75
+    if (ambient) ambient.intensity = dark ? 0.22 : 0.38
+    if (key) key.intensity = dark ? 1.15 : 1.35
+    if (fill) fill.intensity = dark ? 0.4 : 0.55
+  }
+  if (canvasWrap.value) {
+    canvasWrap.value.style.background = dark
+      ? 'radial-gradient(120% 120% at 50% 0%, #16203a 0%, #0b1220 55%, #070b14 100%)'
+      : 'radial-gradient(120% 120% at 50% 0%, #c5d1e6 0%, #a8b8d0 55%, #8e9db5 100%)'
+  }
+}
 
 let engine = null
 let worldGroup = null
@@ -239,6 +266,18 @@ function buildScene() {
   // 设备标签：右侧标签列 + 引线引出，单行去堆叠。机柜名标签仅在机房总览视图显示，
   // 机柜详情视图不再叠加头顶机柜名标签，以保持界面简洁。
   buildDeviceLabels(mdevs, worldGroup)
+
+  // 收集主题敏感材质与灯光引用（供 apply3DTheme 切换时复用，避免重建场景）
+  const lights = engine.scene.children.filter((c) => c.isLight)
+  themeRefs = {
+    groundMat: ground.material,
+    hemisphere: lights.find((l) => l.isHemisphereLight),
+    ambient: lights.find((l) => l.isAmbientLight),
+    key: lights.find((l) => l.isDirectionalLight && l.castShadow),
+    fill: lights.find((l) => l.isDirectionalLight && !l.castShadow),
+  }
+  // 场景建完后立即应用当前主题配色
+  apply3DTheme(isDark.value)
 
   // 相机取景：按机柜实际尺寸自动适配，确保完整内容单屏可见
   frameRackView()
@@ -389,7 +428,7 @@ function showTooltip(e, d) {
   const uEnd = d.u_height ? d.current_start_u + d.u_height - 1 : d.current_start_u
   tooltip.value.innerHTML = `
     <div style="font-weight:700;margin-bottom:2px">${escapeHtml(d.name)}</div>
-    <div style="color:#94a3b8">${escapeHtml(DEVICE_TYPE_LABELS[d.device_type] || d.device_type)}${d.model ? ' · ' + escapeHtml(d.model) : ''}</div>
+    <div style="opacity:0.75">${escapeHtml(DEVICE_TYPE_LABELS[d.device_type] || d.device_type)}${d.model ? ' · ' + escapeHtml(d.model) : ''}</div>
     <div style="margin-top:4px">U 位：${d.current_start_u}U ~ ${uEnd}U</div>
     <div>状态：${escapeHtml(DEVICE_STATUS_LABELS[d.status] || d.status)}</div>
     <div>IP：${escapeHtml(d.ip_address) || '—'}</div>`
@@ -455,6 +494,9 @@ onMounted(async () => {
     error.value = '机柜三维视图初始化失败：' + (e?.message || e)
   }
 })
+
+// 主题切换时实时刷新 3D 场景环境（与机房总览一致）
+watch(isDark, (dark) => apply3DTheme(dark))
 
 onBeforeUnmount(() => {
   if (engine) {
