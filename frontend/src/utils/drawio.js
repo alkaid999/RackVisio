@@ -1,7 +1,8 @@
 // 机房拓扑导出为 draw.io（diagrams.net）格式：生成一段 mxGraphModel XML。
 // 直接使用 draw.io 自带的「机架图形」stencil：
 //   - 机柜：mxgraph.rackGeneral.rackCabinet3（childLayout=rack，自动按 U 绘制刻度）
-//   - 设备：mxgraph.rack.dell.* / mxgraph.rack.f5.* 真实机架设备图形（≤4U 真实硬件外观）
+//   - 交换机：HPE Aruba 机架 stencil（用户指定，按 U 高分层：<5U=Aruba 6300M，≥5U=Aruba CX 6410）
+//   - 其他设备：mxgraph.rack.dell.* / mxgraph.rack.f5.* 真实机架设备图形（≤4U 真实硬件外观）
 //   - 多 U 框式/刀片设备（≥5U）：自定义内联机箱图形（矢量 SVG，按槽位高度缩放，含模块槽位装饰），避免真实硬件图被拉伸变形
 // 设备标签为彩色文本框（沿用类型配色），仅含设备名称 + 当前 U 位（如 U3 或 U3-5）；
 // 机柜名称文本框居中显示于机柜顶部；机房名称居中显示于机房正上方。
@@ -116,15 +117,27 @@ function chassisStyle(type, uH) {
   return 'shape=image;image=' + chassisSvg(type, uH) + ';html=1;labelPosition=right;align=left;spacingLeft=8;shadow=0;'
 }
 
+// 交换机专用图形：用户指定的 HPE Aruba 机架 stencil（按 U 高分层）
+//   <5U → Aruba 6300M（48×1GbE + 4×SFP56）
+//   ≥5U → Aruba CX 6410（机箱级框式）
+// 这些 shape 字符串来自 draw.io 内置「Rack」图形库，直接引用即可，无需内嵌图片。
+const SWITCH_STENCIL_LT5U =
+  'mxgraph.rack.hpe_aruba.switches.jl663a_aruba_6300m_48_port_1gbe_and_4_port_sfp56_switch'
+const SWITCH_STENCIL_GE5U = 'mxgraph.rack.hpe_aruba.switches.r0x27a_aruba_cx_6410_switch'
+
 function stencilFor(d) {
   // 1) 逐设备精确指定（数据携带 stencil 字段时优先）
   if (d.stencil) return d.stencil
-  // 2) 型号映射表
+  // 2) 交换机：按用户指定的 HPE Aruba stencil（高度感知）
+  if (d.device_type === 'switch') {
+    return (d.u_height || 1) >= 5 ? SWITCH_STENCIL_GE5U : SWITCH_STENCIL_LT5U
+  }
+  // 3) 型号映射表
   const hit = matchModel(d.model)
   if (hit) return hit.kind === 'chassis' ? '__chassis__' : hit.id
-  // 3) 高度感知：≥5U 框式/刀片 → 自定义机箱图形
+  // 4) 高度感知：≥5U 框式/刀片 → 自定义机箱图形
   if ((d.u_height || 1) >= 5) return '__chassis__'
-  // 4) ≤4U → 真实固定 U 硬件图形
+  // 5) ≤4U → 真实固定 U 硬件图形
   return realisticStencil(d.device_type, d.u_height || 1)
 }
 
