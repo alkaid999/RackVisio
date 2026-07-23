@@ -310,8 +310,9 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useTheme } from '@/composables/useTheme'
 import { RotateCcw, Crosshair, Cpu, ChevronRight, ChevronDown, Monitor, Boxes, Server, ArrowLeft, X, Network, Cable } from 'lucide-vue-next'
 import * as THREE from 'three'
 import { Line2 } from 'three/examples/jsm/lines/Line2.js'
@@ -391,6 +392,39 @@ const error = ref('')
 const hoveredRackId = ref(null)
 const hoveredDeviceId = ref(null)
 const expandedGroups = ref({}) // 设备总览：机柜分组展开状态
+
+// ── 主题切换：3D 场景随暗色/亮色模式联动 ──
+const { isDark } = useTheme()
+
+// 主题敏感材质引用（buildRoomScene 中赋值，供 apply3DTheme 复用）
+let themeMaterials = null // { wallMat, wallEdgeMat, floorMat, hemisphere, ambient, key, fill }
+
+function apply3DTheme(dark) {
+  if (!engine) return
+  const scene = engine.scene
+  // 背景与雾
+  const bg = dark ? 0x0b1220 : 0xe8ecf4
+  scene.background.setHex(bg)
+  if (scene.fog) { scene.fog.color.setHex(bg); scene.fog.far = dark ? 220 : 300 }
+  // 材质
+  if (themeMaterials) {
+    const { wallMat, wallEdgeMat, floorMat, hemisphere, ambient, key, fill } = themeMaterials
+    if (wallMat) { wallMat.color.setHex(dark ? 0x16223c : 0xd1d9e6); wallMat.opacity = dark ? 0.16 : 0.22 }
+    if (wallEdgeMat) { wallEdgeMat.color.setHex(dark ? 0x2b3c5e : 0x8899b4); wallEdgeMat.emissive.setHex(dark ? 0x16335c : 0x4a5d7c); wallEdgeMat.emissiveIntensity = dark ? 0.5 : 0.25 }
+    if (floorMat) floorMat.color.setHex(dark ? 0xffffff : 0xf0f2f5)
+    // 灯光强度：亮模式更明亮柔和，暗模式偏深邃
+    if (hemisphere) { hemisphere.intensity = dark ? 0.55 : 0.75 }
+    if (ambient) ambient.intensity = dark ? 0.22 : 0.38
+    if (key) key.intensity = dark ? 1.15 : 1.35
+    if (fill) fill.intensity = dark ? 0.4 : 0.55
+  }
+  // CSS 画布背景渐变（与 Three.js 背景协调）
+  if (canvasWrap.value) {
+    canvasWrap.value.style.background = dark
+      ? 'radial-gradient(120% 120% at 50% 0%, #16203a 0%, #0b1220 55%, #070b14 100%)'
+      : 'radial-gradient(120% 120% at 50% 0%, #c5d1e6 0%, #a8b8d0 55%, #8e9db5 100%)'
+  }
+}
 
 const allDevices = computed(() => flattenDevices())
 // 左上角机房信息面板用的状态色
@@ -731,6 +765,20 @@ function buildRoomScene() {
   mkWall(floorW, wallT, 0, floorD / 2)
   mkWall(wallT, floorD, -floorW / 2, 0)
   mkWall(wallT, floorD, floorW / 2, 0)
+
+  // 收集主题敏感材质与灯光引用（供 apply3DTheme 切换时复用，避免重建场景）
+  const lights = engine.scene.children.filter((c) => c.isLight)
+  themeMaterials = {
+    wallMat,
+    wallEdgeMat,
+    floorMat: floor.material,
+    hemisphere: lights.find((l) => l.isHemisphereLight),
+    ambient: lights.find((l) => l.isAmbientLight),
+    key: lights.find((l) => l.isDirectionalLight && l.castShadow),
+    fill: lights.find((l) => l.isDirectionalLight && !l.castShadow),
+  }
+  // 场景建完后立即应用当前主题配色
+  apply3DTheme(isDark.value)
 
 
   // 机柜：正面无门（直视内部设备），左右/后面为穿孔板遮挡；内部挂载设备；列内无间隙、正面朝走廊。
@@ -1537,6 +1585,9 @@ function flattenDevices() {
   for (const rid in rackDevices.value) out.push(...(rackDevices.value[rid] || []))
   return out
 }
+
+// 主题切换时实时更新 3D 场景配色（不重建场景，仅替换材质/灯光/背景）
+watch(isDark, (dark) => apply3DTheme(dark), { immediate: false })
 
 onMounted(async () => {
   try {

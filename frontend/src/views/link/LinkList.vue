@@ -16,7 +16,7 @@
     <!-- 链路资格门控提示：设备资格数据加载完毕后，无「已上架且含接口」的设备时给出具体原因 -->
     <div
       v-if="devicesLoaded && gateHint"
-      class="mb-4 rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-700"
+      class="mb-4 rounded-md border border-amber-300/50 bg-amber-500/10 px-4 py-3 text-sm text-amber-200 dark:text-amber-300"
     >
       <p class="font-medium">尚不满足建链条件</p>
       <p class="mt-1">{{ gateHint }}</p>
@@ -416,23 +416,24 @@ onMounted(async () => {
 }
 .page-sub {
   margin: 0;
-  color: #606266;
+  color: oklch(var(--muted-foreground));
   font-size: 13px;
 }
 .link-device {
   cursor: pointer;
-  color: #2563eb;
+  color: oklch(var(--primary));
 }
 .link-device:hover {
-  color: #1d4ed8;
+  opacity: 0.85;
   text-decoration: underline;
 }
 .toolbar {
-  background: #fff;
-  border: 1px solid #ebeef5;
+  background: oklch(var(--card) / 0.8);
+  border: 1px solid oklch(var(--border) / 0.6);
   border-radius: 10px;
   padding: 14px 16px;
   margin-bottom: 16px;
+  backdrop-filter: blur(8px);
 }
 /* 设备分组折叠树 */
 .link-groups {
@@ -440,7 +441,7 @@ onMounted(async () => {
   flex-direction: column;
 }
 .link-group + .link-group {
-  border-top: 1px solid #f0f2f5;
+  border-top: 1px solid oklch(var(--border) / 0.5);
 }
 .link-group__head {
   display: flex;
@@ -455,19 +456,19 @@ onMounted(async () => {
   transition: background 0.15s ease;
 }
 .link-group__head:hover {
-  background: #f8fafc;
+  background: oklch(var(--accent) / 0.5);
 }
 .link-group__chevron {
   flex: none;
   width: 16px;
   height: 16px;
-  color: #909399;
+  color: oklch(var(--muted-foreground));
   transition: transform 0.2s ease;
 }
 .link-group__name {
   font-size: 14px;
   font-weight: 600;
-  color: #1f2937;
+  color: oklch(var(--foreground));
 }
 .link-group__count {
   font-size: 12px;

@@ -164,6 +164,10 @@
   height: 100%;
   overflow: hidden;
   border-radius: 16px;
+  /* 默认暗色渐变；亮色模式由 JS apply3DTheme 覆盖 */
+  background: radial-gradient(120% 120% at 50% 0%, #16203a 0%, #0b1220 55%, #070b14 100%);
+}
+.dark .three-canvas-wrap {
   background: radial-gradient(120% 120% at 50% 0%, #16203a 0%, #0b1220 55%, #070b14 100%);
 }
 .three-loading {
@@ -186,6 +190,10 @@
   pointer-events: none;
   user-select: none;
   transform: translateY(-4px);
+}
+:root:not(.dark) .three-label {
+  color: #1e293b;
+  text-shadow: 0 1px 3px rgba(255, 255, 255, 0.7);
 }
 .three-label.is-aisle {
   color: #5eead4;
@@ -223,6 +231,11 @@
   color: inherit;
   text-shadow: none;
 }
+:root:not(.dark) .three-label.is-bookmark {
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(148, 163, 184, 0.30);
+  box-shadow: 0 4px 18px -3px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(0, 0, 0, 0.04) inset;
+}
 .three-label.is-bookmark .bookmark-u {
   flex: none;
   font-size: 10px;
@@ -244,6 +257,9 @@
   white-space: nowrap;
   line-height: 1.25;
 }
+:root:not(.dark) .three-label.is-bookmark .bookmark-name {
+  color: #334155;
+}
 /* 机柜名称标签：复用书签卡片风格（毛玻璃 + 3px 状态色左边框 + 圆角），仅显示机柜名 */
 .three-label.is-bookmark.is-rack-label {
   padding: 4px 12px 4px 9px;
@@ -258,6 +274,9 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   line-height: 1.25;
+}
+:root:not(.dark) .three-label.is-bookmark.is-rack-label .rack-name {
+  color: #0f172a;
 }
 /* 选中态书签：琥珀描边 + 外发光，与 3D 设备发光风格统一 */
 .three-label.is-bookmark.is-selected {
@@ -285,6 +304,12 @@
   max-width: 240px;
   transition: opacity 0.12s ease;
 }
+:root:not(.dark) .three-tooltip {
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  color: #1e293b;
+  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.15);
+}
 .glass-panel {
   background: rgba(15, 23, 42, 0.55);
   border: 1px solid rgba(148, 163, 184, 0.18);
@@ -293,12 +318,24 @@
   backdrop-filter: blur(14px);
   color: #e2e8f0;
 }
+:root:not(.dark) .glass-panel {
+  background: rgba(255, 255, 255, 0.75);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  box-shadow: 0 20px 50px -20px rgba(0, 0, 0, 0.12);
+  color: #1e293b;
+}
 .glass-panel .gp-title {
   color: #f8fafc;
   font-weight: 700;
 }
+:root:not(.dark) .glass-panel .gp-title {
+  color: #0f172a;
+}
 .glass-panel .gp-sub {
   color: #94a3b8;
+}
+:root:not(.dark) .glass-panel .gp-sub {
+  color: #64748b;
 }
 
 /* 路由切换页面过渡（配合 <router-view v-slot> + Transition）

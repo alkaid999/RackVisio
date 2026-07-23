@@ -23,26 +23,26 @@
     <div v-if="racks.length" class="toolbar flex flex-wrap items-center gap-x-8 gap-y-2">
       <div class="flex items-center gap-2 text-sm">
         <Server class="w-4 h-4 text-brand-500" />
-        <span class="text-slate-500">机柜</span>
-        <span class="font-semibold text-slate-800">{{ racks.length }}</span>
+        <span class="text-muted-foreground">机柜</span>
+        <span class="font-semibold text-foreground">{{ racks.length }}</span>
       </div>
       <div class="flex items-center gap-2 text-sm">
         <Layers class="w-4 h-4 text-brand-500" />
-        <span class="text-slate-500">平均使用率</span>
-        <span class="font-semibold text-slate-800">{{ avgUtilization }}%</span>
+        <span class="text-muted-foreground">平均使用率</span>
+        <span class="font-semibold text-foreground">{{ avgUtilization }}%</span>
       </div>
       <!-- 设备类型图例 + 运行状态图例 -->
       <div class="flex flex-wrap items-center gap-x-5 gap-y-2 ml-auto">
         <div class="flex flex-wrap items-center gap-3">
-          <span class="text-xs text-slate-400">类型</span>
-          <span v-for="t in DEVICE_TYPE_OPTIONS" :key="t.value" class="flex items-center gap-1.5 text-xs text-slate-500">
+          <span class="text-xs text-muted-foreground/70">类型</span>
+          <span v-for="t in DEVICE_TYPE_OPTIONS" :key="t.value" class="flex items-center gap-1.5 text-xs text-muted-foreground">
             <span class="w-3 h-3 rounded" :style="{ background: DEVICE_TYPE_COLORS[t.value] }"></span>
             {{ t.label }}
           </span>
         </div>
-        <div class="flex flex-wrap items-center gap-3 pl-5 border-l border-slate-200">
-          <span class="text-xs text-slate-400">运行状态</span>
-          <span class="flex items-center gap-1.5 text-xs text-slate-500">
+        <div class="flex flex-wrap items-center gap-3 pl-5 border-l border-border/50">
+          <span class="text-xs text-muted-foreground/70">运行状态</span>
+          <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
             <span class="w-3 h-3 rounded-full" :style="{ background: DEVICE_POWER_COLORS['开机'] }"></span>开机
           </span>
           <span class="flex items-center gap-1.5 text-xs text-slate-500">
@@ -66,8 +66,8 @@
                 <div v-if="slot" class="rack-col">
             <!-- 机柜头 -->
             <div class="rack-head">
-              <div class="font-medium text-slate-800 truncate" :title="slot.name">{{ slot.name }}</div>
-              <div class="text-xs text-slate-400 mt-0.5">{{ slot.code }} · {{ slot.used_u }}/{{ slot.total_u }}U</div>
+              <div class="font-medium text-foreground truncate" :title="slot.name">{{ slot.name }}</div>
+              <div class="text-xs text-muted-foreground mt-0.5">{{ slot.code }} · {{ slot.used_u }}/{{ slot.total_u }}U</div>
             </div>
             <!-- 机柜图形：左侧 U 数标识 + 右侧 U 位体 -->
             <div class="rack-graphic" :style="{ height: rackPixelHeight(slot.total_u) }">
@@ -101,7 +101,7 @@
                     <PopoverContent class="w-64 pointer-events-none">
                       <div class="pop">
                         <div class="flex items-center justify-between mb-2">
-                          <span class="font-semibold text-slate-800 truncate">{{ seg.device.name }}</span>
+                          <span class="font-semibold text-foreground truncate">{{ seg.device.name }}</span>
                           <StatusBadge type="device" :value="seg.device.status" />
                         </div>
                         <div class="pop-row"><span>类型</span><span class="font-medium" :style="{ color: typeColor(seg.device.device_type) }">{{ DEVICE_TYPE_LABELS[seg.device.device_type] }}</span></div>
@@ -119,7 +119,7 @@
                   </Popover>
                   <!-- 空闲块 -->
                   <div v-else class="seg free" :style="{ height: (seg.size / slot.total_u) * 100 + '%' }">
-                    <span class="text-[11px] text-slate-300">空闲</span>
+                    <span class="text-[11px] text-muted-foreground/60">空闲</span>
                   </div>
                 </template>
               </div>
@@ -138,17 +138,17 @@
       <div v-if="detailDevice" class="space-y-3 text-sm">
         <div class="flex items-center gap-2">
           <span class="h-3 w-3 rounded" :style="{ background: typeColor(detailDevice.device_type) }"></span>
-          <span class="font-medium text-slate-700">{{ DEVICE_TYPE_LABELS[detailDevice.device_type] || detailDevice.device_type }}</span>
+          <span class="font-medium text-foreground">{{ DEVICE_TYPE_LABELS[detailDevice.device_type] || detailDevice.device_type }}</span>
           <StatusBadge type="device" :value="detailDevice.status" />
         </div>
         <div class="grid grid-cols-2 gap-x-4 gap-y-2">
-          <div><div class="text-xs text-muted-foreground">型号</div><div class="text-slate-700">{{ detailDevice.model || '—' }}</div></div>
-          <div><div class="text-xs text-muted-foreground">IP</div><div class="text-slate-700">{{ detailDevice.ip_address || '—' }}</div></div>
-          <div v-if="detailDevice.current_rack_id"><div class="text-xs text-muted-foreground">开关机</div><div class="text-slate-700">{{ DEVICE_POWER_LABELS[detailDevice.power_status] || '开机' }}</div></div>
-          <div><div class="text-xs text-muted-foreground">设备编码</div><div class="text-slate-700">{{ detailDevice.device_code || '—' }}</div></div>
-          <div><div class="text-xs text-muted-foreground">U 位</div><div class="text-slate-700">{{ detailDevice.current_start_u }}U–{{ detailDevice.current_start_u + (detailDevice.u_height || 1) - 1 }}U（{{ detailDevice.u_height }}U）</div></div>
+          <div><div class="text-xs text-muted-foreground">型号</div><div class="text-foreground">{{ detailDevice.model || '—' }}</div></div>
+          <div><div class="text-xs text-muted-foreground">IP</div><div class="text-foreground">{{ detailDevice.ip_address || '—' }}</div></div>
+          <div v-if="detailDevice.current_rack_id"><div class="text-xs text-muted-foreground">开关机</div><div class="text-foreground">{{ DEVICE_POWER_LABELS[detailDevice.power_status] || '开机' }}</div></div>
+          <div><div class="text-xs text-muted-foreground">设备编码</div><div class="text-foreground">{{ detailDevice.device_code || '—' }}</div></div>
+          <div><div class="text-xs text-muted-foreground">U 位</div><div class="text-foreground">{{ detailDevice.current_start_u }}U–{{ detailDevice.current_start_u + (detailDevice.u_height || 1) - 1 }}U（{{ detailDevice.u_height }}U）</div></div>
         </div>
-        <div v-if="allOverlapIds.has(detailDevice.id)" class="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600">
+        <div v-if="allOverlapIds.has(detailDevice.id)" class="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-400">
           ⚠ 该设备 U 位与其他设备重叠，请检查上架位置。
         </div>
       </div>
@@ -688,7 +688,7 @@ onMounted(loadRooms)
   justify-content: center;
   text-align: center;
   padding: 0 4px;
-  border-bottom: 2px solid #e2e8f0;
+  border-bottom: 2px solid oklch(var(--border));
   margin-bottom: 10px;
   border-radius: 8px;
 }
@@ -711,13 +711,13 @@ onMounted(loadRooms)
   font-size: 10px;
   font-weight: 500;
   line-height: 1;
-  color: #94a3b8;
+  color: oklch(var(--muted-foreground) / 0.7);
   font-variant-numeric: tabular-nums;
   text-align: right;
   width: 100%;
 }
 .u-tick.major {
-  color: #475569;
+  color: oklch(var(--muted-foreground));
   font-weight: 700;
   font-size: 11px;
 }
@@ -727,15 +727,15 @@ onMounted(loadRooms)
   flex-direction: column;
   height: 100%;
   padding: 0;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
+  background: oklch(var(--card));
+  border: 1px solid oklch(var(--border) / 0.6);
   border-radius: 8px;
   overflow: hidden;
   box-sizing: border-box;
 }
 .seg {
   box-sizing: border-box;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid oklch(var(--border) / 0.4);
   border-radius: 3px;
   display: flex;
   flex-direction: column;
@@ -794,7 +794,7 @@ onMounted(loadRooms)
   opacity: 0.85;
 }
 .seg.free {
-  background: #fff;
+  background: oklch(var(--muted) / 0.4);
   cursor: default;
 }
 .status-dot {
@@ -812,10 +812,10 @@ onMounted(loadRooms)
   gap: 12px;
   font-size: 13px;
   padding: 3px 0;
-  color: #64748b;
+  color: oklch(var(--muted-foreground));
 }
 .pop-row span:last-child {
-  color: #334155;
+  color: oklch(var(--foreground));
 }
 .pop-row--warn {
   color: #ef4444;
@@ -827,7 +827,7 @@ onMounted(loadRooms)
 .pop-hint {
   margin-top: 8px;
   font-size: 11px;
-  color: #94a3b8;
+  color: oklch(var(--muted-foreground) / 0.7);
   text-align: center;
 }
 /* 镜像机房平面图：各平面列并排（左→右=grid_col），整体可横向滚动（列过多时不拆断） */
@@ -839,12 +839,13 @@ onMounted(loadRooms)
   overflow-x: auto;
   padding-bottom: 8px;
   scrollbar-width: thin;
+  scrollbar-color: oklch(var(--muted-foreground) / 0.3) transparent;
 }
 .floor-canvas::-webkit-scrollbar {
   height: 8px;
 }
 .floor-canvas::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: oklch(var(--muted-foreground) / 0.3);
   border-radius: 9999px;
 }
 .floor-col {
