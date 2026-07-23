@@ -321,9 +321,20 @@ function storeBaseEmissive(group) {
     }
   })
 }
+// 判断 obj 是否位于「设备子树」内（机柜高亮/还原需跳过，避免覆盖设备选中高亮）。
+function inDeviceSubtree(obj, root) {
+  let o = obj
+  while (o && o !== root) {
+    if (o.userData && o.userData.kind === 'device') return true
+    o = o.parent
+  }
+  return false
+}
 export function highlightCabinet(group, color = 0x38bdf8, intensity = 0.45) {
   storeBaseEmissive(group)
   group.traverse((obj) => {
+    // 跳过设备子树：仅高亮机柜外壳，保护设备自身的选中/悬停高亮不被覆盖
+    if (inDeviceSubtree(obj, group)) return
     if (obj.material) {
       const mats = Array.isArray(obj.material) ? obj.material : [obj.material]
       mats.forEach((m) => {
@@ -337,6 +348,7 @@ export function highlightCabinet(group, color = 0x38bdf8, intensity = 0.45) {
 }
 export function restoreCabinet(group) {
   group.traverse((obj) => {
+    if (inDeviceSubtree(obj, group)) return
     if (obj.material) {
       const mats = Array.isArray(obj.material) ? obj.material : [obj.material]
       mats.forEach((m) => {
