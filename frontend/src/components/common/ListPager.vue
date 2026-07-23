@@ -40,12 +40,13 @@ function go(p) {
   justify-content: space-between;
   margin-top: 16px;
   padding: 10px 14px;
-  background: #fff;
-  border: 1px solid #ebeef5;
+  background: oklch(var(--card) / 0.8);
+  border: 1px solid oklch(var(--border) / 0.6);
   border-radius: 10px;
+  backdrop-filter: blur(8px);
 }
 .list-pager__text {
   font-size: 13px;
-  color: #606266;
+  color: oklch(var(--muted-foreground));
 }
 </style>

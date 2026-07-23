@@ -5,7 +5,7 @@
       <div v-if="loading" class="three-loading">正在加载机房三维场景…</div>
     </div>
 
-    <!-- 顶部：居中图标控制条（机房总览 / 机柜总览 / 选中机房 / 大屏(退出) / 视角重置） -->
+    <!-- 顶部：居中图标控制条（机房总览 / 选中机房 / 大屏(退出) / 视角重置） -->
     <div class="absolute top-3 left-1/2 -translate-x-1/2 z-30 pointer-events-auto">
       <div class="glass-panel flex items-center gap-1 rounded-2xl px-1.5 py-1.5 shadow-lg shadow-black/20">
         <!-- 机房总览 -->
@@ -13,27 +13,13 @@
           <template #trigger>
             <button
               type="button"
-              class="flex h-9 w-9 items-center justify-center rounded-xl text-slate-300 transition-colors hover:text-white hover:bg-white/5"
-              :class="viewMode === 'room' ? 'bg-brand-500 text-white shadow' : ''"
-              @click="switchMode('room')"
+              class="flex h-9 w-9 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:text-foreground hover:bg-accent bg-brand-500 text-white shadow"
             ><Boxes class="h-5 w-5" /></button>
           </template>
           机房总览
         </Tooltip>
-        <!-- 机柜总览 -->
-        <Tooltip side="bottom">
-          <template #trigger>
-            <button
-              type="button"
-              class="flex h-9 w-9 items-center justify-center rounded-xl text-slate-300 transition-colors hover:text-white hover:bg-white/5"
-              :class="viewMode === 'devices' ? 'bg-brand-500 text-white shadow' : ''"
-              @click="switchMode('devices')"
-            ><Server class="h-5 w-5" /></button>
-          </template>
-          机柜总览
-        </Tooltip>
 
-        <div class="mx-1 h-5 w-px bg-white/10"></div>
+        <div class="mx-1 h-5 w-px bg-border/50"></div>
 
         <!-- 选中机房 -->
         <Select v-model="roomId" class="w-[150px]" @update:model-value="onRoomChange">
@@ -43,14 +29,14 @@
           </SelectContent>
         </Select>
 
-        <div class="mx-1 h-5 w-px bg-white/10"></div>
+        <div class="mx-1 h-5 w-px bg-border/50"></div>
 
         <!-- 大屏 / 退出大屏 -->
         <Tooltip v-if="!fullscreen" side="bottom">
           <template #trigger>
             <button
               type="button"
-              class="flex h-9 w-9 items-center justify-center rounded-xl text-slate-300 transition-colors hover:text-white hover:bg-white/5"
+              class="flex h-9 w-9 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:text-foreground hover:bg-accent"
               @click="goBigScreen"
             ><Monitor class="h-5 w-5" /></button>
           </template>
@@ -60,7 +46,7 @@
           <template #trigger>
             <button
               type="button"
-              class="flex h-9 w-9 items-center justify-center rounded-xl text-slate-300 transition-colors hover:text-white hover:bg-white/5"
+              class="flex h-9 w-9 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:text-foreground hover:bg-accent"
               @click="backToRooms"
             ><ArrowLeft class="h-5 w-5" /></button>
           </template>
@@ -72,7 +58,7 @@
           <template #trigger>
             <button
               type="button"
-              class="flex h-9 w-9 items-center justify-center rounded-xl text-slate-300 transition-colors hover:text-white hover:bg-white/5"
+              class="flex h-9 w-9 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:text-foreground hover:bg-accent"
               @click="resetView"
             ><RotateCcw class="h-5 w-5" /></button>
           </template>
@@ -86,12 +72,12 @@
       <div class="glass-panel min-w-[180px] px-3 py-2.5">
         <div class="flex items-center gap-2">
           <span class="h-2.5 w-2.5 shrink-0 rounded-full" :style="{ backgroundColor: roomStatusColor }"></span>
-          <span class="truncate text-sm font-semibold text-white">{{ room.name }}</span>
+          <span class="truncate text-sm font-semibold text-foreground">{{ room.name }}</span>
         </div>
-        <div class="mt-0.5 text-xs text-slate-400">{{ room.code }}</div>
-        <div class="mt-2 flex items-center gap-4 text-xs text-slate-300">
-          <span>机柜 <b class="font-semibold text-white">{{ racks.length }}</b></span>
-          <span>设备 <b class="font-semibold text-white">{{ allDevices.length }}</b></span>
+        <div class="mt-0.5 text-xs text-muted-foreground">{{ room.code }}</div>
+        <div class="mt-2 flex items-center gap-4 text-xs text-muted-foreground">
+          <span>机柜 <b class="font-semibold text-foreground">{{ racks.length }}</b></span>
+          <span>设备 <b class="font-semibold text-foreground">{{ allDevices.length }}</b></span>
         </div>
       </div>
     </div>
@@ -106,21 +92,21 @@
           <div class="min-w-0">
             <div class="flex items-center gap-2">
               <span class="h-2.5 w-2.5 shrink-0 rounded-full" :style="{ backgroundColor: devStatusColor }"></span>
-              <span class="truncate text-sm font-semibold text-white">{{ selectedDeviceDetail.device.name }}</span>
+              <span class="truncate text-sm font-semibold text-foreground">{{ selectedDeviceDetail.device.name }}</span>
             </div>
-            <div class="mt-0.5 text-[11px] text-slate-400">
+            <div class="mt-0.5 text-[11px] text-muted-foreground">
               {{ devTypeLabel }}<template v-if="selectedDeviceDetail.device.model"> · {{ selectedDeviceDetail.device.model }}</template>
             </div>
           </div>
-          <button class="rounded p-1 text-slate-400 transition-colors hover:bg-white/10 hover:text-white" @click="clearDeviceSelection">
+          <button class="rounded p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground" @click="clearDeviceSelection">
             <X class="h-4 w-4" />
           </button>
         </div>
 
         <!-- 关键信息 -->
-        <div class="grid grid-cols-[3.5rem_1fr] gap-x-2 gap-y-1 text-[11px] text-slate-300">
-          <span class="text-slate-500">IP</span><span class="truncate">{{ selectedDeviceDetail.device.ip_address || '—' }}</span>
-          <span class="text-slate-500">机柜</span>
+        <div class="grid grid-cols-[3.5rem_1fr] gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
+          <span class="text-muted-foreground/70">IP</span><span class="truncate">{{ selectedDeviceDetail.device.ip_address || '—' }}</span>
+          <span class="text-muted-foreground/70">机柜</span>
           <span class="truncate">
             {{ selectedDeviceDetail.device.current_rack_name || '未上架' }}
             <template v-if="selectedDeviceDetail.device.current_start_u != null"> · {{ selectedDeviceDetail.device.current_start_u }}U~{{ devUEnd }}U</template>
@@ -136,15 +122,15 @@
             <div
               v-for="p in selectedDeviceDetail.interfaces"
               :key="p.id"
-              class="flex items-center justify-between gap-2 rounded px-2 py-1 text-[11px] hover:bg-white/5"
+              class="flex items-center justify-between gap-2 rounded px-2 py-1 text-[11px] hover:bg-accent"
             >
-              <span class="truncate text-slate-200">{{ p.name }}</span>
+              <span class="truncate text-foreground/80">{{ p.name }}</span>
               <span class="flex shrink-0 items-center gap-1.5">
-                <span class="text-slate-400">{{ INTERFACE_TYPE_LABELS[p.interface_type] || p.interface_type }}/{{ p.speed }}</span>
+                <span class="text-muted-foreground">{{ INTERFACE_TYPE_LABELS[p.interface_type] || p.interface_type }}/{{ p.speed }}</span>
                 <span class="h-1.5 w-1.5 rounded-full" :style="{ backgroundColor: INTERFACE_STATUS_COLORS[p.status] || '#909399' }"></span>
               </span>
             </div>
-            <div v-if="!selectedDeviceDetail.interfaces.length" class="py-3 text-center text-slate-500">无接口</div>
+            <div v-if="!selectedDeviceDetail.interfaces.length" class="py-3 text-center text-muted-foreground/70">无接口</div>
           </div>
         </div>
 
@@ -154,18 +140,18 @@
             <Cable class="h-3.5 w-3.5 text-brand-400" /> 关联链路（{{ selectedDeviceDetail.links.length }}）
           </div>
           <div class="max-h-32 overflow-y-auto pr-1">
-            <div v-for="(lk, i) in selectedDeviceDetail.links" :key="i" class="rounded px-2 py-1 text-[11px] hover:bg-white/5">
+            <div v-for="(lk, i) in selectedDeviceDetail.links" :key="i" class="rounded px-2 py-1 text-[11px] hover:bg-accent">
               <div class="flex items-center gap-1.5">
                 <span
                   class="rounded px-1 py-0.5 text-[10px] font-medium"
                   :style="{ backgroundColor: (LINK_MEDIUM_COLORS[lk.medium] || '#888') + '33', color: LINK_MEDIUM_COLORS[lk.medium] || '#ccc' }"
                 >{{ LINK_MEDIUM_LABELS[lk.medium] || lk.medium }}</span>
-                <span v-if="lk.peerName" class="truncate text-slate-200">{{ lk.peerName }}</span>
-                <span v-else class="truncate text-slate-400">{{ lk.peerLabel || '外部' }}</span>
+                <span v-if="lk.peerName" class="truncate text-foreground/80">{{ lk.peerName }}</span>
+                <span v-else class="truncate text-muted-foreground">{{ lk.peerLabel || '外部' }}</span>
               </div>
-              <div class="mt-0.5 truncate text-slate-500">{{ lk.source_interface }} → {{ lk.target_interface }}</div>
+              <div class="mt-0.5 truncate text-muted-foreground/70">{{ lk.source_interface }} → {{ lk.target_interface }}</div>
             </div>
-            <div v-if="!selectedDeviceDetail.links.length" class="py-3 text-center text-slate-500">无关联链路</div>
+            <div v-if="!selectedDeviceDetail.links.length" class="py-3 text-center text-muted-foreground/70">无关联链路</div>
           </div>
         </div>
       </div>
@@ -175,17 +161,17 @@
     <div class="absolute top-20 right-3 w-60 pointer-events-auto">
       <div class="glass-panel p-3">
         <!-- 标签切换：设备（默认，点选查看详情与链路）/ 机柜（跳转三维详情） -->
-        <div class="flex mb-2 rounded-lg bg-black/20 p-0.5 text-[11px]">
+        <div class="flex mb-2 rounded-lg bg-accent/50 p-0.5 text-[11px]">
           <button
             type="button"
             class="flex-1 rounded-md py-1 font-medium transition-colors"
-            :class="panelTab === 'device' ? 'bg-brand-500 text-white shadow' : 'text-slate-300 hover:text-white'"
+            :class="panelTab === 'device' ? 'bg-brand-500 text-white shadow' : 'text-muted-foreground hover:text-foreground'"
             @click="panelTab = 'device'"
           >设备</button>
           <button
             type="button"
             class="flex-1 rounded-md py-1 font-medium transition-colors"
-            :class="panelTab === 'rack' ? 'bg-brand-500 text-white shadow' : 'text-slate-300 hover:text-white'"
+            :class="panelTab === 'rack' ? 'bg-brand-500 text-white shadow' : 'text-muted-foreground hover:text-foreground'"
             @click="panelTab = 'rack'"
           >机柜</button>
         </div>
@@ -199,34 +185,34 @@
             <div v-for="grp in racksWithDevices" :key="grp.rack.id" class="rounded-lg">
               <button
                 type="button"
-                class="w-full text-left rounded-lg px-2 py-1.5 transition-colors hover:bg-white/10 flex items-center justify-between gap-2"
-                :class="{ 'bg-white/10 ring-1 ring-brand-400/40': hoveredRackId === grp.rack.id }"
+                class="w-full text-left rounded-lg px-2 py-1.5 transition-colors hover:bg-accent flex items-center justify-between gap-2"
+                :class="{ 'bg-accent ring-1 ring-brand-400/40': hoveredRackId === grp.rack.id }"
                 @mouseenter="onRackHover(grp.rack, $event, true)"
                 @mouseleave="onRackHover(grp.rack, $event, false)"
                 @click="toggleRackGroup(grp.rack.id)"
               >
                 <span class="min-w-0">
-                  <span class="block text-slate-100 text-[12px] font-medium truncate">{{ grp.rack.name }}</span>
+                  <span class="block text-foreground text-[12px] font-medium truncate">{{ grp.rack.name }}</span>
                   <span class="block text-[11px] gp-sub truncate">{{ grp.devices.length }} 台设备</span>
                 </span>
                 <span class="flex items-center gap-1.5 shrink-0">
                   <StatusBadge type="rack" :value="grp.rack.status" />
-                  <component :is="isRackGroupExpanded(grp.rack.id) ? ChevronDown : ChevronRight" class="w-3.5 h-3.5 text-slate-400" />
+                  <component :is="isRackGroupExpanded(grp.rack.id) ? ChevronDown : ChevronRight" class="w-3.5 h-3.5 text-muted-foreground" />
                 </span>
               </button>
-              <div v-if="isRackGroupExpanded(grp.rack.id)" class="ml-3 mt-1 space-y-1 border-l border-white/10 pl-2">
+              <div v-if="isRackGroupExpanded(grp.rack.id)" class="ml-3 mt-1 space-y-1 border-l border-border pl-2">
                 <button
                   v-for="d in grp.devices"
                   :key="d.id"
                   type="button"
-                  class="w-full text-left rounded-md px-2 py-1 text-[11px] transition-colors hover:bg-white/10 flex items-center justify-between gap-2"
-                  :class="{ 'bg-white/10 ring-1 ring-brand-400/30': selectedDeviceId === d.id || hoveredDeviceId === d.id }"
+                  class="w-full text-left rounded-md px-2 py-1 text-[11px] transition-colors hover:bg-accent flex items-center justify-between gap-2"
+                  :class="{ 'bg-accent ring-1 ring-brand-400/30': selectedDeviceId === d.id || hoveredDeviceId === d.id }"
                   @mouseenter="onDeviceHover(d, $event, true)"
                   @mouseleave="onDeviceHover(d, $event, false)"
                   @click="selectDeviceFromList(d.id)"
                 >
                   <span class="min-w-0">
-                    <span class="block text-slate-200 truncate">{{ d.name }}</span>
+                    <span class="block text-foreground/80 truncate">{{ d.name }}</span>
                     <span class="block gp-sub truncate">{{ DEVICE_TYPE_LABELS[d.device_type] || d.device_type }} · {{ d.current_start_u }}U~{{ d.current_start_u + (d.u_height || 1) - 1 }}U</span>
                   </span>
                   <StatusBadge type="device" :value="d.status" />
@@ -250,14 +236,14 @@
               v-for="r in racks"
               :key="r.id"
               type="button"
-              class="w-full text-left rounded-lg px-2 py-1.5 transition-colors hover:bg-white/10 flex items-center justify-between gap-2 cursor-pointer"
-              :class="{ 'bg-white/10 ring-1 ring-brand-400/40': hoveredRackId === r.id }"
+              class="w-full text-left rounded-lg px-2 py-1.5 transition-colors hover:bg-accent flex items-center justify-between gap-2 cursor-pointer"
+              :class="{ 'bg-accent ring-1 ring-brand-400/40': hoveredRackId === r.id }"
               @mouseenter="onRackHover(r, $event, true)"
               @mouseleave="onRackHover(r, $event, false)"
               @click="goRack(r)"
             >
               <span class="min-w-0">
-                <span class="block text-slate-100 text-[12px] font-medium truncate">{{ r.name }}</span>
+                <span class="block text-foreground text-[12px] font-medium truncate">{{ r.name }}</span>
                 <span class="block text-[11px] gp-sub truncate">{{ r.column_code }} / {{ r.code }}</span>
               </span>
               <div class="flex items-center gap-1.5 shrink-0">
@@ -285,19 +271,18 @@
     <!-- 底部操作提示 -->
     <div class="absolute bottom-2.5 left-1/2 -translate-x-1/2 pointer-events-none">
       <div class="glass-panel px-3 py-1 text-[11px] gp-sub">
-        <template v-if="viewMode === 'room'">拖拽旋转 · 滚轮缩放 · W/S 前后移动 · A/D 左右平移 · 单击机柜选中 · 双击进入详情</template>
-        <template v-else>拖拽旋转 · 滚轮缩放 · W/S 前后移动 · A/D 左右平移 · 点击设备高亮定位</template>
+        拖拽旋转 · 滚轮缩放 · W/S 前后移动 · A/D 左右平移 · 单击机柜进入详情
       </div>
     </div>
 
     <!-- 缩放百分比实时显示（右下角） -->
     <div class="absolute bottom-2.5 right-3 z-30 pointer-events-auto">
       <div class="glass-panel flex items-center gap-1.5 px-2.5 py-1.5 text-xs">
-        <span class="text-slate-400">缩放</span>
-        <span class="min-w-[3rem] text-right font-semibold tabular-nums text-white">{{ zoomPercent }}%</span>
+        <span class="text-muted-foreground">缩放</span>
+        <span class="min-w-[3rem] text-right font-semibold tabular-nums text-foreground">{{ zoomPercent }}%</span>
         <button
           type="button"
-          class="ml-0.5 flex h-6 w-6 items-center justify-center rounded-md text-slate-300 transition-colors hover:bg-white/10 hover:text-white"
+          class="ml-0.5 flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           title="重置视角"
           @click="resetView"
         ><RotateCcw class="h-3.5 w-3.5" /></button>
@@ -313,7 +298,7 @@
 import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useTheme } from '@/composables/useTheme'
-import { RotateCcw, Crosshair, Cpu, ChevronRight, ChevronDown, Monitor, Boxes, Server, ArrowLeft, X, Network, Cable } from 'lucide-vue-next'
+import { RotateCcw, Crosshair, Cpu, ChevronRight, ChevronDown, Monitor, Boxes, ArrowLeft, X, Network, Cable } from 'lucide-vue-next'
 import * as THREE from 'three'
 import { Line2 } from 'three/examples/jsm/lines/Line2.js'
 import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js'
@@ -370,7 +355,7 @@ const props = defineProps({
 const route = useRoute()
 const router = useRouter()
 
-const viewMode = ref('room') // 'room' | 'devices'
+const viewMode = ref('room') // 固定机房总览模式（已移除机柜总览/设备总览切换）
 const panelTab = ref('device') // 右侧面板标签：'device' 设备列表（默认，可点选查看链路）/ 'rack' 机柜列表（跳转详情）
 const rooms = ref([])
 const roomId = ref(route.query.room || '')
@@ -700,8 +685,7 @@ function buildScene() {
   hoveredRackId.value = null
   hoveredDeviceId.value = null
 
-  if (viewMode.value === 'devices') buildDevicesScene()
-  else buildRoomScene()
+  buildRoomScene()
 
   // 重建后恢复已选中设备的高亮（描边 + 自发光 + 书签高亮），避免切换场景后丢失
   if (selectedDeviceId.value) {
@@ -992,37 +976,8 @@ function onPointerMove(e) {
   if (!engine) return
   setPointer(e)
   raycaster.setFromCamera(pointer, engine.camera)
-  if (viewMode.value === 'devices') {
-    const hits = raycaster.intersectObjects(deviceMeshes, true)
-    if (hits.length) {
-      const g = findDeviceGroup(hits[0].object)
-      if (g) {
-        // 选中设备保持琥珀高亮，hover 不覆盖；其余悬停设备给蓝色反馈
-        const isSel = g.userData.id === selectedDeviceId.value
-        if (hoveredDeviceMesh !== g) {
-          if (hoveredDeviceMesh) clearDeviceEmissive(hoveredDeviceMesh)
-          if (isSel) hoveredDeviceMesh = null
-          else {
-            hoveredDeviceMesh = g
-            setDeviceEmissive(g, 0x38bdf8, 0.5)
-          }
-        }
-        engine.setCursor('pointer')
-        hoveredDeviceId.value = g.userData.id
-        showDeviceTooltip(e, g.userData.device)
-      }
-    } else {
-      if (hoveredDeviceMesh) {
-        clearDeviceEmissive(hoveredDeviceMesh)
-        hoveredDeviceMesh = null
-      }
-      hoveredDeviceId.value = null
-      engine.setCursor('grab')
-      tooltipVisible.value = false
-    }
-  } else {
-    // 机房总览：优先高亮悬停的设备（点中设备即选中），否则高亮机柜
-    const hits = raycaster.intersectObjects(rackGroups, true)
+  // 机房总览：优先高亮悬停的设备（点中设备即选中），否则高亮机柜
+  const hits = raycaster.intersectObjects(rackGroups, true)
     let devGroup = null
     for (const h of hits) {
       const dg = findDeviceGroup(h.object)
@@ -1079,7 +1034,6 @@ function onPointerMove(e) {
       engine.setCursor('grab')
       tooltipVisible.value = false
     }
-  }
 }
 
 function onPointerDown(e) {
@@ -1092,17 +1046,8 @@ function onPointerUp(e) {
   if (moved > 5 || !engine) return
   setPointer(e)
   raycaster.setFromCamera(pointer, engine.camera)
-  if (viewMode.value === 'devices') {
-    const hits = raycaster.intersectObjects(deviceMeshes, true)
-    if (hits.length) {
-      const g = findDeviceGroup(hits[0].object)
-      if (g) selectDeviceFromList(g.userData.id)
-    } else {
-      clearDeviceSelection()
-    }
-  } else {
-    // 机房总览：设备为机柜子节点。优先判定是否点中设备 → 选中并展示详情/链路；
-    // 否则点中机柜本体 → 进入机柜三维详情。
+  // 机房总览：设备为机柜子节点。优先判定是否点中设备 → 选中并展示详情/链路；
+  // 否则点中机柜本体 → 进入机柜三维详情。
     const hits = raycaster.intersectObjects(rackGroups, true)
     let devGroup = null
     for (const h of hits) {
@@ -1122,12 +1067,11 @@ function onPointerUp(e) {
       // 点击空白处：清空设备选中态（保留旋转/平移由 OrbitControls 处理，仅 click 不 drag 时触发）
       clearDeviceSelection()
     }
-  }
 }
 
 // 双击机柜 → 进入其三维详情视图（与单击效果一致，作为兜底）
 function onDblClick(e) {
-  if (viewMode.value !== 'room' || !engine) return
+  if (!engine) return
   setPointer(e)
   raycaster.setFromCamera(pointer, engine.camera)
   const hits = raycaster.intersectObjects(rackGroups, true)
@@ -1476,14 +1420,6 @@ function goRack(rack) {
 // 打开全屏数据大屏展示页（无导航栏冗余 UI）
 function goBigScreen() {
   router.push({ path: '/bigscreen', query: roomId.value ? { room: roomId.value } : {} })
-}
-
-function switchMode(mode) {
-  if (viewMode.value === mode) return
-  viewMode.value = mode
-  clearDeviceSelection()
-  hoveredDeviceId.value = null
-  if (engine) buildScene()
 }
 
 function onRoomChange(id) {

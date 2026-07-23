@@ -42,7 +42,7 @@
   --card-foreground: 220 20% 90%;
   --popover: 224 22% 11%;
   --popover-foreground: 220 20% 90%;
-  --primary: 217 91% 62%;
+  --primary: 213 94% 68%;
   --primary-foreground: 224 30% 8%;
   --primary-muted: 217 60% 22%;
   --secondary: 223 18% 16%;
@@ -59,7 +59,7 @@
   --warning-foreground: 224 30% 8%;
   --border: 223 16% 19%;
   --input: 223 16% 20%;
-  --ring: 217 91% 62%;
+  --ring: 213 94% 68%;
 }
 
 @layer base {
@@ -196,14 +196,20 @@
   text-shadow: 0 1px 3px rgba(255, 255, 255, 0.7);
 }
 .three-label.is-aisle {
-  color: #5eead4;
+  color: #0f766e;
   font-size: 8.5px;
-  background: rgba(5, 30, 30, 0.55);
-  border: 1px solid rgba(94, 234, 212, 0.35);
+  background: rgba(255, 255, 255, 0.75);
+  border: 1px solid rgba(14, 116, 110, 0.35);
   border-radius: 9999px;
   padding: 3px 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   transform: translateY(-6px);
+}
+.dark .three-label.is-aisle {
+  color: #5eead4;
+  background: rgba(5, 30, 30, 0.55);
+  border-color: rgba(94, 234, 212, 0.35);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
 }
 .three-label.is-aisle::after {
   content: ' ›››';

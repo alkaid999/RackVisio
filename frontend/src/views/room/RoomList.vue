@@ -316,11 +316,12 @@ onMounted(async () => {
 
 <style scoped>
 .toolbar {
-  background: #fff;
-  border: 1px solid #ebeef5;
+  background: oklch(var(--card) / 0.8);
+  border: 1px solid oklch(var(--border) / 0.6);
   border-radius: 10px;
   padding: 14px 16px;
   margin-bottom: 16px;
+  backdrop-filter: blur(8px);
 }
 .grid-cards {
   display: grid;
