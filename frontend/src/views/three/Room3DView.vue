@@ -251,30 +251,23 @@
               :key="r.id"
               type="button"
               class="w-full text-left rounded-lg px-2 py-1.5 transition-colors hover:bg-white/10 flex items-center justify-between gap-2 cursor-pointer"
-              :class="{ 'bg-white/10 ring-1 ring-brand-400/40': hoveredRackId === r.id || selectedRackId === r.id }"
+              :class="{ 'bg-white/10 ring-1 ring-brand-400/40': hoveredRackId === r.id }"
               @mouseenter="onRackHover(r, $event, true)"
               @mouseleave="onRackHover(r, $event, false)"
-              @click="selectRack(r)"
-              @dblclick="goRack(r)"
+              @click="goRack(r)"
             >
               <span class="min-w-0">
                 <span class="block text-slate-100 text-[12px] font-medium truncate">{{ r.name }}</span>
                 <span class="block text-[11px] gp-sub truncate">{{ r.column_code }} / {{ r.code }}</span>
               </span>
               <div class="flex items-center gap-1.5 shrink-0">
-                <button
-                  type="button"
-                  class="rounded-md px-1.5 py-0.5 text-[11px] bg-brand-500/15 text-brand-300 hover:bg-brand-500/30 transition-colors"
-                  title="进入机柜三维详情"
-                  @click.stop="goRack(r)"
-                >进入</button>
                 <StatusBadge type="rack" :value="r.status" />
               </div>
             </div>
             <EmptyState v-if="!racks.length" title="暂无机柜" />
           </div>
           <p class="gp-sub text-[11px] mt-2 leading-relaxed">
-            提示：单击机柜选中高亮（与设备高亮同存）· 双击或点「进入」跳转其三维详情。
+            提示：单击机柜进入其三维详情 · 单击设备查看高亮与链路。
           </p>
         </template>
       </div>
@@ -398,11 +391,6 @@ const error = ref('')
 const hoveredRackId = ref(null)
 const hoveredDeviceId = ref(null)
 const expandedGroups = ref({}) // 设备总览：机柜分组展开状态
-
-// 机柜「持久选中」强调色：翡翠绿——与设备琥珀选中、悬停蓝形成三态区分，二者可同存于同一总览。
-const RACK_SELECT_COLOR = 0x34d399
-const selectedRackId = ref(null)
-let selectedRackGroup = null
 
 const allDevices = computed(() => flattenDevices())
 // 左上角机房信息面板用的状态色
@@ -1016,7 +1004,7 @@ function onPointerMove(e) {
     } else if (hits.length) {
       const g = findCabinetGroup(hits[0].object)
       if (g && hoveredGroup !== g) {
-        if (hoveredGroup && !isRackSelected(hoveredGroup)) restoreCabinet(hoveredGroup)
+        if (hoveredGroup) restoreCabinet(hoveredGroup)
         if (hoveredDeviceMesh) {
           clearDeviceEmissive(hoveredDeviceMesh)
           hoveredDeviceMesh = null
@@ -1024,16 +1012,14 @@ function onPointerMove(e) {
           tooltipVisible.value = false
         }
         hoveredGroup = g
-        // 选中态机柜保持绿色高亮，不被蓝色 hover 覆盖
-        if (!isRackSelected(g)) highlightCabinet(g, 0x38bdf8, 0.45)
+        highlightCabinet(g, 0x38bdf8, 0.45)
       }
       engine.setCursor('pointer')
       hoveredRackId.value = g?.userData?.rack?.id || null
       if (g) showRackTooltip(e, g.userData.rack)
     } else {
       if (hoveredGroup) {
-        // 选中态机柜保留绿色，不还原；其余还原为基色
-        if (!isRackSelected(hoveredGroup)) restoreCabinet(hoveredGroup)
+        restoreCabinet(hoveredGroup)
         hoveredGroup = null
       }
       if (hoveredDeviceMesh) {
@@ -1082,17 +1068,16 @@ function onPointerUp(e) {
       selectDeviceFromList(devGroup.userData.id)
     } else if (hits.length) {
       const g = findCabinetGroup(hits[0].object)
-      // 单击机柜 = 持久选中（与设备高亮同存）；进入详情改由双击触发
-      if (g) selectRack(g.userData.rack)
+      // 单击机柜直接进入其三维详情
+      if (g) goRack(g.userData.rack)
     } else {
-      // 点击空白处：同时清空设备与机柜选中态（保留旋转/平移由 OrbitControls 处理，仅 click 不 drag 时触发）
+      // 点击空白处：清空设备选中态（保留旋转/平移由 OrbitControls 处理，仅 click 不 drag 时触发）
       clearDeviceSelection()
-      clearRackSelection()
     }
   }
 }
 
-// 双击机柜 → 进入其三维详情视图（单击仅做选中，二者解耦）
+// 双击机柜 → 进入其三维详情视图（与单击效果一致，作为兜底）
 function onDblClick(e) {
   if (viewMode.value !== 'room' || !engine) return
   setPointer(e)
@@ -1154,14 +1139,12 @@ function hoverRoster(id, on) {
   const g = rackGroups.find((group) => group.userData.rack.id === id)
   if (!g) return
   if (on) {
-    if (hoveredGroup && hoveredGroup !== g && !isRackSelected(hoveredGroup)) restoreCabinet(hoveredGroup)
+    if (hoveredGroup && hoveredGroup !== g) restoreCabinet(hoveredGroup)
     hoveredGroup = g
-    // 选中态机柜保持绿色高亮，不被蓝色 hover 覆盖
-    if (!isRackSelected(g)) highlightCabinet(g, 0x38bdf8, 0.45)
+    highlightCabinet(g, 0x38bdf8, 0.45)
   } else if (hoveredGroup === g) {
     hoveredGroup = null
-    // 若仍选中则保留绿色；否则还原为基色
-    if (!isRackSelected(g)) restoreCabinet(g)
+    restoreCabinet(g)
   }
 }
 
@@ -1213,45 +1196,6 @@ function clearDeviceSelection() {
   selectedDeviceId.value = null
   selectedDeviceDetail.value = null
   clearCables()
-}
-
-// 机柜持久选中：翡翠绿高亮，与设备琥珀高亮互相独立、可同时存在于同一总览视图。
-function isRackSelected(group) {
-  return selectedRackGroup && selectedRackGroup === group
-}
-function selectRack(rack) {
-  if (selectedRackId.value === rack.id) {
-    // 再次单击同一机柜 → 取消选中（仍悬停则保留蓝色 hover）
-    const g = selectedRackGroup
-    selectedRackGroup = null
-    selectedRackId.value = null
-    if (g) {
-      if (hoveredGroup === g) highlightCabinet(g, 0x38bdf8, 0.45)
-      else restoreCabinet(g)
-    }
-    return
-  }
-  // 还原上一个选中机柜（仍悬停则保留蓝色 hover）
-  if (selectedRackGroup) {
-    const prev = selectedRackGroup
-    selectedRackGroup = null
-    if (hoveredGroup === prev) highlightCabinet(prev, 0x38bdf8, 0.45)
-    else restoreCabinet(prev)
-  }
-  selectedRackId.value = rack.id
-  const g = rackGroups.find((group) => group.userData.rack.id === rack.id)
-  selectedRackGroup = g
-  if (g) highlightCabinet(g, RACK_SELECT_COLOR, 0.6)
-  // 注意：不清除设备选中态——机柜与设备高亮可同存
-}
-function clearRackSelection() {
-  if (selectedRackGroup) {
-    const g = selectedRackGroup
-    selectedRackGroup = null
-    if (hoveredGroup === g) highlightCabinet(g, 0x38bdf8, 0.45)
-    else restoreCabinet(g)
-  }
-  selectedRackId.value = null
 }
 
 // 拉取设备详情：设备本体 + 接口列表 + 单设备拓扑（关联链路）。
@@ -1490,7 +1434,6 @@ function switchMode(mode) {
   if (viewMode.value === mode) return
   viewMode.value = mode
   clearDeviceSelection()
-  clearRackSelection()
   hoveredDeviceId.value = null
   if (engine) buildScene()
 }
@@ -1499,7 +1442,6 @@ function onRoomChange(id) {
   hoveredRackId.value = null
   hoveredGroup = null
   clearDeviceSelection()
-  clearRackSelection()
   expandedGroups.value = {}
   loadRoom(id)
 }
@@ -1563,7 +1505,6 @@ function initEngine() {
       window.__room3dSelect = (id) => selectDeviceFromList(id)
       window.__room3dDebug = () => ({
         selected: selectedDeviceId.value,
-        selectedRack: selectedRackId.value,
         cables: cables.length,
         hasDetail: !!selectedDeviceDetail.value,
         linkCount: selectedDeviceDetail.value ? selectedDeviceDetail.value.links.length : 0,
@@ -1571,12 +1512,6 @@ function initEngine() {
         maxDistance: engine ? +engine.controls.maxDistance.toFixed(2) : null,
         minDistance: engine ? +engine.controls.minDistance.toFixed(2) : null,
       })
-      // 自动化自测：选中/取消机柜
-      window.__room3dSelectRack = (id) => {
-        const r = racks.value.find((x) => x.id === id)
-        if (r) selectRack(r)
-      }
-      window.__room3dClearRack = () => clearRackSelection()
     }
     // 每帧驱动选中设备的关联链路流动光效
     engine.setOnTick(tickCables)
