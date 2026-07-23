@@ -2,7 +2,7 @@
 // 直接使用 draw.io 自带的「机架图形」stencil：
 //   - 机柜：mxgraph.rackGeneral.rackCabinet3（childLayout=rack，自动按 U 绘制刻度）
 //   - 设备：mxgraph.rack.dell.* / mxgraph.rack.f5.* 真实机架设备图形，按 U 位精确落位
-// 设备标签为彩色文本框（沿用类型配色），仅含设备名称 + U 数量；
+// 设备标签为彩色文本框（沿用类型配色），仅含设备名称 + 当前 U 位（如 U3 或 U3-5）；
 // 机柜名称文本框居中显示于机柜顶部；机房名称居中显示于机房正上方。
 // 设备类型配色/标签自包含（与 constants.js 同源，避免导出工具依赖 vue reactive 常量）。
 const DEVICE_TYPE_COLORS = {
@@ -29,7 +29,8 @@ const RACK_W = 204
 const RACK_UNIT = 14.8 // 每 U 像素高
 const M = { top: 21, bottom: 22, left: 33, right: 9 }
 const INNER_W = RACK_W - M.left - M.right // 162
-const GAP = 56
+// 机柜横向间距：设备标签 labelPosition=right 向右延伸，间距需足够大，避免下一台机柜遮挡本柜设备标签。
+const GAP = 180
 const COLS = 5
 const TITLE_H = 26
 const ROOM_TITLE_H = 40
@@ -113,16 +114,32 @@ export function buildRoomDrawioXml({ room, racks, rackDevices }) {
     (a, b) => (a.grid_row ?? 0) - (b.grid_row ?? 0) || (a.grid_col ?? 0) - (b.grid_col ?? 0)
   )
 
+  // 按机房真实站位（grid_row × grid_col）排布，而非强制一行/固定每行数量。
+  // 所有机柜均有有效站位时，用真实坐标计算行列；否则退化为顺序换行布局。
+  const hasGrid = ordered.length > 0 && ordered.every((r) => r.grid_col != null && r.grid_row != null)
+  let posOf
+  if (hasGrid) {
+    const minCol = Math.min(...ordered.map((r) => r.grid_col))
+    const minRow = Math.min(...ordered.map((r) => r.grid_row))
+    posOf = (r) => ({ col: r.grid_col - minCol, row: r.grid_row - minRow })
+  } else {
+    posOf = (r, i) => ({ col: i % COLS, row: Math.floor(i / COLS) })
+  }
+
   // 先算每台机柜高度与最大高度，用于网格排版
   const layout = ordered.map((rack, i) => {
     const totalU = rack.total_u || 42
     const cabH = M.top + totalU * RACK_UNIT + M.bottom
-    return { rack, col: i % COLS, row: Math.floor(i / COLS), totalU, cabH }
+    const p = posOf(rack, i)
+    return { rack, col: p.col, row: p.row, totalU, cabH }
   })
+  const maxCol = layout.reduce((m, l) => Math.max(m, l.col), 0)
+  const maxRow = layout.reduce((m, l) => Math.max(m, l.row), 0)
   const maxCabH = layout.reduce((m, l) => Math.max(m, l.cabH), 0)
   const strideX = RACK_W + GAP
   const strideY = maxCabH + TITLE_H + GAP
-  const colCount = Math.min(ordered.length || 1, COLS)
+  const colCount = maxCol + 1
+  const rowCount = maxRow + 1
   const diagramW = colCount * RACK_W + (colCount - 1) * GAP
 
   // 机房名称：居中显示于机房正上方（y=0 顶部，不遮挡下方机柜）
@@ -179,11 +196,12 @@ export function buildRoomDrawioXml({ room, racks, rackDevices }) {
       const y = M.top + (totalU - topU) * RACK_UNIT
       const h = uH * RACK_UNIT
       const c = DEVICE_TYPE_COLORS[d.device_type] || DEVICE_TYPE_COLORS.other
-      // 设备标签＝彩色文本框（沿用类型配色），仅显示设备名称 + U 数量
+      // 设备标签＝彩色文本框（沿用类型配色），仅显示设备名称 + 当前 U 位（单 U 如 U3，多 U 如 U3-5）
+      const uRange = uH === 1 ? `U${startU}` : `U${startU}-${topU}`
       const labelHtml =
         `<div style='background:${c};color:#fff;border-radius:4px;padding:2px 8px;` +
         `font-size:11px;font-weight:600;white-space:nowrap;display:inline-block;'>` +
-        `${esc(d.name || '未命名设备')} · ${uH}U</div>`
+        `${esc(d.name || '未命名设备')} · ${uRange}</div>`
       cells.push(cell(nid(), labelHtml, deviceStyle(stencilFor(d.device_type, uH)), M.left, y, INNER_W, h, cabId))
     }
   }
