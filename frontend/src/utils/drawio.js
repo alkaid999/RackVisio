@@ -1,6 +1,6 @@
 // 机房拓扑导出为 draw.io（diagrams.net）格式：生成一段 mxGraphModel XML。
 // 直接使用 draw.io 自带的「机架图形」stencil：
-//   - 机柜：mxgraph.rackGeneral.rackCabinet3（childLayout=rack，自动按 U 绘制刻度）
+//   - 机柜：mxgraph.rackGeneral.rackCabinet3（childLayout=rack，按 U 划分槽位；U 刻度编号由导出工具自绘，确保 1U 在底向上递增）
 //   - 交换机：HPE Aruba 机架 stencil（用户指定，按 U 高分层：<5U=Aruba 6300M，≥5U=Aruba CX 6410）
 //   - 服务器：Dell PowerEdge（1U/2U/4U 真实硬件图；≥5U=Oracle Netra CT900 刀片机箱）
 //   - 路由器：Cisco（<5U=7603；≥5U=ASR 9006）
@@ -29,6 +29,13 @@ const RACK_W = 204
 const RACK_UNIT = 14.8 // 每 U 像素高
 const M = { top: 21, bottom: 22, left: 33, right: 9 }
 const INNER_W = RACK_W - M.left - M.right // 162
+// U 刻度标签：自绘（不依赖 stencil 内部 numDisp 参数，确保 1U 在底部向上递增）
+// 每行标注 U1/U5/…，标签列宽
+const U_LABEL_W = 26
+const U_LABEL_STEP = 5 // 每隔几 U 标注一个（含 U1 与顶 U）
+function uLabelStyle() {
+  return 'text;html=1;align=right;verticalAlign=middle;fontSize=9;fontColor=#64748B;fillColor=none;strokeColor=none;'
+}
 // 机柜横向间距：设备标签 labelPosition=right 向右延伸，间距需足够大，避免下一台机柜遮挡本柜设备标签。
 const GAP = 180
 const COLS = 5
@@ -174,7 +181,7 @@ function cabinetStyle(totalU) {
     'shape=mxgraph.rackGeneral.rackCabinet3;rackUnitSize=' + RACK_UNIT + ';fillColor2=#f4f4f4;' +
     'container=1;collapsible=0;childLayout=rack;allowGaps=1;' +
     'marginLeft=' + M.left + ';marginRight=' + M.right + ';marginTop=' + M.top + ';marginBottom=' + M.bottom + ';' +
-    'textColor=#666666;numDisp=ascend;'
+    'textColor=#666666;'
   )
 }
 
@@ -268,7 +275,22 @@ export function buildRoomDrawioXml({ room, racks, rackDevices }) {
     const cabId = nid()
     cells.push(cell(cabId, '', cabinetStyle(totalU), cabX, cabY, RACK_W, cabH))
 
-    // 设备：按 U 位精确落位（U1 在底，numDisp=ascend 向上递增）
+    // U 刻度标签：自绘于机柜左侧（U1 在底部，向上递增到 totalU），与机柜同一 parent 之下、设备之上。
+    // 每隔 U_LABEL_STEP 标注一个（含 U1 与顶 U），避免过密。
+    const labelX = cabX - U_LABEL_W
+    for (let u = 1; u <= totalU; u += U_LABEL_STEP) {
+      const ly = cabY + M.top + (totalU - u) * RACK_UNIT + U_LABEL_STEP * RACK_UNIT / 2
+      const lh = U_LABEL_STEP * RACK_UNIT
+      cells.push(cell(nid(), `U${u}`, uLabelStyle(), labelX, ly, U_LABEL_W, lh))
+    }
+    // 顶部最后一个 U（若未被步进覆盖）单独补标
+    if ((totalU - 1) % U_LABEL_STEP !== 0) {
+      const tu = totalU
+      const ly = cabY + M.top + (totalU - tu) * RACK_UNIT + RACK_UNIT / 2
+      cells.push(cell(nid(), `U${tu}`, uLabelStyle(), labelX, ly, U_LABEL_W, RACK_UNIT))
+    }
+
+    // 设备：按 U 位精确落位（U1 在底，向上递增）
     const devs = (rackDevices?.[rack.id] || [])
       .filter((d) => d.current_start_u != null)
       .sort((a, b) => b.current_start_u - a.current_start_u)
