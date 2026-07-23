@@ -167,6 +167,7 @@ import { computed, ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Server, Layers, Download } from 'lucide-vue-next'
 import ExcelJS from 'exceljs'
+import { downloadBlob } from '@/utils/download'
 import { useToast } from '@/composables/useToast'
 import roomApi from '@/api/room'
 import deviceApi from '@/api/device'
@@ -446,46 +447,7 @@ function toArgb(hex) {
   return 'FF' + hex.replace('#', '').toUpperCase()
 }
 
-// 触发浏览器下载：预览 iframe 的沙箱默认禁止 <a download>，导致「点了导出没反应」（静默失败、无报错）。
-// 解决策略（按可用性逐级回退，最大化跨环境成功率）：
-//   1) 同域 iframe：直接在 window.top 文档内触发锚点下载 —— 顶层上下文不受 iframe 沙箱下载限制；
-//   2) 跨域 iframe / 顶层文档不可访问：改用 window.open 在顶层标签页打开 blob —— 新标签页非沙箱可下载；
-//   3) 弹窗被拦截等极端情况：退回当前窗口锚点（沙箱可能仍拦截，但尽力而为）。
-// 顶层窗口（非 iframe）走 1) 的原生锚点，行为与原实现一致，无回归。
-function downloadBlob(blob, filename) {
-  const url = URL.createObjectURL(blob)
-  const makeAnchor = (doc) => {
-    if (!doc || !doc.body) return false
-    const a = doc.createElement('a')
-    a.href = url
-    a.download = filename
-    a.style.display = 'none'
-    doc.body.appendChild(a)
-    a.click()
-    a.remove()
-    return true
-  }
-  let ok = false
-  try {
-    if (window.top && window.top !== window && window.top.document) {
-      ok = makeAnchor(window.top.document) // 同域 iframe：在顶层文档触发
-    } else {
-      ok = makeAnchor(window.document) // 顶层窗口
-    }
-  } catch (e) {
-    ok = false
-  }
-  if (!ok) {
-    try {
-      ok = !!window.open(url, '_blank') // 跨域 iframe / 顶层不可访问：顶层标签页逃逸沙箱
-    } catch (e) {
-      ok = false
-    }
-    if (!ok) ok = makeAnchor(window.document) // 弹窗被拦截：退回当前窗口（尽力）
-  }
-  // 顶层标签页/弹窗会异步读取 blob，延长回收时间避免下载中断（原 1s 过短）。
-  setTimeout(() => URL.revokeObjectURL(url), 30000)
-}
+// 浏览器下载逻辑已抽取到 src/utils/download.js（downloadBlob），本页直接复用，避免重复实现。
 
 // 导出机柜 U 位明细为 Excel（ExcelJS，支持单元格着色 + 合并 + 悬停批注）：
 // 布局 1:1 镜像「机柜 2D 视图」的渲染结构（floorColumns），不做任何按机柜名的排序 / 分组 / 重组：

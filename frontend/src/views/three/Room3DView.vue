@@ -51,6 +51,22 @@
           </template>
           视角重置
         </Tooltip>
+
+        <div class="mx-1 h-5 w-px bg-border/50"></div>
+
+        <!-- 导出 draw.io -->
+        <Tooltip side="bottom">
+          <template #trigger>
+            <button
+              type="button"
+              class="flex h-9 w-9 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:text-foreground hover:bg-accent disabled:opacity-40 disabled:cursor-not-allowed"
+              :disabled="!racks.length"
+              title="导出机房拓扑为 draw.io（.drawio，可在 diagrams.net 中打开继续编辑）"
+              @click="exportDrawio"
+            ><Download class="h-5 w-5" /></button>
+          </template>
+          导出 draw.io
+        </Tooltip>
       </div>
     </div>
 
@@ -285,7 +301,8 @@
 import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useTheme } from '@/composables/useTheme'
-import { RotateCcw, Crosshair, Cpu, ChevronRight, ChevronDown, Monitor, ArrowLeft, X, Network, Cable } from 'lucide-vue-next'
+import { useToast } from '@/composables/useToast'
+import { RotateCcw, Crosshair, Cpu, ChevronRight, ChevronDown, Monitor, ArrowLeft, X, Network, Cable, Download } from 'lucide-vue-next'
 import * as THREE from 'three'
 import { Line2 } from 'three/examples/jsm/lines/Line2.js'
 import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js'
@@ -296,6 +313,8 @@ import deviceApi from '@/api/device'
 import interfaceApi from '@/api/interface'
 import http from '@/api/http'
 import { createEngine, makeRackLabel, makeBookmarkLabel, makeCanvasTexture } from '@/utils/three-setup'
+import { downloadBlob } from '@/utils/download'
+import { buildRoomDrawioXml } from '@/utils/drawio'
 import {
   buildCabinet,
   buildDevice,
@@ -367,6 +386,7 @@ const expandedGroups = ref({}) // 设备总览：机柜分组展开状态
 
 // ── 主题切换：3D 场景随暗色/亮色模式联动 ──
 const { isDark } = useTheme()
+const { warning } = useToast()
 
 // 主题敏感材质引用（buildRoomScene 中赋值，供 apply3DTheme 复用）
 let themeMaterials = null // { wallMat, wallEdgeMat, floorMat, hemisphere, ambient, key, fill }
@@ -650,6 +670,24 @@ async function loadRoom(id) {
   } finally {
     loading.value = false
   }
+}
+
+// 导出机房拓扑为 draw.io（diagrams.net）格式：复用 3D 总览已加载的 racks / rackDevices，
+// 在平面列表式布局中渲染每台设备的「类型专属 SVG 图形 + 信息标签」（详见 src/utils/drawio.js）。
+async function exportDrawio() {
+  if (!racks.value.length) {
+    warning('当前机房暂无机柜，无法导出 draw.io')
+    return
+  }
+  const xml = buildRoomDrawioXml({
+    room: room.value,
+    racks: racks.value,
+    rackDevices: rackDevices.value,
+  })
+  const blob = new Blob([xml], { type: 'application/xml' })
+  const safeName = (room.value?.name || '机房').replace(/[\\/:*?"<>|]/g, '_')
+  const ts = new Date().toISOString().slice(0, 10)
+  downloadBlob(blob, `机房拓扑_${safeName}_${ts}.drawio`)
 }
 
 function buildScene() {
