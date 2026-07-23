@@ -48,9 +48,7 @@ class DeviceType(str, Enum):
 
     SERVER = "server"
     SWITCH = "switch"
-    FIREWALL = "firewall"
     ROUTER = "router"
-    WAF = "waf"
     SECURITY = "security"
     OTHER = "other"
 

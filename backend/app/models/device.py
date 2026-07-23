@@ -41,7 +41,7 @@ class Device(Base):
     )
     # 设备名称（运维人员日常称呼）。
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    # 设备类型（server/switch/firewall/storage/router/waf/security/other）。
+    # 设备类型（server/switch/router/security/other）。
     device_type: Mapped[str] = mapped_column(String(16), nullable=False, default="server")
     # 设备 U 数（物理高度，决定上架占用 U 位；必有且 ≥ 1）。
     u_height: Mapped[int] = mapped_column(Integer, nullable=False, default=1)

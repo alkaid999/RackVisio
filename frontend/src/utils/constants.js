@@ -48,32 +48,25 @@ export const RACK_STATUS_LABELS = reactive({
   电柜: '电柜',
 })
 
-// ============ 设备类型（8 类，与 backend DeviceType 取值严格一致）============
+// ============ 设备类型（5 类，与 backend DeviceType 取值严格一致）============
 export const DEVICE_TYPE_OPTIONS = [
   { value: 'server', label: '服务器' },
   { value: 'switch', label: '交换机' },
-  { value: 'firewall', label: '防火墙' },
   { value: 'router', label: '路由器' },
-  { value: 'waf', label: 'WAF' },
   { value: 'security', label: '安全设备' },
   { value: 'other', label: '其他' },
 ]
 export const DEVICE_TYPE_LABELS = reactive({
   server: '服务器',
   switch: '交换机',
-  firewall: '防火墙',
   router: '路由器',
-  waf: 'WAF',
   security: '安全设备',
   other: '其他',
 })
 export const DEVICE_TYPE_COLORS = reactive({
   server: '#409EFF',
   switch: '#67C23A',
-  // 注意：红色专用于「告警 / 关机」语义，故防火墙不再占用红色，改用橙色以区别于状态红。
-  firewall: '#F97316',
   router: '#13C2C2',
-  waf: '#EB4895',
   security: '#E6A23C',
   other: '#909399',
 })

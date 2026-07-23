@@ -21,14 +21,13 @@ DEVICE_STATUS_META: dict[str, dict] = {
     "借出": {"label": "借出", "color": "#8b5cf6"},
 }
 
-# 设备类型（8 类，取值与后端 DeviceType 枚举一致）。
+# 设备类型（5 类，取值与后端 DeviceType 枚举一致）。
 # 颜色与前端 utils/constants.js 的 DEVICE_TYPE_COLORS 保持一致。
+# 注：firewall / waf 已于 2026-07-23 合并入 security（安全设备），旧数据由 init_db 迁移改判。
 DEVICE_TYPE_META: dict[str, dict] = {
     "server": {"label": "服务器", "color": "#409EFF"},
     "switch": {"label": "交换机", "color": "#67C23A"},
-    "firewall": {"label": "防火墙", "color": "#F97316"},
     "router": {"label": "路由器", "color": "#13C2C2"},
-    "waf": {"label": "WAF", "color": "#EB4895"},
     "security": {"label": "安全设备", "color": "#E6A23C"},
     "other": {"label": "其他", "color": "#909399"},
 }

@@ -192,6 +192,14 @@ async def _migrate_base(session: AsyncSession) -> None:
     )
     await session.flush()
 
+    # —— devices：废弃「防火墙(firewall) / WAF(waf)」设备类型，合并入「安全设备(security)」 ——
+    # 用户要求取消这两种独立类型；旧库若残留 firewall/waf 设备，统一改判为 security，
+    # 避免其因 DeviceType 枚举已无对应值而在编辑/校验时 422，且保证设备类型仍合法。幂等。
+    await session.execute(
+        text("UPDATE devices SET device_type='security' WHERE device_type IN ('firewall','waf')")
+    )
+    await session.flush()
+
     # —— device_links：废弃「链路类型(link_type)」，替换为「备注(remark)」 ——
     # 旧库可能仍含 link_type 列且缺 remark 列；新库（create_all 已建 remark）则跳过。
     lcols = await _existing_columns(session, "device_links")
