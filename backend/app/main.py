@@ -1,6 +1,6 @@
 """RackVisio 机柜 3D 可视化平台后端入口。
 
-- 启动时建表（create_all）并写入演示种子数据（含默认管理员账号）。
+- 启动时建表（create_all）并写入默认管理员账号（不写入演示业务数据，生产库初始为空）。
 - 所有 v1 路由挂载在 ``settings.API_PREFIX``（默认 /api/v1）之下。
 - 启用 CORS 便于前端（Vite dev server）跨端口调用。
 - ``AuthMiddleware`` 对除登录/健康检查/文档外的所有 ``/api/v1`` 请求强制鉴权。

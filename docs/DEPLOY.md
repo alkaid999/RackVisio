@@ -212,4 +212,4 @@ docker compose up -d --build
 
 ---
 
-> 文档版本：2026-07-19 ｜ 适用架构：PostgreSQL + FastAPI + Nginx（Docker Compose）
+> 文档版本：2026-07-24 ｜ 适用架构：PostgreSQL + FastAPI + Nginx（Docker Compose）

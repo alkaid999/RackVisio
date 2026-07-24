@@ -86,6 +86,7 @@
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
+| GET | `/api/v1/mount-records` | 上架记录列表（支持 `device_name` / `device_code` / `op_type` / `start_time` / `end_time` 过滤；`export=true` 返回全量供前端导出） |
 | PATCH | `/api/v1/mount-records/{record_id}` | 编辑上架记录（上架人 / 下架人） |
 | DELETE | `/api/v1/mount-records/{record_id}` | 删除上架记录 |
 

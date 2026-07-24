@@ -1,7 +1,7 @@
 {
   "name": "rackvisio-frontend",
   "version": "1.1.0",
-  "description": "IDC 机房管理平台前端（Vue 3 + Vite + Tailwind + shadcn 风格组件 + ECharts + AntV G6）",
+  "description": "RackVisio 机柜 3D 可视化平台前端（Vue 3 + Vite + Tailwind + shadcn-vue 风格组件 + Three.js + ECharts + AntV G6 + ExcelJS）",
   "private": true,
   "type": "module",
   "scripts": {
