@@ -47,35 +47,36 @@ function perfTexture() {
   )
 }
 
-// 方孔导轨贴图（竖向两列方孔 + 每 5U 编号），U1 在底部、向上递增（与设备落位方向一致）
+// 方孔导轨贴图（竖向两列方孔 + 每个 U 编号），U1 在底部、向上递增（与设备落位方向一致）。
+// 画布高度随 U 数动态加高，保证每个 U 的编号字号可读（不再像以前每 5U 才标一个）。
 function railTexture(totalU = 42) {
+  const W = 64
+  const H = 512 * Math.ceil(totalU / 21) // 每 ~21U 给 512px 高度，确保 11px 字号不拥挤
   return makeCanvasTexture(
     (ctx, w, h) => {
       ctx.fillStyle = '#9ca6b8'
       ctx.fillRect(0, 0, w, h)
-      ctx.fillStyle = '#0b0f17'
       const hole = 7
       const pad = 12
       const mx = 10
       const gap = (h - 2 * pad) / totalU
-      // 方孔：U1 在底部向上排布
-      for (let u = 1; u <= totalU; u++) {
-        const y = h - pad - (u - 1) * gap
-        ctx.fillRect(mx, y, hole, hole)
-        ctx.fillRect(w - mx - hole, y, hole, hole)
-      }
-      // U 刻度编号（每 5U 标注一个，含 U1）
-      ctx.fillStyle = '#1a2333'
+      // 方孔 + U 编号：U1 在底部向上排布，每个 U 都标注
       ctx.font = 'bold 11px sans-serif'
       ctx.textAlign = 'center'
       ctx.textBaseline = 'middle'
-      for (let u = 1; u <= totalU; u += 5) {
+      for (let u = 1; u <= totalU; u++) {
         const y = h - pad - (u - 1) * gap
+        // 方孔（左右两列）
+        ctx.fillStyle = '#0b0f17'
+        ctx.fillRect(mx, y, hole, hole)
+        ctx.fillRect(w - mx - hole, y, hole, hole)
+        // 每个 U 编号（深色，落在两列方孔之间）
+        ctx.fillStyle = '#1a2333'
         ctx.fillText(String(u), w / 2, y + hole / 2)
       }
     },
-    64,
-    512
+    W,
+    H
   )
 }
 
