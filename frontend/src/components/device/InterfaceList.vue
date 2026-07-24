@@ -4,18 +4,34 @@
       <Spinner class="h-6 w-6 text-primary" />
     </div>
     <template v-else>
+      <!-- 批量操作条：选中接口后出现 -->
+      <div v-if="canEdit && selected.size" class="batch-bar">
+        <span class="batch-count">已选 <b>{{ selected.size }}</b> 项</span>
+        <Button size="sm" variant="destructive" @click="batchDelete">
+          <Trash2 class="h-4 w-4" />批量删除
+        </Button>
+        <Button size="sm" variant="ghost" @click="clearSelection">取消选择</Button>
+      </div>
+
       <!-- 按接口名称前缀自动分组：每组一个可点击折叠/展开的标题行（如 eth / GigabitEthernet / console） -->
       <div v-if="grouped.length" class="iface-groups">
         <section v-for="g in grouped" :key="g.prefix" class="iface-group">
           <header class="iface-group__head" role="button" tabindex="0" @click="toggle(g.prefix)" @keydown.enter="toggle(g.prefix)">
             <ChevronRight class="iface-group__chevron" :class="{ 'is-collapsed': isCollapsed(g.prefix) }" />
             <span class="iface-group__title">{{ g.prefix }}</span>
-            <span class="iface-group__count">{{ g.rows.length }}</span>
+            <span class="iface-group__count">{{ groupTotals[g.prefix] || g.rows.length }}</span>
           </header>
           <div v-show="!isCollapsed(g.prefix)">
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead class="w-10 text-center">
+                    <Checkbox
+                      :model-value="groupAllSelected(g)"
+                      :indeterminate="groupIndeterminate(g)"
+                      @update:model-value="(v) => toggleGroup(g, v)"
+                    />
+                  </TableHead>
                   <TableHead class="w-32">接口名</TableHead>
                   <TableHead class="w-16">槽位</TableHead>
                   <TableHead class="w-20">角色</TableHead>
@@ -26,7 +42,10 @@
                 </TableRow>
               </TableHeader>
               <TableBody>
-                <TableRow v-for="row in g.rows" :key="row.id">
+                <TableRow v-for="row in g.rows" :key="row.id" :data-state="isSelected(row.id) ? 'selected' : null">
+                  <TableCell class="w-10 text-center">
+                    <Checkbox :model-value="isSelected(row.id)" @update:model-value="() => toggleRow(row.id)" />
+                  </TableCell>
                   <TableCell>{{ row.name }}</TableCell>
                   <TableCell><span class="font-mono text-xs text-muted-foreground">#{{ row.interface_no || '—' }}</span></TableCell>
                   <TableCell>
@@ -55,6 +74,8 @@
       <div v-else class="py-10 text-center text-sm text-muted-foreground">
         暂无接口，点击「添加接口」录入本设备端口
       </div>
+      <!-- 分页（复用统一 ListPager 组件，表格模式每页 10 条，客户端切片） -->
+      <ListPager v-if="rows.length" :total="rows.length" :page="page" :page-size="pageSize" @change="goPage" />
     </template>
   </div>
 </template>
@@ -75,6 +96,8 @@ import TableRow from '@/components/ui/table-row.vue'
 import TableHead from '@/components/ui/table-head.vue'
 import TableCell from '@/components/ui/table-cell.vue'
 import Spinner from '@/components/ui/spinner.vue'
+import Checkbox from '@/components/ui/checkbox.vue'
+import ListPager from '@/components/common/ListPager.vue'
 
 const props = defineProps({
   deviceId: { type: String, required: true },
@@ -89,9 +112,35 @@ const { confirm } = useConfirm()
 const rows = ref([])
 const loading = ref(false)
 
-// 接口按「名称前缀」（连续英文字母，如 eth / GigabitEthernet / Gi / console）自动分组；
-// 前缀提取失败（如名称以数字开头）归入「其他」。各组按前缀字母序排列，组内按槽位 + 名称排序。
+// —— 客户端分页：数据已一次性加载到本地，按统一 ListPager 风格切片渲染 ——
+const page = ref(1)
+const pageSize = ref(10) // 与项目其他表格模式一致：每页 10 条
+const totalPages = computed(() => Math.max(1, Math.ceil(rows.value.length / pageSize.value)))
+
+// 排序后的扁平列表（与分组排序一致），用于分页切片。
+const flatSorted = computed(() =>
+  [...rows.value].sort(
+    (a, b) => (a.interface_no || 0) - (b.interface_no || 0) || a.name.localeCompare(b.name)
+  )
+)
+// 当前页接口（在排序后的扁平列表上切片），再交给分组渲染。
+const pagedRows = computed(() => {
+  const start = (page.value - 1) * pageSize.value
+  return flatSorted.value.slice(start, start + pageSize.value)
+})
+
+// 各前缀分组的总数量（基于全量数据），用于组标题展示该组规模，即使当前页只渲染切片。
 const PREFIX_RE = /^([A-Za-z]+)/
+const groupTotals = computed(() => {
+  const map = {}
+  for (const r of rows.value) {
+    const m = (r.name || '').match(PREFIX_RE)
+    const prefix = m ? m[1] : '其他'
+    map[prefix] = (map[prefix] || 0) + 1
+  }
+  return map
+})
+
 const collapsed = ref(new Set())
 function isCollapsed(prefix) {
   return collapsed.value.has(prefix)
@@ -102,9 +151,12 @@ function toggle(prefix) {
   else next.add(prefix)
   collapsed.value = next
 }
+// 接口按「名称前缀」（连续英文字母，如 eth / GigabitEthernet / Gi / console）自动分组；
+// 前缀提取失败（如名称以数字开头）归入「其他」。各组按前缀字母序排列，组内按槽位 + 名称排序。
+// 数据源为当前页切片 pagedRows（分页后仅含本页接口），组总数量用 groupTotals 展示。
 const grouped = computed(() => {
   const map = {}
-  for (const r of rows.value) {
+  for (const r of pagedRows.value) {
     const m = (r.name || '').match(PREFIX_RE)
     const prefix = m ? m[1] : '其他'
     ;(map[prefix] = map[prefix] || []).push(r)
@@ -119,14 +171,53 @@ const grouped = computed(() => {
     }))
 })
 
+// —— 批量选择 ——
+const selected = ref(new Set())
+function isSelected(id) {
+  return selected.value.has(id)
+}
+function toggleRow(id) {
+  const next = new Set(selected.value)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  selected.value = next
+}
+function groupSelectedCount(g) {
+  return g.rows.filter((r) => selected.value.has(r.id)).length
+}
+function groupAllSelected(g) {
+  return g.rows.length > 0 && g.rows.every((r) => selected.value.has(r.id))
+}
+function groupIndeterminate(g) {
+  const n = groupSelectedCount(g)
+  return n > 0 && n < g.rows.length
+}
+function toggleGroup(g, val) {
+  const next = new Set(selected.value)
+  for (const r of g.rows) {
+    if (val) next.add(r.id)
+    else next.delete(r.id)
+  }
+  selected.value = next
+}
+function clearSelection() {
+  selected.value = new Set()
+}
+
 async function load() {
   loading.value = true
+  page.value = 1 // 重新加载后回到第一页
   try {
     rows.value = await interfaceApi.list(props.deviceId)
     emit('loaded', rows.value.length)
   } finally {
     loading.value = false
   }
+}
+// 翻页：先校验边界，再更新当前页（数据已在本地，无需重新请求）。
+function goPage(p) {
+  if (p < 1 || p > totalPages.value) return
+  page.value = p
 }
 async function onDelete(row) {
   const ok = await confirm({
@@ -147,6 +238,31 @@ async function onDelete(row) {
   }
 }
 
+// 批量删除：对选中接口逐个调用删除接口，结束后统一刷新。
+async function batchDelete() {
+  if (!selected.value.size) return
+  const ids = [...selected.value]
+  const ok = await confirm({
+    title: '批量删除接口',
+    description: `确认删除选中的 ${ids.length} 个接口？若已建链将一并断开，此操作不可撤销。`,
+    variant: 'danger',
+    confirmText: '删除',
+    cancelText: '取消',
+  })
+  if (!ok) return
+  try {
+    const results = await Promise.allSettled(ids.map((id) => interfaceApi.remove(id)))
+    const failed = results.filter((r) => r.status === 'rejected').length
+    if (failed === 0) success(`已删除 ${ids.length} 个接口`)
+    else success(`已删除 ${ids.length - failed} 个，失败 ${failed} 个`)
+    clearSelection()
+    await load()
+    emit('mutated', rows.value.length)
+  } catch (e) {
+    // Promise.allSettled 不会 reject，此处仅兜底
+  }
+}
+
 // 暴露刷新方法，供父组件（添加/编辑/建链后）调用。
 defineExpose({ refresh: load })
 
@@ -161,6 +277,29 @@ onMounted(load)
   display: flex;
   flex-direction: column;
   gap: 18px;
+}
+.batch-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  border-radius: 12px;
+  border: 1px solid hsl(var(--destructive) / 0.3);
+  background: hsl(var(--destructive) / 0.08);
+  animation: batch-in 0.16s ease;
+}
+@keyframes batch-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.batch-count {
+  font-size: 13px;
+  color: hsl(var(--foreground));
+}
+.batch-count b {
+  color: hsl(var(--destructive));
+  font-weight: 700;
 }
 .iface-group__head {
   display: flex;
