@@ -25,7 +25,8 @@
             <List class="h-4 w-4" />表格
           </button>
         </div>
-        <Button v-if="canEdit" class="ml-auto" @click="openCreate"><Plus class="h-4 w-4" />新增机柜</Button>
+        <Button v-if="canEdit" variant="outline" class="ml-auto" @click="openBatchCreate"><Layers class="h-4 w-4" />批量新增</Button>
+        <Button v-if="canEdit" @click="openCreate"><Plus class="h-4 w-4" />新增机柜</Button>
       </div>
     </div>
 
@@ -66,6 +67,14 @@
       </div>
     </div>
 
+    <!-- 批量操作条：仅表格模式支持批量删除（卡片模式点击=进入，不做批量选择） -->
+    <div v-if="canEdit && viewMode === 'table' && selected.size" class="batch-bar">
+      <span class="batch-count">已选 <b>{{ selected.size }}</b> 项</span>
+      <Button size="sm" variant="destructive" @click="batchDelete"><Trash2 class="h-4 w-4" />批量删除</Button>
+      <Button size="sm" variant="ghost" @click="toggleAllPage(true)">全选本页</Button>
+      <Button size="sm" variant="ghost" @click="clearSelection">取消选择</Button>
+    </div>
+
     <!-- 卡片视图 -->
     <div v-if="viewMode === 'card'">
       <div v-if="loading" class="flex justify-center py-16">
@@ -95,12 +104,22 @@
       <Table v-else>
         <TableHeader>
           <TableRow>
+            <TableHead class="w-10 text-center">
+              <Checkbox
+                :model-value="allPageSelected"
+                :indeterminate="allPageIndeterminate"
+                @update:model-value="(v) => toggleAllPage(v)"
+              />
+            </TableHead>
             <TableHead v-for="col in rackColumns" :key="col.key">{{ col.label }}</TableHead>
             <TableHead class="w-32 text-right">操作</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          <TableRow v-for="row in racks" :key="row.id">
+          <TableRow v-for="row in racks" :key="row.id" :data-state="isSelected(row.id) ? 'selected' : null">
+            <TableCell class="w-10 text-center">
+              <Checkbox :model-value="isSelected(row.id)" @update:model-value="() => toggleRow(row.id)" />
+            </TableCell>
             <TableCell v-for="col in rackColumns" :key="col.key">
               <template v-if="col.key === 'name'">
                 <button class="font-medium text-primary hover:underline" @click="goRack(row.id)">{{ row.name }}</button>
@@ -131,13 +150,16 @@
 
     <!-- 新增 / 编辑机柜弹窗 -->
     <RackForm v-model:visible="rackFormVisible" :mode="formMode" :rack-id="editRackId" @saved="load" />
+
+    <!-- 批量新增机柜弹窗 -->
+    <RackBatchCreate v-model:visible="batchCreateVisible" :rooms="rooms" @saved="onBatchSaved" />
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { Building2, LayoutGrid, List, Search, Plus, Filter, Undo2, Activity } from 'lucide-vue-next'
+import { Building2, LayoutGrid, List, Search, Plus, Filter, Undo2, Activity, Layers, Trash2 } from 'lucide-vue-next'
 import roomApi from '@/api/room'
 import rackApi from '@/api/rack'
 import { useAuthStore } from '@/stores/auth'
@@ -145,7 +167,9 @@ import { useMetaStore } from '@/stores/meta'
 import RackCard from '@/components/rack/RackCard.vue'
 import EntityActions from '@/components/common/EntityActions.vue'
 import RackForm from '@/views/rack/RackForm.vue'
+import RackBatchCreate from '@/views/rack/RackBatchCreate.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
+import Checkbox from '@/components/ui/checkbox.vue'
 import { SELECT_ALL, RACK_STATUS_OPTIONS, toFilterParam } from '@/utils/constants'
 import { useConfirm } from '@/composables/useConfirm'
 import { useToast } from '@/composables/useToast'
@@ -189,6 +213,8 @@ const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize.v
 function setView(mode) {
   if (viewMode.value === mode) return
   viewMode.value = mode
+  // 卡片模式不支持批量选择/删除，离开表格模式时清空选择，避免残留选中态。
+  if (mode === 'card') clearSelection()
   page.value = 1
   load()
 }
@@ -205,6 +231,9 @@ const rackColumns = [
 const rackFormVisible = ref(false)
 const formMode = ref('create')
 const editRackId = ref('')
+// 批量新增弹窗 & 批量选择状态
+const batchCreateVisible = ref(false)
+const selected = ref(new Set())
 
 function capacityColor(ratio) {
   // 使用率配色统一走 meta.usageColor（兼容 0..1 与 0..100 传参，审查报告#352）。
@@ -221,6 +250,42 @@ function openCreate() {
   formMode.value = 'create'
   editRackId.value = ''
   rackFormVisible.value = true
+}
+function openBatchCreate() {
+  batchCreateVisible.value = true
+}
+// 批量新增完成后刷新列表并清空选择
+function onBatchSaved() {
+  clearSelection()
+  load()
+}
+
+// —— 批量选择 ——
+function isSelected(id) {
+  return selected.value.has(id)
+}
+function toggleRow(id) {
+  const next = new Set(selected.value)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  selected.value = next
+}
+function clearSelection() {
+  selected.value = new Set()
+}
+const allPageSelected = computed(() => racks.value.length > 0 && racks.value.every((r) => selected.value.has(r.id)))
+const allPageIndeterminate = computed(() => {
+  const n = racks.value.filter((r) => selected.value.has(r.id)).length
+  return n > 0 && n < racks.value.length
+})
+// val=true 选中本页全部，false 取消本页全部（不影响其它页已选）。
+function toggleAllPage(val) {
+  const next = new Set(selected.value)
+  for (const r of racks.value) {
+    if (val) next.add(r.id)
+    else next.delete(r.id)
+  }
+  selected.value = next
 }
 function onEdit(rack) {
   formMode.value = 'edit'
@@ -241,6 +306,30 @@ async function onDelete(rack) {
     load()
   } catch (e) {
     // 接口报错已由统一拦截器提示
+  }
+}
+
+// 批量删除：对选中机柜逐个调用删除接口，结束后统一刷新并反馈结果。
+async function batchDelete() {
+  if (!selected.value.size) return
+  const ids = [...selected.value]
+  const ok = await confirm({
+    title: '批量删除机柜',
+    description: `确认删除选中的 ${ids.length} 个机柜？删除前需先下架其内所有设备，此操作不可撤销。`,
+    variant: 'danger',
+    confirmText: '删除',
+    cancelText: '取消',
+  })
+  if (!ok) return
+  try {
+    const results = await Promise.allSettled(ids.map((id) => rackApi.remove(id)))
+    const failed = results.filter((r) => r.status === 'rejected').length
+    if (failed === 0) success(`已删除 ${ids.length} 个机柜`)
+    else success(`已删除 ${ids.length - failed} 个，失败 ${failed} 个`)
+    clearSelection()
+    load()
+  } catch (e) {
+    // Promise.allSettled 不会 reject，此处仅兜底
   }
 }
 
@@ -301,5 +390,32 @@ onMounted(async () => {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 16px;
+}
+.batch-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  border-radius: 12px;
+  border: 1px solid hsl(var(--destructive) / 0.3);
+  background: hsl(var(--destructive) / 0.08);
+  animation: batch-in 0.16s ease;
+}
+@keyframes batch-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.batch-count {
+  font-size: 13px;
+  color: hsl(var(--foreground));
+}
+.batch-count b {
+  color: hsl(var(--destructive));
+  font-weight: 700;
+}
+/* 表格中被选中的行高亮 */
+:deep(tr[data-state='selected']) {
+  background: hsl(var(--primary) / 0.06);
 }
 </style>
