@@ -115,3 +115,28 @@ class RoomDashboard(BaseModel):
     device_status_distribution: DeviceStatusDistribution
     utilization: float = 0.0
     topology_overview: TopologyOverview
+
+
+class RoomImportItem(BaseModel):
+    """机房导入单条（字段与 RoomCreate 对齐，全部可选以容忍空单元格；
+
+    必填校验（名称 / 编号）与格式校验在服务层完成，失败时返回逐行中文错误。
+    ``status`` 接受 active / disabled（或 启用 / 停用），缺省视为 active。
+    """
+
+    name: Optional[str] = Field(default=None, max_length=255)
+    code: Optional[str] = Field(default=None, max_length=64)
+    alias: Optional[str] = Field(default=None, max_length=255)
+    area: Optional[str] = Field(default=None, max_length=64)
+    building: Optional[str] = Field(default=None, max_length=64)
+    floor: Optional[str] = Field(default=None, max_length=32)
+    address: Optional[str] = Field(default=None, max_length=255)
+    status: Optional[str] = Field(default=None, max_length=32)
+
+
+class RoomImportRowsRequest(BaseModel):
+    """机房批量导入请求体：前端解析文件为行后，以 JSON 数组提交。"""
+
+    items: list[RoomImportItem] = Field(
+        ..., min_length=1, max_length=500, description="机房数据行，单次最多 500 条"
+    )

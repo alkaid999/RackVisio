@@ -36,4 +36,12 @@ export default {
   deleteMountRecord(recordId) {
     return http.delete(`/mount-records/${recordId}`)
   },
+  // 导出（按当前筛选返回全量）。params = {room_id, rack_id, device_type, status, keyword, is_asset}。data = [DeviceOut]
+  exportAll(params = {}) {
+    return http.get('/devices/export', { params })
+  },
+  // 批量导入（前端解析后的 JSON 行）。payload = { items: [DeviceImportItem] }。data = ImportResult
+  import(items) {
+    return http.post('/devices/import', { items })
+  },
 }

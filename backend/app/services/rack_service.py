@@ -15,23 +15,77 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.cache import Cache
 from app.core.database import utcnow
-from app.core.enums import DeviceStatus, MountRecordStatus
+from app.core.enums import DeviceStatus, MountRecordStatus, RackBizStatus
 from app.core.exceptions import ConflictError, NotFoundError
 from app.models.rack import Rack
 from app.repositories.device_repo import DeviceRepository
 from app.repositories.mount_record_repo import MountRecordRepository
 from app.repositories.rack_repo import RackRepository
 from app.repositories.room_repo import RoomRepository
+from app.schemas.common import ImportFailure, ImportResult
 from app.schemas.rack import (
     RackBatchCreate,
     RackBatchFailure,
     RackBatchResult,
     RackCreate,
+    RackImportItem,
     RackListItem,
     RackOut,
     RackUpdate,
 )
 from app.services.device_service import DeviceService
+
+
+def _build_grid_allocator(existing: list[Rack]):
+    """构建机柜平面图网格坐标的内存增量分配器（与单条 ``_assign_grid`` 规则一致）。
+
+    - 同列编号归同一行，行内取下一列；新列另起一行。
+    - 返回 ``(next_grid, existing_keys)``：``next_grid`` 按列分配坐标（可显式指定）；
+      ``existing_keys`` 为该机房已有 ``(column_code, code)`` 集合，供唯一性校验。
+    """
+    col_row_map: dict[str, int] = {}
+    col_used_cols: dict[str, set] = {}
+    max_row = -1
+    for r in existing:
+        if r.column_code and r.grid_row is not None:
+            col_row_map.setdefault(r.column_code, r.grid_row)
+            col_used_cols.setdefault(r.column_code, set())
+            if r.grid_col is not None:
+                col_used_cols[r.column_code].add(r.grid_col)
+                max_row = max(max_row, r.grid_row)
+    next_new_row = max_row + 1
+    existing_keys = {(r.column_code, r.code) for r in existing}
+
+    def next_grid(column_code: str, explicit_row=None, explicit_col=None):
+        nonlocal next_new_row
+        if explicit_row is not None and explicit_col is not None:
+            col_used_cols.setdefault(column_code, set()).add(explicit_col)
+            col_row_map.setdefault(column_code, explicit_row)
+            return explicit_row, explicit_col
+        if column_code in col_row_map:
+            row = col_row_map[column_code]
+            used = col_used_cols[column_code]
+            nxt = (max(used) + 1) if used else 0
+        else:
+            row = next_new_row
+            next_new_row = next_new_row + 1
+            col_row_map[column_code] = row
+            col_used_cols[column_code] = set()
+            nxt = 0
+        col_used_cols[column_code].add(nxt)
+        return row, nxt
+
+    return next_grid, existing_keys
+
+
+def _normalize_rack_status(val: Optional[str]) -> RackBizStatus:
+    """导入机柜状态归一化：接受业务枚举中文值，缺省「可用」。"""
+    if not val:
+        return RackBizStatus.AVAILABLE
+    try:
+        return RackBizStatus(val.strip())
+    except ValueError:
+        return RackBizStatus.AVAILABLE
 
 
 class RackService:
@@ -188,6 +242,88 @@ class RackService:
         if result.created:
             await self.session.commit()  # 一次性提交所有成功项
             await self._invalidate_room_cache(data.room_id)
+        return result
+
+    async def import_racks(self, items: list[RackImportItem]) -> ImportResult:
+        """批量导入机柜：按机房分组，逐行 ``begin_nested`` 保存点隔离。
+
+        以「机房编号」定位机房（更贴合表格用户）；每组复用内存 grid 增量分配
+        （同 ``create_racks_batch``）；唯一性（同机房同列同号）与必填校验失败仅计入
+        ``failures``。返回成功条数与失败明细。
+        """
+        result = ImportResult()
+        room_repo = RoomRepository(self.session)
+        rooms = await room_repo.list_all()
+        room_by_code = {r.code: r for r in rooms}
+        room_state: dict[str, dict] = {}
+
+        for idx, item in enumerate(items):
+            row = idx + 1
+            room_code = (item.room_code or "").strip()
+            col = (item.column_code or "").strip()
+            code = (item.code or "").strip()
+            errors: list[str] = []
+            if not room_code:
+                errors.append("所属机房编号不能为空")
+            if not col:
+                errors.append("列编号不能为空")
+            if not code:
+                errors.append("机柜编号不能为空")
+            if errors:
+                result.failures.append(ImportFailure(row=row, errors=errors))
+                continue
+            room = room_by_code.get(room_code)
+            if room is None:
+                result.failures.append(
+                    ImportFailure(row=row, errors=[f"所属机房编号「{room_code}」不存在"])
+                )
+                continue
+            st = room_state.get(room.id)
+            if st is None:
+                existing = await self.rack_repo.list_by_room(room.id)
+                next_grid, existing_keys = _build_grid_allocator(existing)
+                st = {"existing": existing_keys, "seen": set(), "next_grid": next_grid}
+                room_state[room.id] = st
+            key = (col, code)
+            if key in st["existing"] or key in st["seen"]:
+                result.failures.append(
+                    ImportFailure(row=row, errors=[f"机柜「{col}-{code}」在该机房已存在"])
+                )
+                continue
+            st["seen"].add(key)
+            name = (item.name or "").strip() or f"{col}-{code}"
+            status = _normalize_rack_status(item.status)
+            total_u = item.total_u or 42
+            grid_row, grid_col = st["next_grid"](col, item.grid_row, item.grid_col)
+            payload = RackCreate(
+                room_id=room.id,
+                name=name,
+                code=code,
+                column_code=col,
+                total_u=total_u,
+                rack_group=(item.rack_group or "").strip() or None,
+                status=status,
+                grid_row=grid_row,
+                grid_col=grid_col,
+            )
+            await self.session.begin_nested()
+            try:
+                rack = await self.rack_repo.create(payload)
+                rack.created_at = utcnow()
+                rack.updated_at = rack.created_at
+                await self.session.flush()
+                result.created += 1
+                await self.session.commit()
+                await self._invalidate_room_cache(room.id)
+            except Exception as exc:  # 唯一约束 / 其它 DB 异常 → 仅该条失败
+                await self.session.rollback()
+                reason = (
+                    "机柜编号重复（同机房同列同号）或数据不合法"
+                    if isinstance(exc, IntegrityError)
+                    else (str(exc) or "创建失败")[:200]
+                )
+                result.failures.append(ImportFailure(row=row, errors=[reason]))
+        result.failed = len(result.failures)
         return result
 
     async def _assign_grid(self, data: RackCreate, rack: Rack) -> None:

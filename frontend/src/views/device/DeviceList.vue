@@ -24,6 +24,22 @@
             <List class="h-4 w-4" />表格
           </button>
         </div>
+        <!-- 导出（保留当前筛选与字段顺序） -->
+        <DropdownMenu>
+          <template #trigger>
+            <Button variant="outline" :loading="exporting">
+              <Download class="h-4 w-4" />导出<ChevronDown class="h-4 w-4" />
+            </Button>
+          </template>
+          <DropdownMenuContent align="end" class="w-40">
+            <DropdownMenuItem @click="onExport('xlsx')"><FileSpreadsheet class="h-4 w-4" />Excel (.xlsx)</DropdownMenuItem>
+            <DropdownMenuItem @click="onExport('csv')"><FileText class="h-4 w-4" />CSV (.csv)</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <!-- 导入（需 device:edit） -->
+        <Button v-if="canEdit" variant="outline" @click="importVisible = true">
+          <Upload class="h-4 w-4" />导入
+        </Button>
         <Button v-if="canEdit" class="ml-auto" @click="openCreate"><CirclePlus class="h-4 w-4" />新增设备</Button>
       </div>
     </div>
@@ -164,6 +180,14 @@
 
     <!-- 新增 / 编辑设备弹窗（open 由 openDeviceForm() 在按钮手势内同步触发） -->
     <DeviceForm @saved="load" />
+
+    <!-- 批量导入弹窗 -->
+    <DataImportDialog
+      v-model:visible="importVisible"
+      :config="deviceImportConfig"
+      :import-fn="(items) => deviceApi.import(items)"
+      @imported="load"
+    />
   </div>
 </template>
 
@@ -178,6 +202,7 @@ import { useRoomStore } from '@/stores/room'
 import { useAuthStore } from '@/stores/auth'
 import { usePersistentFilter } from '@/composables/usePersistentFilter'
 import roomApi from '@/api/room'
+import deviceApi from '@/api/device'
 import DeviceCard from '@/components/device/DeviceCard.vue'
 import DeviceForm from '@/views/device/DeviceForm.vue'
 import EntityActions from '@/components/common/EntityActions.vue'
@@ -190,7 +215,9 @@ import TableRow from '@/components/ui/table-row.vue'
 import TableHead from '@/components/ui/table-head.vue'
 import TableCell from '@/components/ui/table-cell.vue'
 import { DEVICE_TYPE_OPTIONS, DEVICE_STATUS_OPTIONS, SELECT_ALL, toFilterParam } from '@/utils/constants'
-import { CirclePlus, Search, Filter, Undo2, Building, Boxes, SlidersHorizontal, Activity, LayoutGrid, List, ServerCog } from 'lucide-vue-next'
+import { CirclePlus, Search, Filter, Undo2, Building, Boxes, SlidersHorizontal, Activity, LayoutGrid, List, ServerCog, Download, Upload, ChevronDown, FileSpreadsheet, FileText } from 'lucide-vue-next'
+import { exportData } from '@/utils/excel'
+import { deviceImportConfig } from '@/utils/importConfig'
 import Button from '@/components/ui/button.vue'
 import Input from '@/components/ui/input.vue'
 import Label from '@/components/ui/label.vue'
@@ -201,6 +228,10 @@ import SelectItem from '@/components/ui/select-item.vue'
 import EmptyState from '@/components/ui/empty-state.vue'
 import Spinner from '@/components/ui/spinner.vue'
 import ListPager from '@/components/common/ListPager.vue'
+import DropdownMenu from '@/components/ui/dropdown-menu.vue'
+import DropdownMenuContent from '@/components/ui/dropdown-menu-content.vue'
+import DropdownMenuItem from '@/components/ui/dropdown-menu-item.vue'
+import DataImportDialog from '@/components/common/DataImportDialog.vue'
 
 const router = useRouter()
 const store = useDeviceStore()
@@ -211,6 +242,27 @@ const { success } = useToast()
 const { confirm } = useConfirm()
 // 编辑（新增 / 删除）设备需 device:edit；只读用户隐藏全部写操作按钮。
 const canEdit = computed(() => auth.hasPermission('device:edit'))
+
+// 导出 / 导入状态
+const exporting = ref(false)
+const importVisible = ref(false)
+async function onExport(type) {
+  exporting.value = true
+  try {
+    const rows = await deviceApi.exportAll(buildParams())
+    await exportData({
+      rows,
+      columns: deviceImportConfig.exportColumns,
+      filename: '设备列表',
+      type,
+    })
+    success('导出成功')
+  } catch (e) {
+    // 导出失败由统一拦截器提示
+  } finally {
+    exporting.value = false
+  }
+}
 
 const { filter, clear } = usePersistentFilter(
   'DeviceList',

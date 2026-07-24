@@ -89,3 +89,35 @@ class DeviceOut(BaseModel):
     interface_count: int = 0
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+
+
+class DeviceImportItem(BaseModel):
+    """设备导入单条（字段与 DeviceCreate 对齐，全部可选以容忍空单元格）。
+
+    - 仅登记设备固有属性；位置（上架）不走导入流程，由独立的 mount 完成。
+    - 必填：name；其余选填（device_code 留空由服务层自动生成）。
+    - ``device_type`` 接受枚举值（server/switch/router/security/other/patch/odf/
+      other_facility）；``status`` 接受 在库/已上架/已下架/待报废/借出；
+      ``power_status`` 接受 开机/关机；``is_asset`` 接受 true/false。
+    """
+
+    device_code: Optional[str] = Field(default=None, max_length=64)
+    name: Optional[str] = Field(default=None, max_length=255)
+    device_type: Optional[str] = Field(default=None, max_length=32)
+    u_height: Optional[int] = Field(default=None, ge=1, le=60)
+    model: Optional[str] = Field(default=None, max_length=128)
+    sn: Optional[str] = Field(default=None, max_length=128)
+    ip_address: Optional[str] = Field(default=None, max_length=64)
+    warranty_expire: Optional[date] = None
+    remark: Optional[str] = Field(default=None, max_length=512)
+    status: Optional[str] = Field(default=None, max_length=32)
+    power_status: Optional[str] = Field(default=None, max_length=32)
+    is_asset: Optional[bool] = None
+
+
+class DeviceImportRowsRequest(BaseModel):
+    """设备批量导入请求体：前端解析文件为行后，以 JSON 数组提交。"""
+
+    items: list[DeviceImportItem] = Field(
+        ..., min_length=1, max_length=500, description="设备数据行，单次最多 500 条"
+    )

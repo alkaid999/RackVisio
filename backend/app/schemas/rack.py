@@ -227,3 +227,31 @@ class RackBatchResult(BaseModel):
     @property
     def total(self) -> int:
         return self.created_count + self.failed_count
+
+
+class RackImportItem(BaseModel):
+    """机柜导入单条（字段与 RackCreate 对齐，全部可选以容忍空单元格）。
+
+    - 以「机房编号(room_code)」而非 room_id 定位机房，更贴合表格用户；
+      机房编号不存在时整行失败（行号 + 中文错误）。
+    - 必填：room_code / column_code / code；其余选填。
+    - ``status`` 接受业务枚举中文值（可用/空闲/维护中/空调柜/电柜），缺省「可用」。
+    """
+
+    room_code: Optional[str] = Field(default=None, max_length=64)
+    name: Optional[str] = Field(default=None, max_length=255)
+    code: Optional[str] = Field(default=None, max_length=64)
+    column_code: Optional[str] = Field(default=None, max_length=32)
+    total_u: Optional[int] = Field(default=None, ge=1, le=60)
+    rack_group: Optional[str] = Field(default=None, max_length=128)
+    status: Optional[str] = Field(default=None, max_length=32)
+    grid_row: Optional[int] = None
+    grid_col: Optional[int] = None
+
+
+class RackImportRowsRequest(BaseModel):
+    """机柜批量导入请求体：前端解析文件为行后，以 JSON 数组提交。"""
+
+    items: list[RackImportItem] = Field(
+        ..., min_length=1, max_length=500, description="机柜数据行，单次最多 500 条"
+    )

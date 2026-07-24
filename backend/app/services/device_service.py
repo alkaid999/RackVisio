@@ -17,10 +17,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.cache import Cache
 from app.core.database import utcnow
-from app.core.enums import DeviceStatus, MountRecordStatus
+from app.core.enums import DevicePowerStatus, DeviceStatus, DeviceType, MountRecordStatus
 from app.core.exceptions import ConflictError, NotFoundError, ValidationError
 from app.core.ip_conflict import assert_ip_cidr, assert_ip_unique
 from app.core.meta import FACILITY_TYPES
+from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy.exc import IntegrityError
 from app.models.device import Device
 from app.models.mount_record import MountRecord
@@ -29,7 +30,8 @@ from app.repositories.interface_repo import InterfaceRepository
 from app.repositories.mount_record_repo import MountRecordRepository
 from app.repositories.rack_repo import RackRepository
 from app.repositories.room_repo import RoomRepository
-from app.schemas.device import DeviceCreate, DeviceOut, DeviceUpdate
+from app.schemas.common import ImportFailure, ImportResult
+from app.schemas.device import DeviceCreate, DeviceImportItem, DeviceOut, DeviceUpdate
 from app.schemas.mount_record import MountRecordUpdate
 
 
@@ -174,6 +176,101 @@ class DeviceService:
             await self.session.rollback()
             raise ConflictError("IP 地址冲突：该地址已被占用（可能由并发写入导致）")
         return await self._to_out(device)
+
+    async def _prepare_device_import(
+        self, data: DeviceCreate, seen_codes: set
+    ) -> DeviceCreate:
+        """导入设备落库准备：编号自动生成 / 设施强制非资产 / IP 归一化与唯一校验。
+
+        与 ``create_device`` 核心逻辑一致，但返回准备就绪的 ``DeviceCreate``，
+        由调用方在 ``begin_nested`` 保存点内提交，实现逐行隔离。
+        """
+        if not data.device_code:
+            data.device_code = _gen_device_code()
+        while data.device_code in seen_codes or await self.device_repo.get_by_code(
+            data.device_code
+        ) is not None:
+            data.device_code = _gen_device_code()
+        seen_codes.add(data.device_code)
+        if data.device_type.value in FACILITY_TYPES:
+            data = data.model_copy(update={"is_asset": False})
+        raw_ip = (data.ip_address or "").strip()
+        if raw_ip:
+            assert_ip_cidr(raw_ip)
+            await assert_ip_unique(self.device_repo, self.interface_repo, raw_ip)
+            data = data.model_copy(update={"ip_address": raw_ip})
+        else:
+            data = data.model_copy(update={"ip_address": None})
+        return data
+
+    async def import_devices(self, items: list[DeviceImportItem]) -> ImportResult:
+        """批量导入设备：逐行 ``begin_nested`` 保存点隔离，单条失败不影响其余。
+
+        必填（名称）与类型/枚举/格式校验在前（复用 ``DeviceCreate``）；编号生成 /
+        设施强制非资产 / IP 唯一校验在保存点内进行。返回成功条数与失败明细（行号 + 原因）。
+        """
+        result = ImportResult()
+        seen_codes: set[str] = set()
+        for idx, item in enumerate(items):
+            row = idx + 1
+            name = (item.name or "").strip()
+            if not name:
+                result.failures.append(
+                    ImportFailure(row=row, errors=["设备名称不能为空"])
+                )
+                continue
+            # 组装建表参数：仅带显式提供的字段，其余走 DeviceCreate 默认值。
+            raw: dict = {
+                "name": name,
+                "u_height": item.u_height or 1,
+                "is_asset": item.is_asset if item.is_asset is not None else True,
+            }
+            if item.device_code and item.device_code.strip():
+                raw["device_code"] = item.device_code.strip()
+            if item.device_type and item.device_type.strip():
+                raw["device_type"] = item.device_type.strip()
+            if item.model and item.model.strip():
+                raw["model"] = item.model.strip()
+            if item.sn and item.sn.strip():
+                raw["sn"] = item.sn.strip()
+            if item.ip_address not in (None, ""):
+                raw["ip_address"] = item.ip_address
+            if item.warranty_expire is not None:
+                raw["warranty_expire"] = item.warranty_expire
+            if item.remark and item.remark.strip():
+                raw["remark"] = item.remark.strip()
+            if item.status and item.status.strip():
+                raw["status"] = item.status.strip()
+            if item.power_status and item.power_status.strip():
+                raw["power_status"] = item.power_status.strip()
+            try:
+                data = DeviceCreate(**raw)
+            except PydanticValidationError as exc:
+                msgs = [
+                    f"{'.'.join(str(p) for p in e['loc'])}: {e['msg']}"
+                    for e in exc.errors()
+                ]
+                result.failures.append(ImportFailure(row=row, errors=msgs))
+                continue
+
+            await self.session.begin_nested()
+            try:
+                data = await self._prepare_device_import(data, seen_codes)
+                device = await self.device_repo.create(data)
+                await self.session.flush()
+                result.created += 1
+                await self.session.commit()
+            except Exception as exc:  # 唯一约束 / IP 冲突 / 其它异常 → 仅该条失败
+                await self.session.rollback()
+                if isinstance(exc, (IntegrityError, ConflictError)):
+                    reason = "设备编号或 IP 冲突，或数据不合法"
+                elif isinstance(exc, ValidationError):
+                    reason = str(exc)
+                else:
+                    reason = (str(exc) or "创建失败")[:200]
+                result.failures.append(ImportFailure(row=row, errors=[reason]))
+        result.failed = len(result.failures)
+        return result
 
     async def get_device(self, device_id: str) -> DeviceOut:
         device = await self.device_repo.get(device_id)

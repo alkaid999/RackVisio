@@ -25,6 +25,22 @@
             <List class="h-4 w-4" />表格
           </button>
         </div>
+        <!-- 导出（保留当前筛选与字段顺序） -->
+        <DropdownMenu>
+          <template #trigger>
+            <Button variant="outline" :loading="exporting">
+              <Download class="h-4 w-4" />导出<ChevronDown class="h-4 w-4" />
+            </Button>
+          </template>
+          <DropdownMenuContent align="end" class="w-40">
+            <DropdownMenuItem @click="onExport('xlsx')"><FileSpreadsheet class="h-4 w-4" />Excel (.xlsx)</DropdownMenuItem>
+            <DropdownMenuItem @click="onExport('csv')"><FileText class="h-4 w-4" />CSV (.csv)</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <!-- 导入（需 rack:edit） -->
+        <Button v-if="canEdit" variant="outline" @click="importVisible = true">
+          <Upload class="h-4 w-4" />导入
+        </Button>
         <Button v-if="canEdit" variant="outline" class="ml-auto" @click="openBatchCreate"><Layers class="h-4 w-4" />批量新增</Button>
         <Button v-if="canEdit" @click="openCreate"><Plus class="h-4 w-4" />新增机柜</Button>
       </div>
@@ -153,13 +169,21 @@
 
     <!-- 批量新增机柜弹窗 -->
     <RackBatchCreate v-model:visible="batchCreateVisible" :rooms="rooms" @saved="onBatchSaved" />
+
+    <!-- 批量导入弹窗 -->
+    <DataImportDialog
+      v-model:visible="importVisible"
+      :config="rackImportConfig"
+      :import-fn="(items) => rackApi.import(items)"
+      @imported="load"
+    />
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { Building2, LayoutGrid, List, Search, Plus, Filter, Undo2, Activity, Layers, Trash2 } from 'lucide-vue-next'
+import { Building2, LayoutGrid, List, Search, Plus, Filter, Undo2, Activity, Layers, Trash2, Download, Upload, ChevronDown, FileSpreadsheet, FileText } from 'lucide-vue-next'
 import roomApi from '@/api/room'
 import rackApi from '@/api/rack'
 import { useAuthStore } from '@/stores/auth'
@@ -174,6 +198,8 @@ import { SELECT_ALL, RACK_STATUS_OPTIONS, toFilterParam } from '@/utils/constant
 import { useConfirm } from '@/composables/useConfirm'
 import { useToast } from '@/composables/useToast'
 import { usePersistentFilter } from '@/composables/usePersistentFilter'
+import { exportData } from '@/utils/excel'
+import { rackImportConfig } from '@/utils/importConfig'
 import Button from '@/components/ui/button.vue'
 import Input from '@/components/ui/input.vue'
 import Label from '@/components/ui/label.vue'
@@ -190,6 +216,10 @@ import TableCell from '@/components/ui/table-cell.vue'
 import EmptyState from '@/components/ui/empty-state.vue'
 import Spinner from '@/components/ui/spinner.vue'
 import ListPager from '@/components/common/ListPager.vue'
+import DropdownMenu from '@/components/ui/dropdown-menu.vue'
+import DropdownMenuContent from '@/components/ui/dropdown-menu-content.vue'
+import DropdownMenuItem from '@/components/ui/dropdown-menu-item.vue'
+import DataImportDialog from '@/components/common/DataImportDialog.vue'
 
 const { confirm } = useConfirm()
 const { success } = useToast()
@@ -234,6 +264,31 @@ const editRackId = ref('')
 // 批量新增弹窗 & 批量选择状态
 const batchCreateVisible = ref(false)
 const selected = ref(new Set())
+
+// 导出 / 导入状态
+const exporting = ref(false)
+const importVisible = ref(false)
+async function onExport(type) {
+  exporting.value = true
+  try {
+    const rows = await rackApi.exportAll({
+      room_id: toFilterParam(filter.roomId),
+      keyword: filter.keyword || undefined,
+      status: toFilterParam(filter.status),
+    })
+    await exportData({
+      rows,
+      columns: rackImportConfig.exportColumns,
+      filename: '机柜列表',
+      type,
+    })
+    success('导出成功')
+  } catch (e) {
+    // 导出失败由统一拦截器提示
+  } finally {
+    exporting.value = false
+  }
+}
 
 function capacityColor(ratio) {
   // 使用率配色统一走 meta.usageColor（兼容 0..1 与 0..100 传参，审查报告#352）。

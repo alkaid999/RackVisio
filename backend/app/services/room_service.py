@@ -18,7 +18,14 @@ from app.models.room import Room
 from app.repositories.mount_record_repo import MountRecordRepository
 from app.repositories.rack_repo import RackRepository
 from app.repositories.room_repo import RoomRepository
-from app.schemas.room import RoomCreate, RoomStats, RoomUpdate
+from app.schemas.common import ImportFailure, ImportResult
+from app.schemas.room import (
+    ROOM_CODE_PATTERN,
+    RoomCreate,
+    RoomImportItem,
+    RoomStats,
+    RoomUpdate,
+)
 
 
 class RoomService:
@@ -118,3 +125,76 @@ class RoomService:
         )
         await self.cache.set(cache_key, stats.model_dump(), ttl=30)
         return stats
+
+    # ----------------------------------------------------- 批量导入
+    @staticmethod
+    def _normalize_room_status(val: Optional[str]) -> str:
+        """导入状态归一化：active/disabled 或 启用/停用，缺省视为 active。"""
+        if not val:
+            return RoomStatus.ACTIVE.value
+        v = val.strip()
+        if v in (RoomStatus.ACTIVE.value, "启用"):
+            return RoomStatus.ACTIVE.value
+        if v in (RoomStatus.DISABLED.value, "停用"):
+            return RoomStatus.DISABLED.value
+        return RoomStatus.ACTIVE.value
+
+    async def import_rooms(self, items: list[RoomImportItem]) -> ImportResult:
+        """批量导入机房：逐行 ``begin_nested`` 保存点隔离，单条失败不影响其余。
+
+        必填（名称/编号）与格式校验在前，唯一性（编号）在中；中间件冲突 / 其它异常
+        仅计入 ``failures``。返回成功条数与失败明细（行号 + 中文原因）。
+        """
+        result = ImportResult()
+        existing_codes = set(await self.room_repo.all_codes())
+        seen: set[str] = set()
+        for idx, item in enumerate(items):
+            row = idx + 1
+            name = (item.name or "").strip()
+            code = (item.code or "").strip()
+            errors: list[str] = []
+            if not name:
+                errors.append("机房名称不能为空")
+            if not code:
+                errors.append("机房编号不能为空")
+            elif not ROOM_CODE_PATTERN.match(code):
+                errors.append("机房编号格式不正确（仅允许字母、数字、_、-）")
+            if errors:
+                result.failures.append(ImportFailure(row=row, errors=errors))
+                continue
+            if code in seen or code in existing_codes:
+                result.failures.append(
+                    ImportFailure(row=row, errors=[f"机房编号「{code}」已存在"])
+                )
+                continue
+            seen.add(code)
+            payload = RoomCreate(
+                name=name,
+                code=code,
+                alias=(item.alias or "").strip() or None,
+                area=(item.area or "").strip() or None,
+                building=(item.building or "").strip() or None,
+                floor=(item.floor or "").strip() or None,
+                address=(item.address or "").strip() or None,
+            )
+            await self.session.begin_nested()
+            try:
+                room = await self.room_repo.create(payload)
+                status_val = self._normalize_room_status(item.status)
+                if status_val != RoomStatus.ACTIVE.value:
+                    room.status = status_val
+                    await self.session.flush()
+                await self.cache.delete_prefix(f"room_stats:{room.id}")
+                await self.cache.delete_prefix(f"dashboard:{room.id}")
+                result.created += 1
+                await self.session.commit()
+            except Exception as exc:  # 唯一约束 / 其它 DB 异常 → 仅该条失败
+                await self.session.rollback()
+                reason = (
+                    "机房编号重复或数据不合法"
+                    if isinstance(exc, IntegrityError)
+                    else (str(exc) or "创建失败")[:200]
+                )
+                result.failures.append(ImportFailure(row=row, errors=[reason]))
+        result.failed = len(result.failures)
+        return result

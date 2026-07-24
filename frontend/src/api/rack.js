@@ -56,4 +56,12 @@ export default {
   updatePositions(payload) {
     return http.post('/racks/positions', payload)
   },
+  // 导出（按当前筛选返回全量）。params = {room_id, keyword, status}。data = [RackListItem]
+  exportAll(params = {}) {
+    return http.get('/racks/export', { params })
+  },
+  // 批量导入（前端解析后的 JSON 行）。payload = { items: [RackImportItem] }。data = ImportResult
+  import(items) {
+    return http.post('/racks/import', { items })
+  },
 }

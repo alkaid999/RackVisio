@@ -10,12 +10,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.deps import get_db
 from app.core.rbac import get_current_user, require_permission
 from app.repositories.mount_record_repo import MountRecordRepository
-from app.schemas.common import ok, paginated
+from app.schemas.common import ImportResult, ok, paginated
 from app.schemas.device import DeviceOut
 from app.schemas.rack import (
     RackBatchCreate,
     RackBatchResult,
     RackCreate,
+    RackImportRowsRequest,
     RackListItem,
     RackMountRequest,
     RackOut,
@@ -75,6 +76,34 @@ async def create_racks_batch(payload: RackBatchCreate, db: AsyncSession = Depend
     svc = RackService(db)
     result = await svc.create_racks_batch(payload)
     return ok(RackBatchResult.model_validate(result))
+
+
+@router.get("/export", dependencies=[Depends(require_permission("rack:view"))])
+async def export_racks(
+    db: AsyncSession = Depends(get_db),
+    room_id: Optional[str] = None,
+    keyword: Optional[str] = None,
+    status: Optional[str] = None,
+):
+    """按当前筛选条件导出全部机柜（不分页）。返回行数组，由前端落地为文件。"""
+    svc = RackService(db)
+    items, _ = await svc.list_filtered(
+        page=1, size=100000, room_id=room_id, keyword=keyword, status=status
+    )
+    return ok([r.model_dump() for r in items])
+
+
+@router.post("/import", dependencies=[Depends(require_permission("rack:edit"))])
+async def import_racks(
+    payload: RackImportRowsRequest, db: AsyncSession = Depends(get_db)
+):
+    """批量导入机柜：前端解析文件为 JSON 行后提交，后端逐行校验并创建。
+
+    必须在 ``/{rack_id}`` 路由之前注册，避免被其路径模板拦截。
+    """
+    svc = RackService(db)
+    result = await svc.import_racks(payload.items)
+    return ok(ImportResult.model_validate(result))
 
 
 @router.get("/{rack_id}", dependencies=[Depends(require_permission("rack:view"))])

@@ -10,8 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.deps import get_db
 from app.core.enums import DeviceStatus, DeviceType
 from app.core.rbac import require_permission
-from app.schemas.common import ok, paginated
-from app.schemas.device import DeviceCreate, DeviceOut, DeviceUpdate
+from app.schemas.common import ImportResult, ok, paginated
+from app.schemas.device import DeviceCreate, DeviceImportRowsRequest, DeviceOut, DeviceUpdate
 from app.services.device_service import DeviceService
 
 router = APIRouter(prefix="/devices", tags=["devices"])
@@ -52,6 +52,44 @@ async def create_device(payload: DeviceCreate, db: AsyncSession = Depends(get_db
     svc = DeviceService(db)
     device = await svc.create_device(payload)
     return ok(device)
+
+
+@router.get("/export", dependencies=[Depends(require_permission("device:view"))])
+async def export_devices(
+    db: AsyncSession = Depends(get_db),
+    room_id: Optional[str] = None,
+    rack_id: Optional[str] = None,
+    device_type: Optional[DeviceType] = None,
+    status_filter: Optional[DeviceStatus] = Query(None, alias="status"),
+    keyword: Optional[str] = Query(None, alias="keyword"),
+    is_asset: Optional[bool] = Query(None, alias="is_asset"),
+):
+    """按当前筛选条件导出全部设备（不分页）。返回行数组，由前端落地为文件。"""
+    svc = DeviceService(db)
+    items, _ = await svc.list_devices(
+        page=1,
+        size=100000,
+        room_id=room_id,
+        rack_id=rack_id,
+        device_type=device_type.value if device_type else None,
+        status=status_filter.value if status_filter else None,
+        keyword=keyword,
+        is_asset=is_asset,
+    )
+    return ok([d.model_dump() for d in items])
+
+
+@router.post("/import", dependencies=[Depends(require_permission("device:edit"))])
+async def import_devices(
+    payload: DeviceImportRowsRequest, db: AsyncSession = Depends(get_db)
+):
+    """批量导入设备：前端解析文件为 JSON 行后提交，后端逐行校验并创建。
+
+    必须在 ``/{device_id}`` 路由之前注册，避免被其路径模板拦截。
+    """
+    svc = DeviceService(db)
+    result = await svc.import_devices(payload.items)
+    return ok(ImportResult.model_validate(result))
 
 
 @router.get("/{device_id}", dependencies=[Depends(require_permission("device:view"))])

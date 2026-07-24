@@ -24,6 +24,22 @@
             <List class="h-4 w-4" />表格
           </button>
         </div>
+        <!-- 导出（保留当前筛选与字段顺序） -->
+        <DropdownMenu>
+          <template #trigger>
+            <Button variant="outline" :loading="exporting">
+              <Download class="h-4 w-4" />导出<ChevronDown class="h-4 w-4" />
+            </Button>
+          </template>
+          <DropdownMenuContent align="end" class="w-40">
+            <DropdownMenuItem @click="onExport('xlsx')"><FileSpreadsheet class="h-4 w-4" />Excel (.xlsx)</DropdownMenuItem>
+            <DropdownMenuItem @click="onExport('csv')"><FileText class="h-4 w-4" />CSV (.csv)</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <!-- 导入（需 room:edit） -->
+        <Button v-if="canEdit" variant="outline" @click="importVisible = true">
+          <Upload class="h-4 w-4" />导入
+        </Button>
         <Button v-if="canEdit" class="ml-auto" @click="openCreate"><Plus class="h-4 w-4" />新建机房</Button>
       </div>
     </div>
@@ -155,13 +171,21 @@
 
     <!-- 新建 / 编辑机房弹窗 -->
     <RoomForm v-model:visible="formVisible" :mode="formMode" :room-id="formRoomId" @saved="load" />
+
+    <!-- 批量导入弹窗 -->
+    <DataImportDialog
+      v-model:visible="importVisible"
+      :config="roomImportConfig"
+      :import-fn="(items) => roomApi.import(items)"
+      @imported="load"
+    />
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { LayoutGrid, List, Plus, Server, Search, Filter, Undo2, MapPin, Map, Activity } from 'lucide-vue-next'
+import { LayoutGrid, List, Plus, Server, Search, Filter, Undo2, MapPin, Map, Activity, Download, Upload, ChevronDown, FileSpreadsheet, FileText } from 'lucide-vue-next'
 import { useRoomStore } from '@/stores/room'
 import { useAuthStore } from '@/stores/auth'
 import RoomForm from '@/views/room/RoomForm.vue'
@@ -170,6 +194,8 @@ import { useToast } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
 import { usePersistentFilter } from '@/composables/usePersistentFilter'
 import { ROOM_STATUS_OPTIONS, SELECT_ALL, toFilterParam } from '@/utils/constants'
+import { exportData } from '@/utils/excel'
+import { roomImportConfig } from '@/utils/importConfig'
 import Button from '@/components/ui/button.vue'
 import Input from '@/components/ui/input.vue'
 import Label from '@/components/ui/label.vue'
@@ -188,6 +214,10 @@ import Select from '@/components/ui/select.vue'
 import SelectTrigger from '@/components/ui/select-trigger.vue'
 import SelectContent from '@/components/ui/select-content.vue'
 import SelectItem from '@/components/ui/select-item.vue'
+import DropdownMenu from '@/components/ui/dropdown-menu.vue'
+import DropdownMenuContent from '@/components/ui/dropdown-menu-content.vue'
+import DropdownMenuItem from '@/components/ui/dropdown-menu-item.vue'
+import DataImportDialog from '@/components/common/DataImportDialog.vue'
 
 const router = useRouter()
 const store = useRoomStore()
@@ -232,6 +262,27 @@ function isMutedCol(key) {
 const formVisible = ref(false)
 const formMode = ref('create')
 const formRoomId = ref('')
+
+// 导出 / 导入状态
+const exporting = ref(false)
+const importVisible = ref(false)
+async function onExport(type) {
+  exporting.value = true
+  try {
+    const rows = await roomApi.exportAll(buildParams())
+    await exportData({
+      rows,
+      columns: roomImportConfig.exportColumns,
+      filename: '机房列表',
+      type,
+    })
+    success('导出成功')
+  } catch (e) {
+    // 导出失败由统一拦截器提示
+  } finally {
+    exporting.value = false
+  }
+}
 
 // 区域下拉选项：从全量机房去重得到（不受当前筛选影响）。
 const allRooms = ref([])

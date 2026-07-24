@@ -37,6 +37,18 @@ class RoomRepository:
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
+    async def get_by_code(self, code: str) -> Optional[Room]:
+        """按机房编号（唯一）查询，供导入按编号定位机房。"""
+        stmt = select(Room).where(Room.code == code)
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def all_codes(self) -> list[str]:
+        """返回全部机房编号，供导入去重 / 唯一性校验。"""
+        stmt = select(Room.code)
+        result = await self.session.execute(stmt)
+        return [r[0] for r in result.all()]
+
     async def list(
         self,
         *,

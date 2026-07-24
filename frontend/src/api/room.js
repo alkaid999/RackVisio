@@ -38,4 +38,12 @@ export default {
   dashboard(id) {
     return http.get(`/rooms/${id}/dashboard`)
   },
+  // 导出（按当前筛选返回全量）。params = {area, status, keyword}。data = [RoomOut]
+  exportAll(params = {}) {
+    return http.get('/rooms/export', { params })
+  },
+  // 批量导入（前端解析后的 JSON 行）。payload = { items: [RoomImportItem] }。data = ImportResult
+  import(items) {
+    return http.post('/rooms/import', { items })
+  },
 }

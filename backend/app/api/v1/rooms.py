@@ -9,9 +9,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_db
 from app.core.rbac import require_permission
-from app.schemas.common import ok, paginated
+from app.schemas.common import ImportResult, ok, paginated
 from app.schemas.rack import RackCreate, RackOut
-from app.schemas.room import RoomCreate, RoomOut, RoomStats, RoomUpdate
+from app.schemas.room import RoomCreate, RoomImportRowsRequest, RoomOut, RoomStats, RoomUpdate
 from app.services.dashboard_service import DashboardService
 from app.services.rack_service import RackService
 from app.services.room_service import RoomService
@@ -34,6 +34,34 @@ async def list_rooms(
         page=page, size=size, name=name, area=area, status=status, keyword=keyword
     )
     return paginated([RoomOut.model_validate(r) for r in items], total, page, size)
+
+
+@router.get("/export", dependencies=[Depends(require_permission("room:view"))])
+async def export_rooms(
+    db: AsyncSession = Depends(get_db),
+    area: Optional[str] = None,
+    status: Optional[str] = None,
+    keyword: Optional[str] = None,
+):
+    """按当前筛选条件导出全部机房（不分页）。返回行数组，由前端用 ExcelJS 落地为文件。"""
+    svc = RoomService(db)
+    items, _ = await svc.list_rooms(
+        page=1, size=100000, area=area, status=status, keyword=keyword
+    )
+    return ok([RoomOut.model_validate(r).model_dump() for r in items])
+
+
+@router.post("/import", dependencies=[Depends(require_permission("room:edit"))])
+async def import_rooms(
+    payload: RoomImportRowsRequest, db: AsyncSession = Depends(get_db)
+):
+    """批量导入机房：前端解析文件为 JSON 行后提交，后端逐行校验并创建。
+
+    必须在 ``/{room_id}`` 路由之前注册，避免被其路径模板拦截。
+    """
+    svc = RoomService(db)
+    result = await svc.import_rooms(payload.items)
+    return ok(ImportResult.model_validate(result))
 
 
 @router.post("", dependencies=[Depends(require_permission("room:edit"))])
