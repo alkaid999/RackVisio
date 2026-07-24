@@ -644,6 +644,14 @@ onMounted(loadRooms)
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
+  /* 机柜外框：清晰边界，使其与背景区分。用前景色低透明描边——
+     --foreground 浅色近黑 / 深色近白，同一 α 在两主题下自动呈对称的中等对比灰，
+     保证浅色与深色模式均一眼可辨机柜区域范围，无需写死两套颜色。 */
+  background: hsl(var(--card));
+  border: 2px solid hsl(var(--foreground) / 0.28);
+  border-radius: 14px;
+  padding: 12px 12px 14px;
+  box-shadow: 0 1px 3px hsl(var(--foreground) / 0.06);
 }
 .rack-head {
   height: 64px;
