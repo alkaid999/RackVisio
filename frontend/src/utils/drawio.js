@@ -1,12 +1,13 @@
 // 机房拓扑导出为 draw.io（diagrams.net）格式：生成一段 mxGraphModel XML。
 // 直接使用 draw.io 自带的「机架图形」stencil：
-//   - 机柜：mxgraph.rackGeneral.rackCabinet3（childLayout=rack，按 U 划分槽位；U 刻度编号由导出工具自绘，确保 1U 在底向上递增）
+//   - 机柜：mxgraph.rackGeneral.rackCabinet3（diagrams.net「Numbered Rack Cabinet」；U 数编号由 numDisp 参数控制：
+//            ascend=升序 / descend=降序 / off=关闭。用 numDisp=descend 使顶端标最大 U、底端标 1U，与设备 U1 在底向上递增一致）
 //   - 交换机：HPE Aruba 机架 stencil（用户指定，按 U 高分层：<5U=Aruba 6300M，≥5U=Aruba CX 6410）
 //   - 服务器：Dell PowerEdge（1U/2U/4U 真实硬件图；≥5U=Oracle Netra CT900 刀片机箱）
 //   - 路由器：Cisco（<5U=7603；≥5U=ASR 9006）
 //   - 安全设备：F5（1-2U=ARX 500；3-4U=BIG-IP 110x0；≥5U=VIPRION 4400）
 //   - 多 U 框式/刀片设备（≥5U）：自定义内联机箱图形（矢量 SVG，按槽位高度缩放，含模块槽位装饰），避免真实硬件图被拉伸变形
-// 设备标签为彩色文本框（沿用类型配色），仅含设备名称 + 当前 U 位（如 U3 或 U3-5）；
+// 设备标签为彩色文本框（沿用类型配色），仅含设备名称；
 // 机柜名称文本框居中显示于机柜顶部；机房名称居中显示于机房正上方。
 // 设备类型配色/标签自包含（与 constants.js 同源，避免导出工具依赖 vue reactive 常量）。
 const DEVICE_TYPE_COLORS = {
@@ -29,18 +30,12 @@ const RACK_W = 204
 const RACK_UNIT = 14.8 // 每 U 像素高
 const M = { top: 21, bottom: 22, left: 33, right: 9 }
 const INNER_W = RACK_W - M.left - M.right // 162
-// U 刻度标签：自绘（不依赖 stencil 内部 numDisp 参数，确保 1U 在底部向上递增）
-// 每行标注 U1/U5/…，标签列宽
-const U_LABEL_W = 26
-const U_LABEL_STEP = 5 // 每隔几 U 标注一个（含 U1 与顶 U）
-function uLabelStyle() {
-  return 'text;html=1;align=right;verticalAlign=middle;fontSize=9;fontColor=#64748B;fillColor=none;strokeColor=none;'
-}
 // 机柜横向间距：设备标签 labelPosition=right 向右延伸，间距需足够大，避免下一台机柜遮挡本柜设备标签。
 const GAP = 180
 const COLS = 5
 const TITLE_H = 26
-const ROOM_TITLE_H = 40
+const ROOM_TITLE_H = 66 // 机房标题占用的顶部区域（含与下方机柜的间隔）
+const ROOM_TITLE_BLOCK_H = 44 // 机房标题文本框实际高度（小于 ROOM_TITLE_H → 下方留出间隔）
 
 // 设备图形选择（分层，精确到具体图形）：
 //   1) 逐设备精确指定：数据携带 stencil 字段 → 直接作为 draw.io 机架 stencil ID 使用
@@ -179,7 +174,7 @@ function cabinetStyle(totalU) {
     'strokeColor=#666666;html=1;verticalLabelPosition=bottom;labelBackgroundColor=#ffffff;' +
     'verticalAlign=top;outlineConnect=0;shadow=0;dashed=0;' +
     'shape=mxgraph.rackGeneral.rackCabinet3;rackUnitSize=' + RACK_UNIT + ';fillColor2=#f4f4f4;' +
-    'container=1;collapsible=0;childLayout=rack;allowGaps=1;' +
+    'container=1;collapsible=0;childLayout=rack;allowGaps=1;numDisp=descend;' +
     'marginLeft=' + M.left + ';marginRight=' + M.right + ';marginTop=' + M.top + ';marginBottom=' + M.bottom + ';' +
     'textColor=#666666;'
   )
@@ -238,14 +233,14 @@ export function buildRoomDrawioXml({ room, racks, rackDevices }) {
     cell(
       nid(),
       textBlock([
-        `<b>${esc(room?.name || '机房')}</b>`,
-        `机柜 ${racks?.length || 0} 台 · 导出自 RackVisio`,
+        `<b style='font-size:22px;'>${esc(room?.name || '机房')}</b>`,
+        `<span style='font-size:12px;font-weight:400;opacity:0.8;'>机柜 ${racks?.length || 0} 台 · 导出自 RackVisio</span>`,
       ]),
-      'text;html=1;align=center;verticalAlign=middle;fontSize=18;',
+      'text;html=1;align=center;verticalAlign=middle;',
       20,
       0,
       diagramW,
-      ROOM_TITLE_H
+      ROOM_TITLE_BLOCK_H
     )
   )
 
@@ -258,7 +253,6 @@ export function buildRoomDrawioXml({ room, racks, rackDevices }) {
     const used = rack.used_u ?? 0
     const rackNameBits = [esc(rack.name || '机柜')]
     if (rack.code) rackNameBits.push(esc(rack.code))
-    if (totalU) rackNameBits.push(`${used}/${totalU}U`)
     cells.push(
       cell(
         nid(),
@@ -275,21 +269,6 @@ export function buildRoomDrawioXml({ room, racks, rackDevices }) {
     const cabId = nid()
     cells.push(cell(cabId, '', cabinetStyle(totalU), cabX, cabY, RACK_W, cabH))
 
-    // U 刻度标签：自绘于机柜左侧（U1 在底部，向上递增到 totalU），与机柜同一 parent 之下、设备之上。
-    // 每隔 U_LABEL_STEP 标注一个（含 U1 与顶 U），避免过密。
-    const labelX = cabX - U_LABEL_W
-    for (let u = 1; u <= totalU; u += U_LABEL_STEP) {
-      const ly = cabY + M.top + (totalU - u) * RACK_UNIT + U_LABEL_STEP * RACK_UNIT / 2
-      const lh = U_LABEL_STEP * RACK_UNIT
-      cells.push(cell(nid(), `U${u}`, uLabelStyle(), labelX, ly, U_LABEL_W, lh))
-    }
-    // 顶部最后一个 U（若未被步进覆盖）单独补标
-    if ((totalU - 1) % U_LABEL_STEP !== 0) {
-      const tu = totalU
-      const ly = cabY + M.top + (totalU - tu) * RACK_UNIT + RACK_UNIT / 2
-      cells.push(cell(nid(), `U${tu}`, uLabelStyle(), labelX, ly, U_LABEL_W, RACK_UNIT))
-    }
-
     // 设备：按 U 位精确落位（U1 在底，向上递增）
     const devs = (rackDevices?.[rack.id] || [])
       .filter((d) => d.current_start_u != null)
@@ -302,15 +281,18 @@ export function buildRoomDrawioXml({ room, racks, rackDevices }) {
       const y = M.top + (totalU - topU) * RACK_UNIT
       const h = uH * RACK_UNIT
       const c = DEVICE_TYPE_COLORS[d.device_type] || DEVICE_TYPE_COLORS.other
-      // 设备标签＝彩色文本框（沿用类型配色），仅显示设备名称 + 当前 U 位（单 U 如 U3，多 U 如 U3-5）
-      const uRange = uH === 1 ? `U${startU}` : `U${startU}-${topU}`
+      // 设备标签＝彩色文本框（沿用类型配色），仅显示设备名称
       const labelHtml =
         `<div style='background:${c};color:#fff;border-radius:4px;padding:2px 8px;` +
         `font-size:11px;font-weight:600;white-space:nowrap;display:inline-block;'>` +
-        `${esc(d.name || '未命名设备')} · ${uRange}</div>`
+        `${esc(d.name || '未命名设备')}</div>`
       // 图形：自定义机箱图形(__chassis__) 或 draw.io 机架 stencil（含逐设备精确指定/型号映射/高度兜底）
       const sf = stencilFor(d)
       const devStyle = sf === '__chassis__' ? chassisStyle(d.device_type, uH) : deviceStyle(sf)
+      // childLayout=rack 模式下，子节点坐标以机柜本体（parent=cabId）左上角为 (0,0)。
+      // 机柜内部 U 槽位区域左缘 = marginLeft（与 cabinetStyle 的 marginLeft 一致），
+      // 故设备 x 必须 = M.left（即 marginLeft=33），宽度 = INNER_W（= RACK_W - marginLeft - marginRight）。
+      // 若 x=0，设备会从机柜最左缘（含左侧边框/导轨区）开始，整体偏左并溢出机柜。
       cells.push(cell(nid(), labelHtml, devStyle, M.left, y, INNER_W, h, cabId))
     }
   }
