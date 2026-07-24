@@ -565,30 +565,54 @@ async function exportExcel() {
         uCell.border = { top: thin, left: thin, bottom: thin, right: thin }
         // 右：设备
         const mCell = r.getCell(devCol)
-        mCell.border = { top: thin, left: thin, bottom: thin, right: thin }
         const d = info.devByU[u]
         if (!d) {
+          // 空闲 U：白底 + 细网格边框（与左侧 U 编号列网格一致）
           mCell.value = ''
           mCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: FREE_FILL } }
           mCell.alignment = { horizontal: 'center', vertical: 'middle' }
+          mCell.border = { top: thin, left: thin, bottom: thin, right: thin }
           row++
           continue
         }
         const uTop = d.current_start_u + d.u_height - 1
         const uBottom = d.current_start_u
-        if (u !== uTop) { row++; continue } // 仅顶部 U 行写内容，其余由合并呈现
+        if (u !== uTop) {
+          // 非顶部 U 行：仅占位，外框与同色填充由顶部 U 行统一绘制，
+          // 避免「仅顶部 U 行有粗框、其余细框被合并隐藏」导致多 U 设备下部看似无边框。
+          row++
+          continue
+        }
+        // —— 设备顶部 U 行：统一绘制整段占用 U 行（uTop→uBottom）的外框 + 同色填充，再合并 ——
         const isOverlap = info.overlaps.has(d.id)
         const typeBase = isOverlap ? '#ef4444' : DEVICE_TYPE_COLORS[d.device_type] || '#909399'
         const dark = toArgb(mixHex(typeBase, '000000', 0.22))
         const lightFill = toArgb(mixHex(typeBase, 'ffffff', 0.82))
         const typeLabel = DEVICE_TYPE_LABELS[d.device_type] || d.device_type
+        const frame = { style: 'medium', color: { argb: 'FF1E293B' } }
+        const topRow = row
+        const botRow = row + (uTop - uBottom)
+        // 整段外框：
+        //  · 左上角单元格（uTop 行）四边全部用粗框 —— 合并后整段区块的边框由左上角单元格决定，
+        //    必须四边皆粗，否则合并后底边/侧边会退化成细线（这正是此前多 U 设备“下半部分无边框”的根因）。
+        //  · 其余行左右用粗框、上下用细线；底行再单独补一条粗底边，作为「合并因 U 位重叠未执行」时的兜底，
+        //    确保任何情况下每个设备单元格都保留完整可见边框，杜绝“部分设备无边框”。
+        for (let rr = topRow; rr <= botRow; rr++) {
+          const c = ws.getRow(rr).getCell(devCol)
+          const isTop = rr === topRow
+          const isBot = rr === botRow
+          c.border = {
+            top: isTop ? frame : thin,
+            left: frame,
+            right: frame,
+            bottom: isBot || isTop ? frame : thin,
+          }
+          c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: lightFill } }
+        }
+        // 顶部单元格写内容 + 悬停批注（合并后仅显示顶部单元格内容）
         mCell.value = (isOverlap ? '⚠ ' : '') + d.name
-        mCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: lightFill } }
         mCell.font = { bold: true, size: 9, color: { argb: dark } }
         mCell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true }
-        const thick = { style: 'medium', color: { argb: 'FF1E293B' } }
-        mCell.border = { top: thick, left: thick, bottom: thick, right: thick }
-        // 悬停批注
         const noteLines = [`设备：${d.name}`]
         const isFac = !isAssetDevice(d)
         const noteFields = isFac
@@ -608,14 +632,9 @@ async function exportExcel() {
         if (isFac) noteLines.push('占 U 位，不计入资产统计 / 不建接口')
         noteLines.push(`占用：${uBottom}U–${uTop}U（${d.u_height}U）`)
         mCell.note = noteLines.join('\n')
-        if (uBottom !== uTop) {
-          // 循环自上而下写：uTop 写在当前行 row，uBottom 写在 row + (uTop - uBottom)。
-          // 合并区间须向下覆盖设备自身占用的全部 U 行，而非向上并入更高 U 的空行。
-          const topRow = row
-          const botRow = row + (uTop - uBottom)
-          if (canRectMerge(topRow, devCol, botRow, devCol)) {
-            ws.mergeCells({ top: topRow, left: devCol, bottom: botRow, right: devCol })
-          }
+        if (uBottom !== uTop && canRectMerge(topRow, devCol, botRow, devCol)) {
+          // 合并区间须向下覆盖设备自身占用的全部 U 行（uTop 写于当前行 row，uBottom 写于 row + (uTop - uBottom)）。
+          ws.mergeCells({ top: topRow, left: devCol, bottom: botRow, right: devCol })
         }
         row++
       }
