@@ -57,7 +57,7 @@ export const DEVICE_TYPE_OPTIONS = [
   { value: 'security', label: '安全设备' },
   { value: 'other', label: '其他设备' },
   { value: 'patch', label: '配线架' },
-  { value: 'odf', label: 'ODF光纤配线架' },
+  { value: 'odf', label: 'ODF配线架' },
   { value: 'other_facility', label: '其他设施' },
 ]
 export const DEVICE_TYPE_LABELS = reactive({
@@ -68,7 +68,7 @@ export const DEVICE_TYPE_LABELS = reactive({
   other: '其他设备',
   // 基础设施（非资产）
   patch: '配线架',
-  odf: 'ODF光纤配线架',
+  odf: 'ODF配线架',
   other_facility: '其他设施',
 })
 export const DEVICE_TYPE_COLORS = reactive({
@@ -84,7 +84,7 @@ export const DEVICE_TYPE_COLORS = reactive({
 })
 
 // ============ 基础设施（非资产）============
-// 配线架 / ODF光纤配线架 / 其他设施：占 U 位但不进资产统计、不建接口、不显设备编码。
+// 配线架 / ODF配线架 / 其他设施：占 U 位但不进资产统计、不建接口、不显设备编码。
 // 与后端 meta.FACILITY_TYPES 严格一致；DeviceList 默认隐藏，设备类型下拉仍可选。
 export const FACILITY_TYPES = new Set(['patch', 'odf', 'other_facility'])
 

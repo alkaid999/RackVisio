@@ -667,7 +667,7 @@ function drawPatchFace(ctx, W, H, ac) {
   ctx.fillRect(padX, H / 2 - 3, areaW, 6)
 }
 
-// ODF 光纤配线架（非资产）：多排光纤适配器（圆耦合器，蓝/绿/琥珀区分单多模），区别于铜缆配线架。
+// ODF配线架（非资产）：多排光纤适配器（圆耦合器，蓝/绿/琥珀区分单多模），区别于铜缆配线架。
 function drawOdfFace(ctx, W, H, ac) {
   const padX = W * 0.06
   const padY = H * 0.12

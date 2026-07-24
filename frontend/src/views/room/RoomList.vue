@@ -293,7 +293,7 @@ function goPlan(id) {
 async function onDelete(room) {
   const ok = await confirm({
     title: '删除机房',
-    description: `确认删除机房「${room.name}」？该操作不可撤销，其下机柜与设备将一并影响。`,
+    description: `确认删除机房「${room.name}」？将永久删除该机房及其下空机柜。若机房内仍有已上架设备则无法删除（需先下架）。`,
     variant: 'danger',
     confirmText: '删除',
   })

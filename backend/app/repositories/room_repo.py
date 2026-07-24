@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Optional, Tuple
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.enums import RoomStatus
@@ -95,3 +95,13 @@ class RoomRepository:
         room.status = RoomStatus.DISABLED.value
         await self.session.flush()
         return room
+
+    async def delete(self, room: Room) -> None:
+        """物理删除机房（连同其机柜、上架记录由调用方先清理）。"""
+        await self.session.delete(room)
+        await self.session.flush()
+
+    async def delete_by_id(self, room_id: str) -> None:
+        """按 id 物理删除机房（bulk，不触发 ORM 级联，避免与显式子表清理重复）。"""
+        await self.session.execute(delete(Room).where(Room.id == room_id))
+        await self.session.flush()

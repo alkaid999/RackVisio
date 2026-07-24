@@ -84,7 +84,7 @@
             type="button"
             class="h-9 rounded-md border px-3 text-sm transition-colors"
             :class="showFacility ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-muted text-muted-foreground hover:text-foreground'"
-            :title="showFacility ? '当前包含基础设施（配线架/ODF光纤配线架/其他设施）' : '仅显示资产设备，隐藏基础设施'"
+            :title="showFacility ? '当前包含基础设施（配线架/ODF配线架/其他设施）' : '仅显示资产设备，隐藏基础设施'"
             @click="toggleFacility"
           >
             {{ showFacility ? '含设施' : '仅资产' }}
@@ -227,7 +227,7 @@ function onFilterRestored(f) {
 const roomOptions = computed(() => roomStore.rooms)
 const rackOptions = computed(() => roomStore.racks)
 const viewMode = ref('card')
-// 资产范围：默认仅资产（隐藏设施），切换后包含基础设施（配线架/ODF光纤配线架/其他设施）。
+// 资产范围：默认仅资产（隐藏设施），切换后包含基础设施（配线架/ODF配线架/其他设施）。
 const showFacility = ref(false)
 function toggleFacility() {
   showFacility.value = !showFacility.value

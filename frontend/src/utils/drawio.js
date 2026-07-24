@@ -29,7 +29,7 @@ const DEVICE_TYPE_LABELS = {
   security: '安全设备',
   other: '其他设备',
   patch: '配线架',
-  odf: 'ODF光纤配线架',
+  odf: 'ODF配线架',
   other_facility: '其他设施',
 }
 

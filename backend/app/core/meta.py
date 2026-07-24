@@ -34,7 +34,7 @@ DEVICE_TYPE_META: dict[str, dict] = {
     "other": {"label": "其他设备", "color": "#909399"},
     # —— 基础设施（非资产）：占 U 位、不进资产统计、不建接口、不显设备编码 ——
     "patch": {"label": "配线架", "color": "#64748b", "asset": False},
-    "odf": {"label": "ODF光纤配线架", "color": "#64748b", "asset": False},
+    "odf": {"label": "ODF配线架", "color": "#64748b", "asset": False},
     "other_facility": {"label": "其他设施", "color": "#94a3b8", "asset": False},
 }
 

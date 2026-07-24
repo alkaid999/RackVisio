@@ -59,7 +59,7 @@ class DeviceType(str, Enum):
     OTHER = "other"  # 其他设备（资产）
     # —— 基础设施（非资产，占 U 位但不进资产统计）——
     PATCH = "patch"  # 配线架
-    ODF = "odf"  # ODF 光纤配线架
+    ODF = "odf"  # ODF配线架
     OTHER_FACILITY = "other_facility"  # 其他设施
 
 

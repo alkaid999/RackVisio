@@ -15,6 +15,7 @@ from app.core.cache import Cache
 from app.core.enums import RoomStatus
 from app.core.exceptions import ConflictError, NotFoundError, ValidationError
 from app.models.room import Room
+from app.repositories.mount_record_repo import MountRecordRepository
 from app.repositories.rack_repo import RackRepository
 from app.repositories.room_repo import RoomRepository
 from app.schemas.room import RoomCreate, RoomStats, RoomUpdate
@@ -28,6 +29,7 @@ class RoomService:
         self.cache = cache or Cache()
         self.room_repo = RoomRepository(session)
         self.rack_repo = RackRepository(session)
+        self.mount_repo = MountRecordRepository(session)
 
     async def create_room(self, data: RoomCreate) -> Room:
         try:
@@ -76,9 +78,25 @@ class RoomService:
             raise ConflictError(f"机房编号 {data.code} 已存在")
 
     async def delete_room(self, room_id: str) -> None:
-        """软删除：状态置为 disabled，并失效相关缓存。"""
+        """物理删除机房。
+
+        删除前校验：若机房内仍有「有效上架设备」（经机柜关联），禁止删除，
+        需先将这些设备下架。空机柜（无上架设备）允许存在、并随机房一并删除。
+        删除顺序：先清上架记录、再清机柜、最后删机房，避免外键孤儿数据
+        （设备位置经 mount_records 关联，无设备表直连字段；SQLite 未启用 FK 级联，
+        PostgreSQL 会强制外键，故必须显式按 room_id 清理子表）。
+        """
         room = await self.get_room(room_id)
-        await self.room_repo.soft_delete(room)
+        device_ids = await self.mount_repo.list_device_ids_by_room(room_id)
+        if device_ids:
+            raise ConflictError(
+                f"机房内还有 {len(device_ids)} 台已上架设备，无法删除。请先将这些设备下架后再删除机房。"
+            )
+        # 清理顺序：上架记录 → 机柜 → 机房（均按 room_id 显式 bulk 删除，
+        # 避免 session.delete(room) 触发 Room→Rack 级联而重复删机柜产生告警）。
+        await self.mount_repo.delete_by_room(room_id)
+        await self.rack_repo.delete_by_room(room_id)
+        await self.room_repo.delete_by_id(room_id)
         await self.session.commit()
         await self.cache.delete_prefix(f"room_stats:{room_id}")
         await self.cache.delete_prefix(f"dashboard:{room_id}")

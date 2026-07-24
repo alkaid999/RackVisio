@@ -11,7 +11,7 @@ from __future__ import annotations
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.enums import MountRecordStatus
@@ -137,6 +137,23 @@ class MountRecordRepository:
         )
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
+
+    async def delete_by_room(self, room_id: str) -> None:
+        """物理删除指定机房下全部上架记录（删除机房前清理，避免孤儿数据）。
+
+        上架记录经 ``rack_id`` 关联机柜、再经机柜 ``room_id`` 归属机房；本方法直接
+        按 ``rack.room_id == room_id`` 跨表定位并批量删除，覆盖该机房所有机柜的记录。
+        """
+        stmt = (
+            delete(MountRecord)
+            .where(
+                MountRecord.rack_id.in_(
+                    select(Rack.id).where(Rack.room_id == room_id)
+                )
+            )
+        )
+        await self.session.execute(stmt)
+        await self.session.flush()
 
     async def list_all_active(self) -> list[MountRecord]:
         """全部有效上架记录（拓扑派生设备当前机柜用）。"""

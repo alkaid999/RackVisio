@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.rack import Rack
@@ -140,4 +140,9 @@ class RackRepository:
 
     async def delete(self, rack: Rack) -> None:
         await self.session.delete(rack)
+        await self.session.flush()
+
+    async def delete_by_room(self, room_id: str) -> None:
+        """物理删除指定机房下全部机柜（删除机房前清理，避免孤儿数据）。"""
+        await self.session.execute(delete(Rack).where(Rack.room_id == room_id))
         await self.session.flush()

@@ -240,11 +240,11 @@ async function onDeleteRack(rack) {
 async function onRoomSaved() {
   await Promise.all([store.fetchOne(roomId), store.fetchStats(roomId)])
 }
-// 删除机房：软删除（status=disabled），其下机柜一并失效；需 room:edit 权限。
+// 删除机房：物理删除，需 room:edit 权限。删除前后端均校验机房内不得有已上架设备（有设备则拦截，需先下架）；空机柜随机房一并删除。
 async function onDeleteRoom() {
   const ok = await confirm({
     title: '删除机房',
-    description: `确认删除机房「${room.value?.name}」？删除后其下机柜一并失效，操作不可恢复。`,
+    description: `确认删除机房「${room.value?.name}」？将永久删除该机房及其下空机柜。若机房内仍有已上架设备则无法删除（需先下架）。`,
     variant: 'danger',
     confirmText: '删除',
   })
