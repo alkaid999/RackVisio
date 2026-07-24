@@ -2,8 +2,8 @@
   <Dialog
     :model-value="visible"
     title="批量新增机柜"
-    description="为同一机房一次性生成多个机柜：先填写通用信息，再设置编号规则并生成预览，确认后批量创建。"
-    class="max-w-3xl"
+    description="为同一机房一次性生成多个机柜：填写通用信息并设置编号规则，确认后批量创建。"
+    class="max-w-2xl"
     @update:model-value="(v) => emit('update:visible', v)"
   >
     <!-- 通用信息（对所有生成的机柜生效） -->
@@ -59,33 +59,14 @@
       </div>
     </div>
 
-    <!-- 预览表（可编辑） -->
-    <div class="mt-4">
-      <div class="mb-2 flex items-center justify-between">
-        <span class="text-sm font-medium">预览（{{ rows.length }} 台）· 名称留空将自动生成为「列编号-机柜编号」</span>
-        <Button size="sm" variant="outline" @click="generate"><RefreshCw class="h-3.5 w-3.5" />重新生成</Button>
-      </div>
-      <div class="max-h-64 overflow-auto rounded-lg border border-border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead class="w-36">列编号</TableHead>
-              <TableHead class="w-36">机柜编号</TableHead>
-              <TableHead>名称（选填）</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            <TableRow v-for="(r, i) in rows" :key="i" v-memo="[r.column_code, r.code, r.name]">
-              <TableCell><Input v-model="r.column_code" class="h-8" /></TableCell>
-              <TableCell><Input v-model="r.code" class="h-8" /></TableCell>
-              <TableCell>
-                <Input v-model="r.name" :placeholder="`${r.column_code || '?'}-${r.code || '?'}`" class="h-8" />
-              </TableCell>
-            </TableRow>
-          </TableBody>
-        </Table>
-      </div>
-    </div>
+    <!-- 生成结果摘要（只读一行，不渲染可编辑表格，去掉长边框单列） -->
+    <p class="mt-3 text-sm text-muted-foreground">
+      将生成 <b class="text-foreground">{{ previewCount }}</b> 个机柜：列编号
+      <b class="text-foreground">{{ gen.prefix || '?' }}</b>，编号自
+      <b class="text-foreground">{{ gen.start }}</b> 起、零填充
+      <b class="text-foreground">{{ gen.pad }}</b> 位（示例
+      <b class="text-foreground">{{ sampleCode }}</b>）。名称留空自动生成为「列编号-机柜编号」。
+    </p>
 
     <template #footer>
       <div v-if="submitting" class="mb-3">
@@ -109,7 +90,7 @@
 </template>
 
 <script setup>
-import { reactive, ref, watch } from 'vue'
+import { reactive, ref, computed, watch } from 'vue'
 import { useToast } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
 import rackApi from '@/api/rack'
@@ -121,14 +102,8 @@ import SelectItem from '@/components/ui/select-item.vue'
 import Input from '@/components/ui/input.vue'
 import Label from '@/components/ui/label.vue'
 import Button from '@/components/ui/button.vue'
-import Table from '@/components/ui/table.vue'
-import TableHeader from '@/components/ui/table-header.vue'
-import TableBody from '@/components/ui/table-body.vue'
-import TableRow from '@/components/ui/table-row.vue'
-import TableHead from '@/components/ui/table-head.vue'
-import TableCell from '@/components/ui/table-cell.vue'
 import { RACK_STATUS_OPTIONS } from '@/utils/constants'
-import { Ruler, CircleDot, Users, Columns3, Hash, Plus, RefreshCw, CircleX } from 'lucide-vue-next'
+import { Ruler, CircleDot, Users, Columns3, Hash, Plus, CircleX } from 'lucide-vue-next'
 
 const props = defineProps({
   visible: { type: Boolean, default: false },
@@ -144,54 +119,52 @@ const { confirm } = useConfirm()
 const common = reactive({ room_id: '', total_u: 42, status: '可用', rack_group: '' })
 // 编号生成规则
 const gen = reactive({ prefix: 'A', start: 1, count: 5, pad: 2 })
-// 可编辑预览行
-const rows = ref([])
 const errors = reactive({ room_id: '' })
 const submitting = ref(false)
 const progress = ref(0)
 
-// 根据「列前缀 + 起始序号 + 数量 + 编号位数」生成基础行：
-// 列编号 = 列前缀（同一列内多台机柜共享），机柜编号 = 零填充的序号。
-// 后端唯一约束为 (room_id, column_code, code) 复合键，故同列多台机柜合法。
-function buildRows() {
+// 根据规则推导界面提示：将生成的机柜数 + 示例编号（不再维护可编辑预览行）。
+const previewCount = computed(() =>
+  Math.min(Math.max(Number(gen.count) || 1, 1), 100)
+)
+const sampleCode = computed(() => {
+  const pad = Math.min(Math.max(Number(gen.pad) || 2, 1), 6)
+  const start = Number(gen.start) || 1
+  return `${gen.prefix || '?'}-${String(start).padStart(pad, '0')}`
+})
+
+// 依据规则直接构造提交项：列编号=列前缀，机柜编号=零填充序号；名称留空交后端自动生成。
+function buildItems() {
   const prefix = (gen.prefix || '').trim()
   const start = Number(gen.start) || 1
-  const count = Math.min(Math.max(Number(gen.count) || 1, 1), 100)
   const pad = Math.min(Math.max(Number(gen.pad) || 2, 1), 6)
-  const list = []
-  for (let i = 0; i < count; i++) {
+  const items = []
+  for (let i = 0; i < previewCount.value; i++) {
     const seq = String(start + i).padStart(pad, '0')
-    list.push({ column_code: prefix, code: seq, name: '' })
+    items.push({ column_code: prefix, code: seq, name: undefined })
   }
-  rows.value = list
-}
-function generate() {
-  buildRows()
+  return items
 }
 
-// 打开时若无预览行则生成一份默认预览；关闭时清空，方便下次重新生成。
+// 关闭时清空错误提示，方便下次重填。
 watch(
   () => props.visible,
   (v) => {
-    if (v && rows.value.length === 0) buildRows()
-    if (!v) {
-      rows.value = []
-      errors.room_id = ''
-    }
+    if (!v) errors.room_id = ''
   }
 )
 
 async function onSubmit() {
   errors.room_id = common.room_id ? '' : '请选择所属机房'
   if (!common.room_id) return
-  const invalid = rows.value.filter((r) => !(r.column_code || '').trim() || !(r.code || '').trim())
-  if (invalid.length) {
-    error('请补全所有机柜的「列编号」与「机柜编号」')
+  const items = buildItems()
+  if (!items.length) {
+    error('请至少生成 1 个机柜')
     return
   }
   const ok = await confirm({
     title: '确认批量新增',
-    description: `即将在所选机房新增 ${rows.value.length} 个机柜，确认继续？`,
+    description: `即将在所选机房新增 ${items.length} 个机柜（列编号「${gen.prefix || '?'}」），确认继续？`,
     variant: 'warning',
     confirmText: '确认新增',
     cancelText: '取消',
@@ -202,13 +175,13 @@ async function onSubmit() {
   // 同时实时更新进度条，消除「弹窗死寂」的体感卡顿。
   submitting.value = true
   progress.value = 0
-  const total = rows.value.length
+  const total = items.length
   const CHUNK = 20
   let createdCount = 0
   const allFailed = []
   try {
     for (let i = 0; i < total; i += CHUNK) {
-      const slice = rows.value.slice(i, i + CHUNK)
+      const slice = items.slice(i, i + CHUNK)
       const payload = {
         room_id: common.room_id,
         total_u: Number(common.total_u),
