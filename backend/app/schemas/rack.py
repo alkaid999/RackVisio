@@ -165,3 +165,65 @@ class RackPositionsUpdate(BaseModel):
     """批量更新机柜网格坐标（2D 平面图拖拽持久化）。"""
 
     positions: list[RackPositionUpdate]
+
+
+class RackBatchItem(BaseModel):
+    """批量新增中的单条机柜（通用字段 room_id/total_u/status/rack_group 提到顶层）。
+
+    仅携带定位所需字段：列编号(column_code) + 机柜编号(code)，名称选填。
+    """
+
+    # 列编号：同一机房内唯一（如 A1、B2）。
+    column_code: str = Field(..., min_length=1, max_length=32)
+    # 机柜编号：同一列内唯一（如 01、02）。
+    code: str = Field(..., min_length=1, max_length=64)
+    # 名称选填：留空时由后端按「列编号-机柜编号」自动生成。
+    name: Optional[str] = Field(default=None, max_length=255)
+    # 平面图网格坐标（选填，缺省由后端增量自动分配）。
+    grid_row: Optional[int] = None
+    grid_col: Optional[int] = None
+
+
+class RackBatchCreate(BaseModel):
+    """批量新增机柜请求：一次请求一个事务，替代前端循环调单条。
+
+    通用字段（room_id/total_u/status/rack_group）提到顶层，所有条目共享；
+    每条仅携带 column_code + code（+ 可选 name / grid 坐标）。
+    """
+
+    room_id: str = Field(..., min_length=1, description="所属机房 ID（必填）")
+    total_u: int = Field(default=42, ge=1, le=60)
+    status: RackBizStatus = RackBizStatus.AVAILABLE
+    rack_group: Optional[str] = Field(default=None, max_length=128)
+    items: list[RackBatchItem] = Field(
+        ..., min_length=1, max_length=200, description="机柜条目，单次最多 200 台"
+    )
+
+
+class RackBatchFailure(BaseModel):
+    """批量新增中的单条失败明细。"""
+
+    index: int = Field(description="条目在 items 中的下标（从 0 开始）")
+    column_code: str
+    code: str
+    name: Optional[str] = None
+    error: str = Field(description="失败原因（如：编号重复 / 数据不合法）")
+
+
+class RackBatchResult(BaseModel):
+    """批量新增结果：成功明细 + 失败明细，便于前端逐条反馈。"""
+
+    created: list[RackOut] = Field(default_factory=list)
+    failed: list[RackBatchFailure] = Field(default_factory=list)
+
+    @property
+    def created_count(self) -> int:
+        return len(self.created)
+
+    @property
+    def failed_count(self) -> int:
+        return len(self.failed)
+
+    @property
+    def total(self) -> int:
+        return self.created_count + self.failed_count

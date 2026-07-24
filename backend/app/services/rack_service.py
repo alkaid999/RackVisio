@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from typing import Optional
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.cache import Cache
@@ -21,7 +22,15 @@ from app.repositories.device_repo import DeviceRepository
 from app.repositories.mount_record_repo import MountRecordRepository
 from app.repositories.rack_repo import RackRepository
 from app.repositories.room_repo import RoomRepository
-from app.schemas.rack import RackCreate, RackListItem, RackUpdate
+from app.schemas.rack import (
+    RackBatchCreate,
+    RackBatchFailure,
+    RackBatchResult,
+    RackCreate,
+    RackListItem,
+    RackOut,
+    RackUpdate,
+)
 from app.services.device_service import DeviceService
 
 
@@ -58,6 +67,128 @@ class RackService:
         await self.session.refresh(rack)
         await self._invalidate_room_cache(data.room_id)
         return rack
+
+    async def create_racks_batch(self, data: RackBatchCreate) -> RackBatchResult:
+        """批量新增机柜：一次请求在一个事务内完成，替代前端循环调单条。
+
+        - 机房校验一次；同机房已有 ``(column_code, code)`` 集合一次性取出，避免逐条查库。
+        - 平面图 grid 坐标在内存中增量分配：同列归同一行、行内取下一列，新列另起一行，
+          与单条 ``_assign_grid`` 规则一致；同批次内条目也互斥。
+        - 每条机柜用 ``begin_nested()`` 保存点隔离：冲突 / 空值 / 唯一约束违规只计入
+          ``failed``，不影响其余条目；全部成功项在循环结束后统一 ``commit``。
+        """
+        room_repo = RoomRepository(self.session)
+        room = await room_repo.get(data.room_id)
+        if room is None:
+            raise NotFoundError("所属机房不存在")
+
+        existing = await self.rack_repo.list_by_room(data.room_id)
+        existing_keys = {(r.column_code, r.code) for r in existing}
+
+        # ---- 内存中维护 grid 占用状态，实现增量分配 ----
+        col_row_map: dict[str, int] = {}
+        col_used_cols: dict[str, set] = {}
+        max_row = -1
+        for r in existing:
+            if r.column_code and r.grid_row is not None:
+                col_row_map.setdefault(r.column_code, r.grid_row)
+                col_used_cols.setdefault(r.column_code, set())
+                if r.grid_col is not None:
+                    col_used_cols[r.column_code].add(r.grid_col)
+                    max_row = max(max_row, r.grid_row)
+        next_new_row = max_row + 1
+
+        def next_grid(column_code: str) -> tuple[int, int]:
+            nonlocal next_new_row
+            if column_code in col_row_map:
+                row = col_row_map[column_code]
+                used = col_used_cols[column_code]
+                nxt = (max(used) + 1) if used else 0
+            else:
+                row = next_new_row
+                next_new_row = next_new_row + 1
+                col_row_map[column_code] = row
+                col_used_cols[column_code] = set()
+                nxt = 0
+            col_used_cols[column_code].add(nxt)
+            return row, nxt
+
+        result = RackBatchResult()
+        seen: set = set()
+        for idx, item in enumerate(data.items):
+            col = (item.column_code or "").strip()
+            code = (item.code or "").strip()
+            if not col or not code:
+                result.failed.append(
+                    RackBatchFailure(
+                        index=idx, column_code=col, code=code,
+                        name=item.name, error="列编号与机柜编号均必填",
+                    )
+                )
+                continue
+            key = (col, code)
+            if key in seen:
+                result.failed.append(
+                    RackBatchFailure(
+                        index=idx, column_code=col, code=code,
+                        name=item.name, error="本批次内存在重复编号（同列同号）",
+                    )
+                )
+                continue
+            if key in existing_keys:
+                result.failed.append(
+                    RackBatchFailure(
+                        index=idx, column_code=col, code=code,
+                        name=item.name, error="该列编号下机柜编号已存在",
+                    )
+                )
+                continue
+            seen.add(key)
+
+            grid_row, grid_col = (
+                (item.grid_row, item.grid_col)
+                if item.grid_row is not None and item.grid_col is not None
+                else next_grid(col)
+            )
+            name = (item.name or "").strip() or f"{col}-{code}"
+            payload = RackCreate(
+                room_id=data.room_id,
+                name=name,
+                code=code,
+                column_code=col,
+                total_u=data.total_u,
+                rack_group=data.rack_group,
+                status=data.status,
+                grid_row=grid_row,
+                grid_col=grid_col,
+            )
+
+            await self.session.begin_nested()
+            try:
+                rack = await self.rack_repo.create(payload)
+                rack.created_at = utcnow()
+                rack.updated_at = rack.created_at
+                await self.session.flush()
+                result.created.append(RackOut.model_validate(rack))
+                await self.session.commit()  # 释放保存点，保留到外层事务
+            except Exception as exc:  # 唯一约束 / 其他 DB 异常 → 仅该条失败
+                await self.session.rollback()  # 回滚到保存点
+                reason = (
+                    "编号重复（同机房同列同号）或数据不合法"
+                    if isinstance(exc, IntegrityError)
+                    else (str(exc) or "创建失败")[:200]
+                )
+                result.failed.append(
+                    RackBatchFailure(
+                        index=idx, column_code=col, code=code,
+                        name=item.name, error=reason,
+                    )
+                )
+
+        if result.created:
+            await self.session.commit()  # 一次性提交所有成功项
+            await self._invalidate_room_cache(data.room_id)
+        return result
 
     async def _assign_grid(self, data: RackCreate, rack: Rack) -> None:
         """为新机柜自动分配平面图网格坐标（若未显式指定）。

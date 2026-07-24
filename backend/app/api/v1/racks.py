@@ -13,6 +13,8 @@ from app.repositories.mount_record_repo import MountRecordRepository
 from app.schemas.common import ok, paginated
 from app.schemas.device import DeviceOut
 from app.schemas.rack import (
+    RackBatchCreate,
+    RackBatchResult,
     RackCreate,
     RackListItem,
     RackMountRequest,
@@ -62,6 +64,17 @@ async def create_rack(payload: RackCreate, db: AsyncSession = Depends(get_db)):
     svc = RackService(db)
     rack = await svc.create_rack(payload)
     return ok(RackOut.model_validate(rack))
+
+
+@router.post("/batch", dependencies=[Depends(require_permission("rack:edit"))])
+async def create_racks_batch(payload: RackBatchCreate, db: AsyncSession = Depends(get_db)):
+    """批量新增机柜：一次请求一个事务，返回成功 / 失败明细。
+
+    必须在 ``/{rack_id}`` 路由之前注册，避免被其路径模板拦截。
+    """
+    svc = RackService(db)
+    result = await svc.create_racks_batch(payload)
+    return ok(RackBatchResult.model_validate(result))
 
 
 @router.get("/{rack_id}", dependencies=[Depends(require_permission("rack:view"))])
