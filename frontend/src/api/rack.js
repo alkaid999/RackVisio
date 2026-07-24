@@ -14,6 +14,11 @@ export default {
   create(payload) {
     return http.post('/racks', payload)
   },
+  // 批量新增机柜：一次请求一个事务。payload = {room_id,total_u,status,rack_group,items:[{column_code,code,name?}]}
+  // data = {created:[RackOut], failed:[{index,column_code,code,name,error}]}
+  batchCreate(payload) {
+    return http.post('/racks/batch', payload)
+  },
   // 更新机柜（全部可选字段）。
   update(id, payload) {
     return http.put(`/racks/${id}`, payload)

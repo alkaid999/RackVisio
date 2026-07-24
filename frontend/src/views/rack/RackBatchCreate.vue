@@ -75,7 +75,7 @@
             </TableRow>
           </TableHeader>
           <TableBody>
-            <TableRow v-for="(r, i) in rows" :key="i">
+            <TableRow v-for="(r, i) in rows" :key="i" v-memo="[r.column_code, r.code, r.name]">
               <TableCell><Input v-model="r.column_code" class="h-8" /></TableCell>
               <TableCell><Input v-model="r.code" class="h-8" /></TableCell>
               <TableCell>
@@ -88,8 +88,20 @@
     </div>
 
     <template #footer>
+      <div v-if="submitting" class="mb-3">
+        <div class="mb-1 flex items-center justify-between text-xs text-muted-foreground">
+          <span>正在批量新增机柜…</span>
+          <span>{{ progress }}%</span>
+        </div>
+        <div class="h-2 w-full overflow-hidden rounded-full bg-muted">
+          <div
+            class="h-full rounded-full bg-primary transition-all duration-200"
+            :style="{ width: progress + '%' }"
+          />
+        </div>
+      </div>
       <div class="flex justify-end gap-2">
-        <Button variant="outline" @click="emit('update:visible', false)"><CircleX class="h-4 w-4" />取消</Button>
+        <Button variant="outline" :disabled="submitting" @click="emit('update:visible', false)"><CircleX class="h-4 w-4" />取消</Button>
         <Button :loading="submitting" @click="onSubmit"><Plus class="h-4 w-4" />确认新增</Button>
       </div>
     </template>
@@ -136,6 +148,7 @@ const gen = reactive({ prefix: 'A', start: 1, count: 5, pad: 2 })
 const rows = ref([])
 const errors = reactive({ room_id: '' })
 const submitting = ref(false)
+const progress = ref(0)
 
 // 根据「列前缀 + 起始序号 + 数量 + 编号位数」生成基础行：
 // 列编号 = 列前缀（同一列内多台机柜共享），机柜编号 = 零填充的序号。
@@ -184,29 +197,53 @@ async function onSubmit() {
     cancelText: '取消',
   })
   if (!ok) return
+
+  // 限流：分块顺序提交（每批 20 台），避免一次性并发全部请求炸连接池 / 后端事务。
+  // 同时实时更新进度条，消除「弹窗死寂」的体感卡顿。
   submitting.value = true
+  progress.value = 0
+  const total = rows.value.length
+  const CHUNK = 20
+  let createdCount = 0
+  const allFailed = []
   try {
-    const results = await Promise.allSettled(
-      rows.value.map((r) =>
-        rackApi.create({
-          room_id: common.room_id,
+    for (let i = 0; i < total; i += CHUNK) {
+      const slice = rows.value.slice(i, i + CHUNK)
+      const payload = {
+        room_id: common.room_id,
+        total_u: Number(common.total_u),
+        status: common.status,
+        rack_group: (common.rack_group || '').trim() || undefined,
+        items: slice.map((r) => ({
           column_code: (r.column_code || '').trim(),
           code: (r.code || '').trim(),
           name: (r.name || '').trim() || undefined,
-          total_u: Number(common.total_u),
-          rack_group: (common.rack_group || '').trim() || undefined,
-          status: common.status,
-        })
-      )
-    )
-    const failed = results.filter((r) => r.status === 'rejected').length
-    const okCount = results.length - failed
-    if (failed === 0) success(`成功新增 ${okCount} 个机柜`)
-    else success(`成功新增 ${okCount} 个，失败 ${failed} 个（列/编号可能重复）`)
+        })),
+      }
+      const data = await rackApi.batchCreate(payload)
+      const created = data?.created || []
+      const failed = data?.failed || []
+      createdCount += created.length
+      // 后端 failed[].index 为当前分块内下标，需加上分块起点还原为全局行号。
+      for (const f of failed) allFailed.push({ ...f, index: i + f.index })
+      progress.value = Math.min(100, Math.round(((i + slice.length) / total) * 100))
+    }
+    if (allFailed.length === 0) success(`成功新增 ${createdCount} 个机柜`)
+    else {
+      const detail = allFailed
+        .slice(0, 5)
+        .map((f) => `${f.column_code}-${f.code}：${f.error}`)
+        .join('；')
+      const more = allFailed.length > 5 ? ` 等${allFailed.length}条` : ''
+      success(`成功新增 ${createdCount} 个，失败 ${allFailed.length} 个（${detail}${more}）`)
+    }
     emit('saved')
     emit('update:visible', false)
+  } catch (e) {
+    error('批量新增失败：' + (e?.message || '服务器异常'))
   } finally {
     submitting.value = false
+    progress.value = 0
   }
 }
 </script>
