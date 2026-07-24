@@ -319,6 +319,23 @@ async def _migrate_base(session: AsyncSession) -> None:
     await session.commit()
 
 
+async def _migrate_facility(session: AsyncSession) -> None:
+    """设施支持迁移：devices 新增 is_asset 列并回填（方言无关）。
+
+    旧库无此列时 ALTER 追加 BOOLEAN；存量设备（均为资产）统一回填为 True。
+    SQLite 以 INTEGER(0/1) 存储、PostgreSQL 以 BOOLEAN 存储，统一用 1/0 字面量写入，
+    两种方言通吃（与 _migrate_base 的方言无关原则一致）。
+    """
+    dcols = await _existing_columns(session, "devices")
+    if "is_asset" not in dcols:
+        await session.execute(text("ALTER TABLE devices ADD COLUMN is_asset BOOLEAN"))
+    # 存量设备默认资产(True)；设施类型(patch/odf/other_facility)为新增枚举值，旧库无此类数据，无需改判。
+    await session.execute(
+        text("UPDATE devices SET is_asset=1 WHERE is_asset IS NULL")
+    )
+    await session.flush()
+
+
 async def seed_data(session: AsyncSession) -> None:
     """初始化种子数据（幂等）。
 
@@ -406,4 +423,5 @@ async def seed_consumable_types(session: AsyncSession) -> None:
 # 每项：(版本号, 迁移协程)。版本号建议用 4 位零填充递增（0001, 0002, ...）。
 MIGRATIONS: list = [
     ("0001_base", _migrate_base),
+    ("0002_facility", _migrate_facility),
 ]

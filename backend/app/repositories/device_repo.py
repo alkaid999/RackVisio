@@ -61,6 +61,7 @@ class DeviceRepository:
         device_type: Optional[str] = None,
         status: Optional[str] = None,
         keyword: Optional[str] = None,
+        is_asset: Optional[bool] = None,
     ) -> Tuple[list[Device], int]:
         conditions = []
         if device_ids is not None:
@@ -70,6 +71,9 @@ class DeviceRepository:
             conditions.append(Device.device_type == device_type)
         if status:
             conditions.append(Device.status == status)
+        if is_asset is not None:
+            # 资产/设施过滤：True=仅资产，False=仅设施（非资产）。
+            conditions.append(Device.is_asset == is_asset)
         if keyword:
             like = f"%{keyword}%"
             conditions.append(

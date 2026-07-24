@@ -44,6 +44,7 @@ class StatsOverview(BaseModel):
     room_count: int = 0
     rack_count: int = 0
     device_count: int = 0
+    facility_count: int = 0
     device_status: list[DeviceStatusCount] = []
     rack_capacity_by_room: list[RoomRackCapacity] = []
     # 补充聚合（仪表盘补充模块使用）。

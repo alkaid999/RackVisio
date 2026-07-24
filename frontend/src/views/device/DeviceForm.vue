@@ -16,20 +16,23 @@
           <div class="form-group__title">基础信息</div>
           <div class="form-grid">
             <FormItem label="设备名称" name="name" :icon="Type">
-              <Input v-model="form.name" placeholder="如：Server-01" />
+              <Input v-model="form.name" :placeholder="namePlaceholder" />
             </FormItem>
             <FormItem label="设备类型" name="device_type" :icon="Component">
               <Select v-model="form.device_type">
                 <SelectTrigger placeholder="选择类型" />
                 <SelectContent>
-                  <SelectItem v-for="o in DEVICE_TYPE_OPTIONS" :key="o.value" :value="o.value">{{ o.label }}</SelectItem>
+                  <div class="px-2 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground select-none">设备（资产）</div>
+                  <SelectItem v-for="o in assetTypeOptions" :key="o.value" :value="o.value">{{ o.label }}</SelectItem>
+                  <div class="mt-1 px-2 py-1.5 text-xs font-semibold uppercase tracking-wide text-amber-600 dark:text-amber-400 select-none">基础设施（非资产）</div>
+                  <SelectItem v-for="o in facilityTypeOptions" :key="o.value" :value="o.value" class="text-amber-700 dark:text-amber-300">{{ o.label }}</SelectItem>
                 </SelectContent>
               </Select>
             </FormItem>
-            <FormItem label="设备编号" name="device_code" :icon="Hash">
+            <FormItem v-if="!isFacility" label="设备编号" name="device_code" :icon="Hash">
               <Input v-model="form.device_code" placeholder="留空则自动生成（如 DEV-XXXXXXXX）" />
             </FormItem>
-            <FormItem label="设备型号" name="model" :icon="Cpu">
+            <FormItem v-if="!isFacility" label="设备型号" name="model" :icon="Cpu">
               <Input v-model="form.model" placeholder="如：Dell R740" />
             </FormItem>
           </div>
@@ -50,39 +53,45 @@
           </div>
         </div>
 
-        <!-- 网络与资产：联网 / 序列 / 维保 / 状态 -->
+        <!-- 网络与资产：联网 / 序列 / 维保 / 状态（设施隐藏此组，仅展示说明） -->
         <div class="form-group">
           <div class="form-group__title">网络与资产</div>
-          <div class="form-grid">
-            <FormItem label="IP 地址" name="ip_address" :icon="Globe">
-              <Input v-model="form.ip_address" placeholder="如：10.0.0.1" />
-            </FormItem>
-            <FormItem label="序列号(SN)" name="sn" :icon="Barcode">
-              <Input v-model="form.sn" placeholder="如：SN-2024-0001" />
-            </FormItem>
-            <FormItem label="维保到期日" name="warranty_expire" :icon="CalendarClock">
-              <Input type="date" v-model="form.warranty_expire" />
-            </FormItem>
-            <FormItem v-if="!isMounted" label="设备状态" name="status" :icon="Signal">
-              <Select v-model="form.status">
-                <SelectTrigger placeholder="选择状态" />
-                <SelectContent>
-                  <SelectItem v-for="o in DEVICE_STATUS_EDITABLE" :key="o.value" :value="o.value">{{ o.label }}</SelectItem>
-                </SelectContent>
-              </Select>
-            </FormItem>
-            <!-- 已上架设备：开关机状态仅此处可设（在库不可修改） -->
-            <FormItem v-if="isMounted" label="开关机状态" name="power_status" :icon="Power">
-              <Select v-model="form.power_status">
-                <SelectTrigger placeholder="选择开关机状态" />
-                <SelectContent>
-                  <SelectItem v-for="o in DEVICE_POWER_OPTIONS" :key="o.value" :value="o.value">{{ o.label }}</SelectItem>
-                </SelectContent>
-              </Select>
-            </FormItem>
-          </div>
-          <p v-if="!isMounted" class="form-group__hint">「已上架 / 已下架」由机柜上架、下架操作自动驱动，此处仅可标记在库 / 待报废。</p>
-          <p v-if="isMounted" class="form-group__hint">在架设备的通电状态。关机以红色标识，便于在 2D 机柜视图中一眼识别停机设备。</p>
+          <template v-if="!isFacility">
+            <div class="form-grid">
+              <FormItem label="IP 地址" name="ip_address" :icon="Globe">
+                <Input v-model="form.ip_address" placeholder="如：10.0.0.1" />
+              </FormItem>
+              <FormItem label="序列号(SN)" name="sn" :icon="Barcode">
+                <Input v-model="form.sn" placeholder="如：SN-2024-0001" />
+              </FormItem>
+              <FormItem label="维保到期日" name="warranty_expire" :icon="CalendarClock">
+                <Input type="date" v-model="form.warranty_expire" />
+              </FormItem>
+              <FormItem v-if="!isMounted" label="设备状态" name="status" :icon="Signal">
+                <Select v-model="form.status">
+                  <SelectTrigger placeholder="选择状态" />
+                  <SelectContent>
+                    <SelectItem v-for="o in DEVICE_STATUS_EDITABLE" :key="o.value" :value="o.value">{{ o.label }}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </FormItem>
+              <!-- 已上架设备：开关机状态仅此处可设（在库不可修改） -->
+              <FormItem v-if="isMounted" label="开关机状态" name="power_status" :icon="Power">
+                <Select v-model="form.power_status">
+                  <SelectTrigger placeholder="选择开关机状态" />
+                  <SelectContent>
+                    <SelectItem v-for="o in DEVICE_POWER_OPTIONS" :key="o.value" :value="o.value">{{ o.label }}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </FormItem>
+            </div>
+            <p v-if="!isMounted" class="form-group__hint">「已上架 / 已下架」由机柜上架、下架操作自动驱动，此处仅可标记在库 / 待报废。</p>
+            <p v-if="isMounted" class="form-group__hint">在架设备的通电状态。关机以红色标识，便于在 2D 机柜视图中一眼识别停机设备。</p>
+          </template>
+          <p v-else class="form-group__hint flex items-center gap-1.5">
+            <ServerCog class="h-4 w-4 shrink-0 text-muted-foreground" />
+            基础设施（非资产）：占 U 位，但不计入资产统计、不建接口、不显设备编码。填写名称、U 数与备注即可。
+          </p>
         </div>
 
         <!-- 备注 -->
@@ -117,7 +126,7 @@ import { useToast } from '@/composables/useToast'
 import { useDeviceStore } from '@/stores/device'
 import { useDeviceFormState } from '@/composables/useDeviceFormState'
 import deviceApi from '@/api/device'
-import { DEVICE_TYPE_OPTIONS, DEVICE_STATUS_OPTIONS, DEVICE_POWER_OPTIONS } from '@/utils/constants'
+import { DEVICE_TYPE_OPTIONS, DEVICE_STATUS_OPTIONS, DEVICE_POWER_OPTIONS, isFacilityType } from '@/utils/constants'
 import {
   Hash,
   Type,
@@ -133,6 +142,7 @@ import {
   CircleX,
   Save,
   MapPin,
+  ServerCog,
 } from 'lucide-vue-next'
 import Dialog from '@/components/ui/dialog.vue'
 import Form from '@/components/ui/form.vue'
@@ -183,6 +193,26 @@ const currentPosLabel = computed(() => {
 })
 // 已上架（当前有有效上架记录）设备：资产状态由位置派生，状态字段只读。
 const isMounted = computed(() => isEdit.value && !!store.currentDevice?.current_rack_id)
+// 设施（非资产）：占 U 位但不进资产统计 / 不建接口 / 不显设备编码。
+const isFacility = computed(() => isFacilityType(form.device_type))
+// 设备类型下拉分组：资产设备 / 基础设施（非资产）明显区分。
+const assetTypeOptions = computed(() => DEVICE_TYPE_OPTIONS.filter((o) => !isFacilityType(o.value)))
+const facilityTypeOptions = computed(() => DEVICE_TYPE_OPTIONS.filter((o) => isFacilityType(o.value)))
+// 设备名称占位提示随类型变化（设施用专属前缀，资产设备用 Server-01 样例）。
+const namePlaceholder = computed(() => {
+  switch (form.device_type) {
+    case 'patch':
+      return '如：PATCH-01'
+    case 'odf':
+      return '如：ODF-01'
+    case 'other_facility':
+      return '如：FAC-01'
+    case 'other':
+      return '如：DEV-01'
+    default:
+      return '如：Server-01'
+  }
+})
 
 const rules = {
   name: [{ required: true, message: '请输入设备名称', trigger: 'blur' }],
@@ -240,21 +270,22 @@ async function onSubmit() {
   submitting.value = true
   try {
     const payload = {
-      device_code: form.device_code || undefined,
       name: form.name,
       device_type: form.device_type,
       u_height: Number(form.u_height) || 1,
-      // 可选字段：清空后发送空字符串 ''（而非 undefined），后端据此把旧值清掉。
-      // 注意：此前用 `|| undefined` 会把字段从请求体剔除，后端 partial-update 不更新 → 旧值残留（bug）。
-      model: form.model,
-      sn: form.sn,
-      ip_address: form.ip_address,
-      // 日期字段清空时传 null（空串 '' 不是合法日期，会被校验拒绝）。
-      warranty_expire: form.warranty_expire ? form.warranty_expire : null,
       remark: form.remark,
       status: form.status,
       // 开关机状态仅在「在架」时有意义；在库设备不更新此字段（避免无意义写入）。
       power_status: isMounted.value ? form.power_status : undefined,
+    }
+    // 设施（非资产）：不提交资产专属字段（编号/型号/SN/IP/维保），后端强制 is_asset=False。
+    if (!isFacility.value) {
+      payload.device_code = form.device_code || undefined
+      payload.model = form.model
+      payload.sn = form.sn
+      payload.ip_address = form.ip_address
+      // 日期字段清空时传 null（空串 '' 不是合法日期，会被校验拒绝）。
+      payload.warranty_expire = form.warranty_expire ? form.warranty_expire : null
     }
     if (isEdit.value) {
       await store.update(formState.deviceId, payload)

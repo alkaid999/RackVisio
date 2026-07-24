@@ -20,6 +20,7 @@ from app.core.database import utcnow
 from app.core.enums import DeviceStatus, MountRecordStatus
 from app.core.exceptions import ConflictError, NotFoundError, ValidationError
 from app.core.ip_conflict import assert_ip_cidr, assert_ip_unique
+from app.core.meta import FACILITY_TYPES
 from sqlalchemy.exc import IntegrityError
 from app.models.device import Device
 from app.models.mount_record import MountRecord
@@ -151,6 +152,10 @@ class DeviceService:
         # 确保编号唯一（极小概率碰撞则重试）。
         while await self.device_repo.get_by_code(data.device_code) is not None:
             data.device_code = _gen_device_code()
+        # 设施（patch/odf/other_facility）强制 is_asset=False：占 U 位但不进资产统计、
+        # 不建接口、不显设备编码。前端若误传 True 也以 False 为准。
+        if data.device_type.value in FACILITY_TYPES:
+            data = data.model_copy(update={"is_asset": False})
         # 归一化 IP：空串视为未设置 → None。否则空串 '' 会被 uq_device_ip 部分唯一索引
         # （WHERE ip_address IS NOT NULL）当作有效值强制唯一，导致第二个不填 IP 的设备
         # 触发 UNIQUE 冲突。同时把 repo 写操作纳入 try，避免 flush 抛 IntegrityError 冒泡成 500。
@@ -190,6 +195,7 @@ class DeviceService:
         status: Optional[str] = None,
         room_id: Optional[str] = None,
         keyword: Optional[str] = None,
+        is_asset: Optional[bool] = None,
     ) -> Tuple[list[DeviceOut], int]:
         # 当前位置过滤（机柜 / 机房）→ 经上架记录表得到设备 id 集合。
         device_ids: Optional[list[str]] = None
@@ -209,6 +215,7 @@ class DeviceService:
             device_type=device_type,
             status=status,
             keyword=keyword,
+            is_asset=is_asset,
         )
         # 批量预取：有效上架记录 + 关联机柜/机房名 + 接口数，将 N+1 降为常量级查询。
         device_ids_all = [d.id for d in devices]
@@ -244,6 +251,12 @@ class DeviceService:
         device = await self.device_repo.get(device_id)
         if device is None:
             raise NotFoundError("设备不存在")
+        # 设施强制 is_asset=False（即使前端误传 True）：设备或即将变更的类型属设施时强制非资产。
+        effective_type = (
+            data.device_type.value if data.device_type is not None else device.device_type
+        )
+        if effective_type in FACILITY_TYPES:
+            data = data.model_copy(update={"is_asset": False})
         # 若改编号，校验唯一（非空时）。
         if data.device_code and data.device_code != device.device_code:
             if await self.device_repo.get_by_code(data.device_code) is not None:

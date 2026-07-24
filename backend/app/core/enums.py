@@ -44,13 +44,23 @@ class DeviceType(str, Enum):
 
     覆盖服务器 / 网络设备 / 安全设备等常见 IDC 资产。新增类型只需在此追加
     枚举值，并同步前端 ``DEVICE_TYPE_OPTIONS`` 即可（枚举即配置）。
+
+    其中 ``PATCH`` / ``ODF`` / ``OTHER_FACILITY`` 为「基础设施（非资产）」：占用机柜 U 位，
+    但不计入资产统计、不建物理接口、不显设备编码。其 ``is_asset`` 由后端在创建时
+    强制为 ``False``（见 ``device_service.create_device``），前端通过 ``/meta`` 的
+    ``facility_types`` 识别并差异化渲染。``OTHER`` 为普通资产类型「其他设备」，与
+    基础设施区分。
     """
 
     SERVER = "server"
     SWITCH = "switch"
     ROUTER = "router"
     SECURITY = "security"
-    OTHER = "other"
+    OTHER = "other"  # 其他设备（资产）
+    # —— 基础设施（非资产，占 U 位但不进资产统计）——
+    PATCH = "patch"  # 配线架
+    ODF = "odf"  # ODF 光纤配线架
+    OTHER_FACILITY = "other_facility"  # 其他设施
 
 
 class DeviceStatus(str, Enum):

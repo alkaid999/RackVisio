@@ -96,9 +96,11 @@
             <div class="flex items-center gap-2">
               <span class="h-2.5 w-2.5 shrink-0 rounded-full" :style="{ backgroundColor: devStatusColor }"></span>
               <span class="truncate text-sm font-semibold text-foreground">{{ selectedDeviceDetail.device.name }}</span>
+              <span v-if="devIsFacility" class="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">设施</span>
             </div>
             <div class="mt-0.5 text-[11px] text-muted-foreground">
-              {{ devTypeLabel }}<template v-if="selectedDeviceDetail.device.model"> · {{ selectedDeviceDetail.device.model }}</template>
+              <template v-if="devIsFacility">基础设施（非资产） · 占 U 位</template>
+              <template v-else>{{ devTypeLabel }}<template v-if="selectedDeviceDetail.device.model"> · {{ selectedDeviceDetail.device.model }}</template></template>
             </div>
           </div>
           <button class="rounded p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground" @click="clearDeviceSelection">
@@ -108,16 +110,20 @@
 
         <!-- 关键信息 -->
         <div class="grid grid-cols-[3.5rem_1fr] gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
-          <span class="text-muted-foreground/70">IP</span><span class="truncate">{{ selectedDeviceDetail.device.ip_address || '—' }}</span>
+          <span v-if="!devIsFacility" class="text-muted-foreground/70">IP</span><span v-if="!devIsFacility" class="truncate">{{ selectedDeviceDetail.device.ip_address || '—' }}</span>
           <span class="text-muted-foreground/70">机柜</span>
           <span class="truncate">
             {{ selectedDeviceDetail.device.current_rack_name || '未上架' }}
             <template v-if="selectedDeviceDetail.device.current_start_u != null"> · {{ selectedDeviceDetail.device.current_start_u }}U~{{ devUEnd }}U</template>
           </span>
+          <template v-if="devIsFacility">
+            <span class="text-muted-foreground/70">属性</span>
+            <span class="truncate">基础设施（非资产）</span>
+          </template>
         </div>
 
         <!-- 接口列表（交换机接口过多时可滚动，避免面板过长） -->
-        <div class="mt-3 flex min-h-0 flex-1 flex-col">
+        <div v-if="!devIsFacility" class="mt-3 flex min-h-0 flex-1 flex-col">
           <div class="gp-title mb-1 flex items-center gap-1.5 text-[11px]">
             <Network class="h-3.5 w-3.5 text-brand-400" /> 接口（{{ selectedDeviceDetail.interfaces.length }}）
           </div>
@@ -138,7 +144,7 @@
         </div>
 
         <!-- 关联链路（与 3D 动态线缆一一对应） -->
-        <div class="mt-2">
+        <div v-if="!devIsFacility" class="mt-2">
           <div class="gp-title mb-1 flex items-center gap-1.5 text-[11px]">
             <Cable class="h-3.5 w-3.5 text-brand-400" /> 关联链路（{{ selectedDeviceDetail.links.length }}）
           </div>
@@ -156,6 +162,12 @@
             </div>
             <div v-if="!selectedDeviceDetail.links.length" class="py-3 text-center text-muted-foreground/70">无关联链路</div>
           </div>
+        </div>
+
+        <!-- 基础设施（非资产）提示：无物理接口与链路 -->
+        <div v-if="devIsFacility" class="mt-3 rounded-lg border border-dashed border-muted-foreground/30 p-3 text-[11px] leading-relaxed text-muted-foreground">
+          <div class="mb-1 font-medium text-foreground/80">基础设施（非资产）</div>
+          <div>占 U 位，但不计入资产统计，不建立物理接口与链路。</div>
         </div>
       </div>
     </div>
@@ -343,6 +355,7 @@ import {
   INTERFACE_STATUS_COLORS,
   LINK_MEDIUM_LABELS,
   LINK_MEDIUM_COLORS,
+  isAssetDevice,
 } from '@/utils/constants'
 import { escapeHtml } from '@/utils/escape'
 import Button from '@/components/ui/button.vue'
@@ -438,6 +451,10 @@ const devUEnd = computed(() => {
   const d = selectedDeviceDetail.value?.device
   if (!d || d.current_start_u == null) return null
   return d.current_start_u + (d.u_height || 1) - 1
+})
+const devIsFacility = computed(() => {
+  const d = selectedDeviceDetail.value?.device
+  return d ? !isAssetDevice(d) : false
 })
 function isRackGroupExpanded(id) {
   return !!expandedGroups.value[id]
@@ -1121,12 +1138,15 @@ function showRackTooltip(e, rack) {
 
 function showDeviceTooltip(e, d) {
   const uEnd = d.u_height ? d.current_start_u + d.u_height - 1 : d.current_start_u
+  const isFac = !isAssetDevice(d)
   tooltip.value.innerHTML = `
     <div style="font-weight:700;margin-bottom:2px">${escapeHtml(d.name)}</div>
     <div style="color:#94a3b8">${escapeHtml(DEVICE_TYPE_LABELS[d.device_type] || d.device_type)}${d.model ? ' · ' + escapeHtml(d.model) : ''}</div>
     <div style="margin-top:4px">U 位：${d.current_start_u}U ~ ${uEnd}U</div>
-    <div>状态：${escapeHtml(DEVICE_STATUS_LABELS[d.status] || d.status)}</div>
-    <div>IP：${escapeHtml(d.ip_address) || '—'}</div>`
+    ${isFac
+      ? '<div style="color:#64748b;margin-top:4px">基础设施（非资产）<br>占 U 位，不计入资产统计 / 不建接口</div>'
+      : `<div>状态：${escapeHtml(DEVICE_STATUS_LABELS[d.status] || d.status)}</div>
+    <div>IP：${escapeHtml(d.ip_address) || '—'}</div>`}`
   tooltipVisible.value = true
   tooltipStyle.value = { left: e.clientX + 14 + 'px', top: e.clientY + 14 + 'px' }
 }

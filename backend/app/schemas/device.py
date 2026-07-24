@@ -35,6 +35,8 @@ class DeviceCreate(BaseModel):
     status: DeviceStatus = DeviceStatus.IN_STOCK
     # 开关机状态：仅对「在架」设备有意义，默认「开机」。
     power_status: DevicePowerStatus = DevicePowerStatus.ON
+    # 是否计入资产；设施（patch/odf/other_facility）由服务层强制为 False，默认 True（资产）。
+    is_asset: bool = True
 
 
 class DeviceUpdate(BaseModel):
@@ -54,6 +56,8 @@ class DeviceUpdate(BaseModel):
     remark: Optional[str] = Field(default=None, max_length=512)
     status: Optional[DeviceStatus] = None
     power_status: Optional[DevicePowerStatus] = None
+    # 是否计入资产（可选更新）；设施类型更新时由服务层强制为 False。
+    is_asset: Optional[bool] = None
 
 
 class DeviceOut(BaseModel):
@@ -73,6 +77,8 @@ class DeviceOut(BaseModel):
     remark: Optional[str] = None
     status: str
     power_status: str = "开机"
+    # 是否计入资产（默认 True）。设施恒为 False。
+    is_asset: bool = True
     # —— 派生：当前有效上架记录的位置（无有效记录时为 None）——
     current_room_id: Optional[str] = None
     current_room_name: Optional[str] = None

@@ -13,6 +13,7 @@ from app.core.deps import get_db
 from app.core.meta import (
     DEVICE_STATUS_META,
     DEVICE_TYPE_META,
+    FACILITY_TYPES,
     RACK_STATUS_META,
     USAGE_COLORS,
     USAGE_CRIT,
@@ -41,7 +42,8 @@ async def get_meta(db: AsyncSession = Depends(get_db)):
             "device_status": [{"value": k, **v} for k, v in DEVICE_STATUS_META.items()],
             "device_type": [{"value": k, **v} for k, v in DEVICE_TYPE_META.items()],
             "rack_status": [{"value": k, **v} for k, v in RACK_STATUS_META.items()],
-        "usage_thresholds": {"warn": USAGE_WARN, "crit": USAGE_CRIT},
-        "usage_colors": USAGE_COLORS,
-    }
+            "facility_types": sorted(FACILITY_TYPES),
+            "usage_thresholds": {"warn": USAGE_WARN, "crit": USAGE_CRIT},
+            "usage_colors": USAGE_COLORS,
+        }
     )

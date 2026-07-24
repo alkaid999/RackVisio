@@ -86,16 +86,16 @@
                     <template #trigger>
                       <div
                         class="seg dev group"
-                        :class="{ 'u-overlap': overlapIdsOf(slot).has(seg.device.id) }"
+                        :class="{ 'u-overlap': overlapIdsOf(slot).has(seg.device.id), 'is-facility': !isAssetDevice(seg.device) }"
                         :style="segStyle(seg, slot)"
                         @mouseenter="openPop(seg.device.id)"
                         @mouseleave="closePop()"
                         @click="openDetail(seg.device)"
                       >
-                        <div class="seg-name" :class="{ 'is-1u': seg.size === 1 }">{{ seg.device.name }}</div>
+                        <div class="seg-name" :class="{ 'is-1u': seg.size === 1, 'facility-name': !isAssetDevice(seg.device) }">{{ seg.device.name }}</div>
                         <div v-if="seg.size > 1" class="seg-meta">{{ seg.uStart }}U–{{ seg.uEnd }}U · {{ seg.size }}U</div>
                         <span v-if="overlapIdsOf(slot).has(seg.device.id)" class="u-overlap-mark">!</span>
-                        <span class="status-dot" :style="{ background: powerDotColor(seg.device.power_status) }"></span>
+                        <span v-if="isAssetDevice(seg.device)" class="status-dot" :style="{ background: powerDotColor(seg.device.power_status) }"></span>
                       </div>
                     </template>
                     <PopoverContent class="w-64 pointer-events-none">
@@ -105,11 +105,18 @@
                           <StatusBadge type="device" :value="seg.device.status" />
                         </div>
                         <div class="pop-row"><span>类型</span><span class="font-medium" :style="{ color: typeColor(seg.device.device_type) }">{{ DEVICE_TYPE_LABELS[seg.device.device_type] }}</span></div>
-                        <div class="pop-row"><span>开关机</span><span class="font-medium" :style="{ color: (DEVICE_POWER_COLORS[seg.device.power_status] || DEVICE_POWER_COLORS['开机']) }">{{ DEVICE_POWER_LABELS[seg.device.power_status] || '开机' }}</span></div>
-                        <div class="pop-row"><span>型号</span><span>{{ seg.device.model || '—' }}</span></div>
-                        <div class="pop-row"><span>IP</span><span>{{ seg.device.ip_address || '—' }}</span></div>
-                        <div class="pop-row"><span>设备编码</span><span>{{ seg.device.device_code || '—' }}</span></div>
-                        <div class="pop-row"><span>U 位</span><span>{{ seg.uStart }}U–{{ seg.uEnd }}U（{{ seg.size }}U）</span></div>
+                        <template v-if="!isAssetDevice(seg.device)">
+                          <div class="pop-row pop-row--note"><span>属性</span><span>基础设施（非资产）</span></div>
+                          <div class="pop-row"><span>U 位</span><span>{{ seg.uStart }}U–{{ seg.uEnd }}U（{{ seg.size }}U）</span></div>
+                          <div class="pop-row pop-row--note"><span>说明</span><span>占 U 位，不计入资产 / 不建接口</span></div>
+                        </template>
+                        <template v-else>
+                          <div class="pop-row"><span>开关机</span><span class="font-medium" :style="{ color: (DEVICE_POWER_COLORS[seg.device.power_status] || DEVICE_POWER_COLORS['开机']) }">{{ DEVICE_POWER_LABELS[seg.device.power_status] || '开机' }}</span></div>
+                          <div class="pop-row"><span>型号</span><span>{{ seg.device.model || '—' }}</span></div>
+                          <div class="pop-row"><span>IP</span><span>{{ seg.device.ip_address || '—' }}</span></div>
+                          <div class="pop-row"><span>设备编码</span><span>{{ seg.device.device_code || '—' }}</span></div>
+                          <div class="pop-row"><span>U 位</span><span>{{ seg.uStart }}U–{{ seg.uEnd }}U（{{ seg.size }}U）</span></div>
+                        </template>
                         <div v-if="overlapIdsOf(slot).has(seg.device.id)" class="pop-row pop-row--warn">
                           <span>⚠ 冲突</span><span>该设备 U 位与其他设备重叠</span>
                         </div>
@@ -178,6 +185,7 @@ import {
   DEVICE_TYPE_COLORS,
   DEVICE_POWER_COLORS,
   DEVICE_POWER_LABELS,
+  isAssetDevice,
 } from '@/utils/constants'
 import Select from '@/components/ui/select.vue'
 import SelectTrigger from '@/components/ui/select-trigger.vue'
@@ -267,6 +275,15 @@ function segStyle(seg, rack) {
   let boxShadow = 'inset 0 0 0 1px rgba(255,255,255,0.25)'
   if (isOverlap) {
     boxShadow = 'inset 0 0 0 2px #ef4444, 0 0 0 1px rgba(239,68,68,0.45)'
+  }
+  // 设施（非资产）：斜纹底纹 + 中性灰，与资产实心色块明确区分（不显示开关机圆点）。
+  if (!isAssetDevice(d)) {
+    const base = typeColor(d.device_type)
+    return {
+      height: (seg.size / rack.total_u) * 100 + '%',
+      background: `repeating-linear-gradient(45deg, ${base}, ${base} 7px, rgba(255,255,255,0.12) 7px, rgba(255,255,255,0.12) 14px)`,
+      boxShadow,
+    }
   }
   return {
     height: (seg.size / rack.total_u) * 100 + '%',
@@ -573,15 +590,22 @@ async function exportExcel() {
         mCell.border = { top: thick, left: thick, bottom: thick, right: thick }
         // 悬停批注
         const noteLines = [`设备：${d.name}`]
-        const noteFields = [
-          ['类型', typeLabel],
-          ['型号', d.model],
-          ['序列号', d.sn],
-          ['IP', d.ip_address],
-          ['设备编码', d.device_code],
-          ['开关机', DEVICE_POWER_LABELS[d.power_status] || '开机'],
-        ].filter(([, v]) => v != null && String(v).trim() !== '')
+        const isFac = !isAssetDevice(d)
+        const noteFields = isFac
+          ? [
+              ['类型', typeLabel],
+              ['属性', '基础设施（非资产）'],
+            ]
+          : [
+              ['类型', typeLabel],
+              ['型号', d.model],
+              ['序列号', d.sn],
+              ['IP', d.ip_address],
+              ['设备编码', d.device_code],
+              ['开关机', DEVICE_POWER_LABELS[d.power_status] || '开机'],
+            ]
         for (const [k, v] of noteFields) noteLines.push(`${k}：${v}`)
+        if (isFac) noteLines.push('占 U 位，不计入资产统计 / 不建接口')
         noteLines.push(`占用：${uBottom}U–${uTop}U（${d.u_height}U）`)
         mCell.note = noteLines.join('\n')
         if (uBottom !== uTop) {
@@ -778,6 +802,14 @@ onMounted(loadRooms)
   border-radius: 9999px;
   box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.6);
 }
+/* 设施名称：斜纹底上白色原名看不清，加半透明深灰底 pill 提升可读性（明暗模式通用）。 */
+.seg-name.facility-name {
+  background: rgba(15, 23, 42, 0.5);
+  color: #e2e8f0;
+  border-radius: 3px;
+  padding: 1px 5px;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.35);
+}
 .pop-row {
   display: flex;
   justify-content: space-between;
@@ -788,6 +820,11 @@ onMounted(loadRooms)
 }
 .pop-row span:last-child {
   color: oklch(var(--foreground));
+}
+/* 设施提示行（非资产说明）：弱化色，区别于常规取值 */
+.pop-row--note span:last-child {
+  color: oklch(var(--muted-foreground));
+  font-weight: 500;
 }
 .pop-row--warn {
   color: #ef4444;

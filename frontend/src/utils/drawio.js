@@ -6,6 +6,7 @@
 //   - 服务器：Dell PowerEdge（1U/2U/4U 真实硬件图；≥5U=Oracle Netra CT900 刀片机箱）
 //   - 路由器：Cisco（<5U=7603；≥5U=ASR 9006）
 //   - 安全设备：F5（1-2U=ARX 500；3-4U=BIG-IP 110x0；≥5U=VIPRION 4400）
+//   - 设施（非资产）：配线架=cat5e_enhanced_patch_panel_48_ports；ODF配线架=sun_zfs_storage_7320；其他设施=sun_storage_2500-m2_array
 //   - 多 U 框式/刀片设备（≥5U）：自定义内联机箱图形（矢量 SVG，按槽位高度缩放，含模块槽位装饰），避免真实硬件图被拉伸变形
 // 设备标签为彩色文本框（沿用类型配色），仅含设备名称；
 // 机柜名称文本框居中显示于机柜顶部；机房名称居中显示于机房正上方。
@@ -16,13 +17,20 @@ const DEVICE_TYPE_COLORS = {
   router: '#13C2C2',
   security: '#E6A23C',
   other: '#909399',
+  // 基础设施（非资产）
+  patch: '#64748b',
+  odf: '#64748b',
+  other_facility: '#94a3b8',
 }
 const DEVICE_TYPE_LABELS = {
   server: '服务器',
   switch: '交换机',
   router: '路由器',
   security: '安全设备',
-  other: '其他',
+  other: '其他设备',
+  patch: '配线架',
+  odf: 'ODF光纤配线架',
+  other_facility: '其他设施',
 }
 
 // draw.io 机架 stencil 几何参数（与示例文件一致）
@@ -61,6 +69,13 @@ function typeStencil(type, uH) {
       if (uH <= 2) return 'mxgraph.rack.f5.arx_500'
       if (uH <= 4) return 'mxgraph.rack.f5.big_ip_110x0'
       return 'mxgraph.rack.f5.viprion_4400'
+    // 基础设施（非资产）：用户指定精确机架 stencil
+    case 'patch':
+      return 'mxgraph.rack.general.cat5e_enhanced_patch_panel_48_ports'
+    case 'odf':
+      return 'mxgraph.rack.oracle.sun_zfs_storage_7320'
+    case 'other_facility':
+      return 'mxgraph.rack.oracle.sun_storage_2500-m2_array'
     default:
       return '__chassis__'
   }

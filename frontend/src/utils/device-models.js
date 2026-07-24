@@ -9,7 +9,7 @@
 //
 // 视图层只需调用 buildCabinet / buildDevice / setDevicePosition，并摆放返回的 Group。
 import * as THREE from 'three'
-import { DEVICE_TYPE_COLORS, DEVICE_TYPE_LABELS } from '@/utils/constants'
+import { DEVICE_TYPE_COLORS, DEVICE_TYPE_LABELS, isFacilityType } from '@/utils/constants'
 import { makeCanvasTexture } from '@/utils/three-setup'
 
 // 视觉放大系数：在保持真实长宽高比例的前提下，让机柜在屏幕中清晰可辨。
@@ -629,9 +629,82 @@ function drawSecurityFace(ctx, W, H, ac) {
   ctx.fill()
 }
 
+// 配线架（非资产）：高密度 RJ45 端口阵列（双排）+ 中部理线环，明显区别于交换机端口面。
+function drawPatchFace(ctx, W, H, ac) {
+  const padX = W * 0.05
+  const padY = H * 0.16
+  const rows = 2
+  const cols = W > 900 ? 24 : 16
+  const areaW = W - 2 * padX
+  const cw = areaW / cols
+  const chh = (H - 2 * padY) / rows
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const x = padX + c * cw + cw * 0.18
+      const y = padY + r * chh + chh * 0.25
+      const pw = cw * 0.64
+      const ph = chh * 0.5
+      // 端口方块（RJ45 轮廓）
+      ctx.fillStyle = '#0a0f17'
+      roundRect(ctx, x, y, pw, ph, 2)
+      ctx.fill()
+      ctx.strokeStyle = 'rgba(255,255,255,0.14)'
+      ctx.lineWidth = 1.5
+      ctx.stroke()
+      // 端口内两束触点
+      ctx.fillStyle = '#cbd5e1'
+      ctx.fillRect(x + pw * 0.2, y + ph * 0.3, pw * 0.6, ph * 0.12)
+      ctx.fillRect(x + pw * 0.2, y + ph * 0.55, pw * 0.6, ph * 0.12)
+      // 端口指示灯
+      ctx.fillStyle = c % 2 === 0 ? '#22c55e' : '#16a34a'
+      ctx.beginPath()
+      ctx.arc(x + pw * 0.5, y - 4, 2.5, 0, Math.PI * 2)
+      ctx.fill()
+    }
+  }
+  // 中部理线环（横贯，强调配线架特征）
+  ctx.fillStyle = ac
+  ctx.fillRect(padX, H / 2 - 3, areaW, 6)
+}
+
+// ODF 光纤配线架（非资产）：多排光纤适配器（圆耦合器，蓝/绿/琥珀区分单多模），区别于铜缆配线架。
+function drawOdfFace(ctx, W, H, ac) {
+  const padX = W * 0.06
+  const padY = H * 0.12
+  const rows = Math.max(3, Math.min(6, Math.floor((H - 2 * padY) / (H * 0.14))))
+  const cols = 12
+  const areaW = W - 2 * padX
+  const cw = areaW / cols
+  const chh = (H - 2 * padY) / rows
+  const couplers = ['#3b82f6', '#22c55e', '#f59e0b'] // 蓝=单模 / 绿=OS2 / 琥珀=多模
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const cx = padX + c * cw + cw * 0.5
+      const cy = padY + r * chh + chh * 0.5
+      const rad = Math.min(cw, chh) * 0.3
+      // 适配器面板底座
+      ctx.fillStyle = '#0a0f17'
+      roundRect(ctx, cx - rad * 1.4, cy - rad * 1.4, rad * 2.8, rad * 2.8, 3)
+      ctx.fill()
+      // 耦合器（圆，中心暗孔）
+      ctx.fillStyle = couplers[(r + c) % couplers.length]
+      ctx.beginPath()
+      ctx.arc(cx, cy, rad, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.fillStyle = '#0b0f17'
+      ctx.beginPath()
+      ctx.arc(cx, cy, rad * 0.45, 0, Math.PI * 2)
+      ctx.fill()
+    }
+  }
+  // 顶部类型标记条
+  ctx.fillStyle = ac
+  ctx.fillRect(0, H * 0.04, W, 6)
+  drawLED(ctx, padX + 16, H * 0.1, '#22c55e')
+}
+
 // 其他/通用：简单端口列 + 通风
-function drawGenericFace(ctx, W, H, ac) {
-  const padX = W * 0.1
+function drawGenericFace(ctx, W, H, ac) {  const padX = W * 0.1
   const padY = H * 0.15
   const cols = 6
   const rows = Math.max(2, Math.min(5, Math.floor((H - 2 * padY) / (H * 0.18))))
@@ -673,6 +746,10 @@ function realisticFaceTexture(device, w, h, accentHex) {
       else if (type === 'switch') drawSwitchFace(ctx, W, H, ac)
       else if (type === 'router') drawRouterFace(ctx, W, H, ac)
       else if (type === 'security') drawSecurityFace(ctx, W, H, ac)
+      else if (type === 'patch') drawPatchFace(ctx, W, H, ac)
+      else if (type === 'odf') drawOdfFace(ctx, W, H, ac)
+      // 其他设施（非资产）前面板近似配线架
+      else if (type === 'other_facility') drawPatchFace(ctx, W, H, ac)
       else drawGenericFace(ctx, W, H, ac)
     },
     cw,
@@ -754,16 +831,20 @@ export function buildDevice(device, opts = {}) {
   const sizeU = device.u_height || 1
   const uHeight = opts.uHeight ?? opts.uH ?? U_H
   const width = opts.width ?? opts.w ?? RACK_W * 0.9
-  const depth = opts.depth ?? opts.d ?? RACK_D * 0.82
+  const isFacility = isFacilityType(type)
+  // 设施（非资产）机箱更浅（配线架/ODF 通常浅于服务器），与资产设备形成独立形态。
+  const depth = (opts.depth ?? opts.d ?? RACK_D * 0.82) * (isFacility ? 0.8 : 1)
   const height = opts.height ?? opts.h ?? sizeU * uHeight * 0.92
   const accentHex = new THREE.Color(DEVICE_TYPE_COLORS[type] || '#909399').getHex()
+  // 设施机箱用偏中性浅灰金属，区别于资产深枪灰；前面板纹理已按类型绘制。
+  const chassisColor = isFacility ? 0x39414f : CHASSIS
 
   const g = new THREE.Group()
 
   // 机箱本体（拾取 + 高亮目标）
   const chassis = new THREE.Mesh(
     new THREE.BoxGeometry(width, height, depth),
-    new THREE.MeshStandardMaterial({ color: CHASSIS, metalness: 0.7, roughness: 0.42 })
+    new THREE.MeshStandardMaterial({ color: chassisColor, metalness: 0.7, roughness: 0.42 })
   )
   chassis.castShadow = true
   chassis.receiveShadow = true

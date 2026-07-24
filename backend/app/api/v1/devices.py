@@ -27,6 +27,7 @@ async def list_devices(
     device_type: Optional[DeviceType] = None,
     status_filter: Optional[DeviceStatus] = Query(None, alias="status"),
     keyword: Optional[str] = Query(None, alias="keyword"),
+    is_asset: Optional[bool] = Query(None, alias="is_asset"),
 ):
     svc = DeviceService(db)
     items, total = await svc.list_devices(
@@ -37,6 +38,7 @@ async def list_devices(
         device_type=device_type.value if device_type else None,
         status=status_filter.value if status_filter else None,
         keyword=keyword,
+        is_asset=is_asset,
     )
     return paginated(items, total, page, size)
 

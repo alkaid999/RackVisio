@@ -9,6 +9,7 @@ import {
   DEVICE_TYPE_LABELS,
   DEVICE_STATUS_COLORS,
   DEVICE_STATUS_LABELS,
+  FACILITY_TYPES,
 } from '@/utils/constants'
 
 // 界面元数据（标签 / 颜色 / 阈值）单一数据源。
@@ -19,6 +20,7 @@ export const useMetaStore = defineStore('meta', {
     deviceStatus: [], // [{ value, label, color }]
     deviceType: [], // [{ value, label, color }]
     rackStatus: [], // [{ value, label, color }]
+    facilityTypes: [], // 设施类型集合（非资产），如 ['patch','odf','other_facility']
     usageThresholds: { warn: 30, crit: 80 }, // 离线兜底默认值
     usageColors: { ok: '#67C23A', warn: '#E6A23C', crit: '#F56C6C' }, // 离线兜底三档色
     loaded: false,
@@ -57,12 +59,16 @@ export const useMetaStore = defineStore('meta', {
       this.deviceStatus = data.device_status || []
       this.deviceType = data.device_type || []
       this.rackStatus = data.rack_status || []
+      this.facilityTypes = data.facility_types || []
       this.usageThresholds = data.usage_thresholds || { warn: 30, crit: 80 }
       this.usageColors = data.usage_colors || {
         ok: '#67C23A',
         warn: '#E6A23C',
         crit: '#F56C6C',
       }
+      // 设施类型集合写回常量：保证 isFacilityType / isAssetDevice 与后端权威源一致。
+      FACILITY_TYPES.clear()
+      for (const t of this.facilityTypes) FACILITY_TYPES.add(t)
       // 2) 同步写回 reactive 常量映射：覆盖全站既有 import 这些映射的组件，无需逐文件改。
       //    仅覆盖后端返回的值，未返回的 key 保留常量默认值（离线兜底）。
       for (const it of this.deviceStatus) {

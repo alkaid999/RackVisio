@@ -16,7 +16,7 @@ import uuid
 from datetime import date, datetime
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import Date, DateTime, ForeignKey, Integer, String
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base, utcnow
@@ -63,6 +63,12 @@ class Device(Base):
     # 在库设备未通电，不记录此状态；2D 机柜视图据此以红 / 非红底色区分运行与停机。
     power_status: Mapped[str] = mapped_column(
         String(8), nullable=False, default=DevicePowerStatus.ON.value
+    )
+    # 是否计入资产（True=资产，False=基础设施）。
+    # 设施（配线架/ODF配线架/其他设施 等）占 U 位但不进资产统计、不建接口、不显设备编码；
+    # 由服务层在创建时按 device_type 强制判定，前端经 /meta 的 facility_types 识别。
+    is_asset: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="1"
     )
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)

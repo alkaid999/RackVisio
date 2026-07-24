@@ -10,10 +10,18 @@
             {{ device.name }}
             <DeviceTypeTag :type="device.device_type" />
             <StatusBadge type="device" :value="device.status" />
+            <span v-if="isFacility" class="inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium text-muted-foreground" style="background: hsl(var(--muted))">
+              <ServerCog class="h-3.5 w-3.5" />基础设施
+            </span>
           </h2>
           <p class="page-sub">
-            {{ device.current_rack_id ? `位置：${device.current_start_u}U ~ ${device.current_start_u + (device.u_height || 0) - 1}U` : '位置：未上架（仅资产登记）' }} ·
-            型号：{{ device.model || '—' }} · IP：{{ device.ip_address || '—' }}
+            <template v-if="isFacility">
+              基础设施（非资产）· 占 U 位，不计入资产统计 / 不建接口
+            </template>
+            <template v-else>
+              {{ device.current_rack_id ? `位置：${device.current_start_u}U ~ ${device.current_start_u + (device.u_height || 0) - 1}U` : '位置：未上架（仅资产登记）' }} ·
+              型号：{{ device.model || '—' }} · IP：{{ device.ip_address || '—' }}
+            </template>
           </p>
         </div>
         <div class="flex gap-2">
@@ -30,16 +38,17 @@
           <!-- 基础信息 -->
           <div class="flex gap-2"><span class="shrink-0 text-muted-foreground flex items-center gap-1"><Heading class="h-3.5 w-3.5" />设备名称</span><span>{{ device.name }}</span></div>
           <div class="flex gap-2"><span class="shrink-0 text-muted-foreground flex items-center gap-1"><Component class="h-3.5 w-3.5" />设备类型</span><DeviceTypeTag :type="device.device_type" /></div>
-          <div class="flex gap-2"><span class="shrink-0 text-muted-foreground flex items-center gap-1"><Hash class="h-3.5 w-3.5" />设备编号</span><span class="font-mono">{{ device.device_code || '—' }}</span></div>
-          <div class="flex gap-2"><span class="shrink-0 text-muted-foreground flex items-center gap-1"><Cpu class="h-3.5 w-3.5" />设备型号</span><span>{{ device.model || '—' }}</span></div>
+          <div v-if="isFacility" class="flex gap-2"><span class="shrink-0 text-muted-foreground flex items-center gap-1"><ServerCog class="h-3.5 w-3.5" />资产属性</span><span>基础设施（非资产）</span></div>
+          <div v-if="!isFacility" class="flex gap-2"><span class="shrink-0 text-muted-foreground flex items-center gap-1"><Hash class="h-3.5 w-3.5" />设备编号</span><span class="font-mono">{{ device.device_code || '—' }}</span></div>
+          <div v-if="!isFacility" class="flex gap-2"><span class="shrink-0 text-muted-foreground flex items-center gap-1"><Cpu class="h-3.5 w-3.5" />设备型号</span><span>{{ device.model || '—' }}</span></div>
           <!-- 物理与位置 -->
           <div class="flex gap-2"><span class="shrink-0 text-muted-foreground flex items-center gap-1"><Ruler class="h-3.5 w-3.5" />设备 U 数</span><span>{{ device.u_height }}U</span></div>
           <!-- 网络与资产 -->
-          <div class="flex gap-2"><span class="shrink-0 text-muted-foreground flex items-center gap-1"><Globe class="h-3.5 w-3.5" />IP 地址</span><span>{{ device.ip_address || '—' }}</span></div>
-          <div class="flex gap-2"><span class="shrink-0 text-muted-foreground flex items-center gap-1"><Barcode class="h-3.5 w-3.5" />序列号(SN)</span><span>{{ device.sn || '—' }}</span></div>
-          <div class="flex gap-2"><span class="shrink-0 text-muted-foreground flex items-center gap-1"><CalendarClock class="h-3.5 w-3.5" />维保到期日</span><span>{{ device.warranty_expire || '—' }}</span></div>
-          <div class="flex gap-2"><span class="shrink-0 text-muted-foreground flex items-center gap-1"><Signal class="h-3.5 w-3.5" />设备状态</span><StatusBadge type="device" :value="device.status" /></div>
-          <div class="flex gap-2">
+          <div v-if="!isFacility" class="flex gap-2"><span class="shrink-0 text-muted-foreground flex items-center gap-1"><Globe class="h-3.5 w-3.5" />IP 地址</span><span>{{ device.ip_address || '—' }}</span></div>
+          <div v-if="!isFacility" class="flex gap-2"><span class="shrink-0 text-muted-foreground flex items-center gap-1"><Barcode class="h-3.5 w-3.5" />序列号(SN)</span><span>{{ device.sn || '—' }}</span></div>
+          <div v-if="!isFacility" class="flex gap-2"><span class="shrink-0 text-muted-foreground flex items-center gap-1"><CalendarClock class="h-3.5 w-3.5" />维保到期日</span><span>{{ device.warranty_expire || '—' }}</span></div>
+          <div v-if="!isFacility" class="flex gap-2"><span class="shrink-0 text-muted-foreground flex items-center gap-1"><Signal class="h-3.5 w-3.5" />设备状态</span><StatusBadge type="device" :value="device.status" /></div>
+          <div v-if="!isFacility" class="flex gap-2">
             <span class="shrink-0 text-muted-foreground flex items-center gap-1"><Power class="h-3.5 w-3.5" />开关机</span>
             <span class="flex items-center gap-1.5">
               <span class="inline-block h-2.5 w-2.5 rounded-full" :style="{ background: DEVICE_POWER_COLORS[powerStatus] }"></span>
@@ -75,8 +84,8 @@
         </div>
       </Card>
 
-      <!-- 接口面板（自由排布 + 列表 双视图） -->
-      <Card class="mb-5">
+      <!-- 接口面板（自由排布 + 列表 双视图；设施不建接口，隐藏） -->
+      <Card v-if="!isFacility" class="mb-5">
         <template #header>
           <div class="flex flex-wrap items-center justify-between gap-3">
             <span class="section-title flex items-center gap-1.5">
@@ -131,6 +140,10 @@
             />
           </div>
         </template>
+      </Card>
+      <Card v-else class="mb-5">
+        <template #header><span class="section-title flex items-center gap-1.5"><ServerCog class="h-4 w-4" />接口面板</span></template>
+        <p class="text-sm text-muted-foreground py-2">基础设施（非资产）不建物理接口，故不提供接口面板。</p>
       </Card>
 
       <!-- 添加 / 编辑接口弹窗 -->
@@ -274,7 +287,7 @@ import InterfaceDetailDialog from '@/components/device/InterfaceDetailDialog.vue
 import DeviceTypeTag from '@/components/device/DeviceTypeTag.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import DeviceForm from '@/views/device/DeviceForm.vue'
-import { Network } from 'lucide-vue-next'
+import { Network, ServerCog } from 'lucide-vue-next'
 import {
   Pencil,
   Trash2,
@@ -299,7 +312,7 @@ import {
   Cpu,
 } from 'lucide-vue-next'
 import Button from '@/components/ui/button.vue'
-import { DEVICE_POWER_COLORS } from '@/utils/constants'
+import { DEVICE_POWER_COLORS, isAssetDevice } from '@/utils/constants'
 import Card from '@/components/ui/card.vue'
 import EmptyState from '@/components/ui/empty-state.vue'
 import Spinner from '@/components/ui/spinner.vue'
@@ -330,6 +343,8 @@ const powerStatus = computed(() => {
   if (isInStock.value) return '关机'
   return device.value?.power_status || '开机'
 })
+// 设施（非资产）：占 U 位但不进资产统计 / 不建接口 / 不显设备编码。
+const isFacility = computed(() => !isAssetDevice(device.value))
 
 // 接口数据（自由排布前面板 + 列表均读取此数据）。
 const interfaces = ref([])

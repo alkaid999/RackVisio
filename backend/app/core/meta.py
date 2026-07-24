@@ -21,16 +21,26 @@ DEVICE_STATUS_META: dict[str, dict] = {
     "借出": {"label": "借出", "color": "#8b5cf6"},
 }
 
-# 设备类型（5 类，取值与后端 DeviceType 枚举一致）。
+# 设备类型（取值与后端 DeviceType 枚举一致）。
 # 颜色与前端 utils/constants.js 的 DEVICE_TYPE_COLORS 保持一致。
 # 注：firewall / waf 已于 2026-07-23 合并入 security（安全设备），旧数据由 init_db 迁移改判。
+# 其中 patch / odf / other_facility 为「基础设施（非资产）」，带 ``asset: False`` 标志，
+# 由下方 FACILITY_TYPES 派生、经 /meta 下发给前端。
 DEVICE_TYPE_META: dict[str, dict] = {
     "server": {"label": "服务器", "color": "#409EFF"},
     "switch": {"label": "交换机", "color": "#67C23A"},
     "router": {"label": "路由器", "color": "#13C2C2"},
     "security": {"label": "安全设备", "color": "#E6A23C"},
-    "other": {"label": "其他", "color": "#909399"},
+    "other": {"label": "其他设备", "color": "#909399"},
+    # —— 基础设施（非资产）：占 U 位、不进资产统计、不建接口、不显设备编码 ——
+    "patch": {"label": "配线架", "color": "#64748b", "asset": False},
+    "odf": {"label": "ODF光纤配线架", "color": "#64748b", "asset": False},
+    "other_facility": {"label": "其他设施", "color": "#94a3b8", "asset": False},
 }
+
+# 设施类型集合（非资产基础设施），由 DEVICE_TYPE_META 中 asset=False 的项派生。
+# 经 /meta 下发 facility_types，前端据此隐藏资产字段 / 差异化渲染 / 默认隐藏设施列表。
+FACILITY_TYPES = {k for k, v in DEVICE_TYPE_META.items() if v.get("asset") is False}
 
 # 机柜业务状态（用户维护枚举，支持后续扩展）。
 # 颜色与前端 utils/constants.js 的 RACK_STATUS_COLORS 保持一致。

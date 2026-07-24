@@ -78,6 +78,18 @@
             </SelectContent>
           </Select>
         </div>
+        <div class="flex flex-col gap-1">
+          <Label class="flex items-center gap-1"><ServerCog class="h-3.5 w-3.5 text-muted-foreground" />资产范围</Label>
+          <button
+            type="button"
+            class="h-9 rounded-md border px-3 text-sm transition-colors"
+            :class="showFacility ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-muted text-muted-foreground hover:text-foreground'"
+            :title="showFacility ? '当前包含基础设施（配线架/ODF光纤配线架/其他设施）' : '仅显示资产设备，隐藏基础设施'"
+            @click="toggleFacility"
+          >
+            {{ showFacility ? '含设施' : '仅资产' }}
+          </button>
+        </div>
         <div class="flex items-center gap-2 pb-1">
           <Button @click="load"><Filter class="h-4 w-4" />查询</Button>
           <Button variant="outline" @click="resetFilter"><Undo2 class="h-4 w-4" />重置</Button>
@@ -178,7 +190,7 @@ import TableRow from '@/components/ui/table-row.vue'
 import TableHead from '@/components/ui/table-head.vue'
 import TableCell from '@/components/ui/table-cell.vue'
 import { DEVICE_TYPE_OPTIONS, DEVICE_STATUS_OPTIONS, SELECT_ALL, toFilterParam } from '@/utils/constants'
-import { CirclePlus, Search, Filter, Undo2, Building, Boxes, SlidersHorizontal, Activity, LayoutGrid, List } from 'lucide-vue-next'
+import { CirclePlus, Search, Filter, Undo2, Building, Boxes, SlidersHorizontal, Activity, LayoutGrid, List, ServerCog } from 'lucide-vue-next'
 import Button from '@/components/ui/button.vue'
 import Input from '@/components/ui/input.vue'
 import Label from '@/components/ui/label.vue'
@@ -215,6 +227,12 @@ function onFilterRestored(f) {
 const roomOptions = computed(() => roomStore.rooms)
 const rackOptions = computed(() => roomStore.racks)
 const viewMode = ref('card')
+// 资产范围：默认仅资产（隐藏设施），切换后包含基础设施（配线架/ODF光纤配线架/其他设施）。
+const showFacility = ref(false)
+function toggleFacility() {
+  showFacility.value = !showFacility.value
+  reload()
+}
 
 // 分页：卡片模式每页 12 条，表格模式每页 10 条（服务端分页）。
 const page = ref(1)
@@ -261,6 +279,8 @@ function buildParams() {
     device_type: toFilterParam(filter.deviceType),
     status: toFilterParam(filter.status),
     keyword: filter.keyword || undefined,
+    // 默认仅资产（隐藏设施）；开启「含设施」后不过滤 is_asset，展示全部。
+    is_asset: showFacility.value ? undefined : true,
   }
 }
 async function load() {

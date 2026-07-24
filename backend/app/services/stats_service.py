@@ -67,13 +67,23 @@ class StatsService:
             (await session.execute(select(func.count()).select_from(Rack))).scalar() or 0
         )
         device_count = int(
-            (await session.execute(select(func.count()).select_from(Device))).scalar() or 0
+            (await session.execute(
+                select(func.count()).select_from(Device).where(Device.is_asset.is_(True))
+            )).scalar() or 0
+        )
+        # 设施（非资产）单独计数：占 U 位但不进资产统计。
+        facility_count = int(
+            (await session.execute(
+                select(func.count()).select_from(Device).where(Device.is_asset.is_(False))
+            )).scalar() or 0
         )
 
-        # 设备状态分布（GROUP BY status）。
+        # 设备状态分布（GROUP BY status，仅资产；设施不进资产统计）。
         status_rows = (
             await session.execute(
-                select(Device.status, func.count()).group_by(Device.status)
+                select(Device.status, func.count())
+                .where(Device.is_asset.is_(True))
+                .group_by(Device.status)
             )
         ).all()
         status_counts: dict[str, int] = {s: 0 for s in DEVICE_STATUS_LABELS}
@@ -128,10 +138,12 @@ class StatsService:
             else 0.0
         )
 
-        # 设备类型分布（GROUP BY device_type，降序）。
+        # 设备类型分布（GROUP BY device_type，降序，仅资产；设施不进资产统计）。
         type_rows = (
             await session.execute(
-                select(Device.device_type, func.count()).group_by(Device.device_type)
+                select(Device.device_type, func.count())
+                .where(Device.is_asset.is_(True))
+                .group_by(Device.device_type)
             )
         ).all()
         type_counts = {t or "other": c for t, c in type_rows}
@@ -152,6 +164,7 @@ class StatsService:
             room_count=room_count,
             rack_count=rack_count,
             device_count=device_count,
+            facility_count=facility_count,
             device_status=device_status,
             rack_capacity_by_room=rack_capacity_by_room,
             total_u=overall_total_u,

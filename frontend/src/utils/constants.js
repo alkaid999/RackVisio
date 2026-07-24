@@ -48,20 +48,28 @@ export const RACK_STATUS_LABELS = reactive({
   电柜: '电柜',
 })
 
-// ============ 设备类型（5 类，与 backend DeviceType 取值严格一致）============
+// ============ 设备类型（与 backend DeviceType 取值严格一致）============
+// 其中 patch / odf / other_facility 为「基础设施（非资产）」，见 FACILITY_TYPES 注释。
 export const DEVICE_TYPE_OPTIONS = [
   { value: 'server', label: '服务器' },
   { value: 'switch', label: '交换机' },
   { value: 'router', label: '路由器' },
   { value: 'security', label: '安全设备' },
-  { value: 'other', label: '其他' },
+  { value: 'other', label: '其他设备' },
+  { value: 'patch', label: '配线架' },
+  { value: 'odf', label: 'ODF光纤配线架' },
+  { value: 'other_facility', label: '其他设施' },
 ]
 export const DEVICE_TYPE_LABELS = reactive({
   server: '服务器',
   switch: '交换机',
   router: '路由器',
   security: '安全设备',
-  other: '其他',
+  other: '其他设备',
+  // 基础设施（非资产）
+  patch: '配线架',
+  odf: 'ODF光纤配线架',
+  other_facility: '其他设施',
 })
 export const DEVICE_TYPE_COLORS = reactive({
   server: '#409EFF',
@@ -69,7 +77,29 @@ export const DEVICE_TYPE_COLORS = reactive({
   router: '#13C2C2',
   security: '#E6A23C',
   other: '#909399',
+  // 基础设施（非资产，中性灰）
+  patch: '#64748b',
+  odf: '#64748b',
+  other_facility: '#94a3b8',
 })
+
+// ============ 基础设施（非资产）============
+// 配线架 / ODF光纤配线架 / 其他设施：占 U 位但不进资产统计、不建接口、不显设备编码。
+// 与后端 meta.FACILITY_TYPES 严格一致；DeviceList 默认隐藏，设备类型下拉仍可选。
+export const FACILITY_TYPES = new Set(['patch', 'odf', 'other_facility'])
+
+// 判断某设备类型是否为基础设施（非资产）。
+export function isFacilityType(type) {
+  return FACILITY_TYPES.has(type)
+}
+
+// 判断某设备是否为资产（设施返回 false）。
+// 优先用后端下发的 is_asset 字段，回退到类型判断（兼容历史数据缺该字段的情况）。
+export function isAssetDevice(device) {
+  if (!device) return true
+  if (typeof device.is_asset === 'boolean') return device.is_asset
+  return !isFacilityType(device.device_type)
+}
 
 // ============ 设备状态（资产生命周期，与后端 DeviceStatus 取值严格一致）============
 // 在库=灰、已上架=绿、待报废=红、借出=紫。
