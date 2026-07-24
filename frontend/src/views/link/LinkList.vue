@@ -16,10 +16,13 @@
     <!-- 链路资格门控提示：设备资格数据加载完毕后，无「已上架且含接口」的设备时给出具体原因 -->
     <div
       v-if="devicesLoaded && gateHint"
-      class="mb-4 rounded-md border border-amber-300/50 bg-amber-500/10 px-4 py-3 text-sm text-amber-200 dark:text-amber-300"
+      class="alert-hint mb-4 flex items-start gap-3 rounded-lg px-4 py-4 text-sm"
     >
-      <p class="font-medium">尚不满足建链条件</p>
-      <p class="mt-1">{{ gateHint }}</p>
+      <TriangleAlert class="mt-0.5 h-5 w-5 shrink-0 text-warning" />
+      <div>
+        <p class="font-semibold">尚不满足建链条件</p>
+        <p class="mt-1 leading-relaxed opacity-90">{{ gateHint }}</p>
+      </div>
     </div>
 
     <!-- 筛选工具栏 -->
@@ -163,7 +166,7 @@ import roomApi from '@/api/room'
 import { useRoomStore } from '@/stores/room'
 import { useAuthStore } from '@/stores/auth'
 import LinkFormDialog from '@/views/link/LinkFormDialog.vue'
-import { ChevronRight, Eye, Pencil, Trash2 } from 'lucide-vue-next'
+import { ChevronRight, Eye, Pencil, Trash2, TriangleAlert } from 'lucide-vue-next'
 import {
   LINK_MEDIUM_LABELS,
   LINK_MEDIUM_COLORS,
