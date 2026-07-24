@@ -65,6 +65,7 @@ node_modules/
 .turbo/
 .cache/
 dist/
+dist-verify/
 dist-prod/
 build/
 out/

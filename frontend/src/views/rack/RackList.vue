@@ -80,7 +80,7 @@
             :can-edit="canEdit"
             @view="goRack"
             @edit="onEdit"
-            @delete="onDelete"
+            @delete="() => onDelete(rack)"
           />
         </div>
         <EmptyState v-else title="暂无机柜数据" />
