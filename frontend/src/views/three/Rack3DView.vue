@@ -89,8 +89,10 @@ import {
 } from '@/utils/device-models'
 import RackInfoCard from '@/components/three/RackInfoCard.vue'
 import DeviceInfoCard from '@/components/three/DeviceInfoCard.vue'
-import { DEVICE_TYPE_LABELS, DEVICE_STATUS_LABELS, DEVICE_TYPE_COLORS } from '@/utils/constants'
+import { DEVICE_TYPE_LABELS, DEVICE_STATUS_LABELS, DEVICE_TYPE_COLORS, RACK_STATUS_COLORS } from '@/utils/constants'
 import { escapeHtml } from '@/utils/escape'
+import { useMetaStore } from '@/stores/meta'
+import { formatPower } from '@/utils/format'
 import Button from '@/components/ui/button.vue'
 
 const route = useRoute()
@@ -211,6 +213,11 @@ function buildScene() {
 
   const r = rack.value
   const rackH = (r.total_u || 42) * U_H
+  const meta = useMetaStore()
+  const statusColor = (s) => RACK_STATUS_COLORS[s] || '#909399'
+  const sc = new THREE.Color(statusColor(r.status)).getHex()
+  const powerRatio = r.design_power ? r.used_power / r.design_power : 0
+  const pc = new THREE.Color(meta.usageColor(powerRatio)).getHex()
 
   // 地面（承接阴影，强化空间真实感）
   const ground = new THREE.Mesh(
@@ -234,6 +241,10 @@ function buildScene() {
     showBack: true,
     showRails: true,
     showCasters: true,
+    statusColor: sc,
+    occupancyRatio: r.total_u ? r.used_u / r.total_u : 0,
+    powerRatio,
+    powerColor: pc,
   })
   worldGroup.add(cabinet)
 

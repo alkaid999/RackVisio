@@ -359,6 +359,8 @@ import {
   isAssetDevice,
 } from '@/utils/constants'
 import { escapeHtml } from '@/utils/escape'
+import { useMetaStore } from '@/stores/meta'
+import { formatPower } from '@/utils/format'
 import Button from '@/components/ui/button.vue'
 import Select from '@/components/ui/select.vue'
 import SelectTrigger from '@/components/ui/select-trigger.vue'
@@ -484,6 +486,7 @@ let hoveredDeviceMesh = null // 悬停设备
 let downPos = null
 
 const statusColor = (s) => RACK_STATUS_COLORS[s] || '#909399'
+const meta = useMetaStore()
 
 // 机房布局常量：过道加宽，避免查看具体机柜时被相邻列遮挡。
 const AISLE = 6.0
@@ -850,6 +853,8 @@ function buildRoomScene(onComplete) {
 
       const sc = new THREE.Color(statusColor(rack.status)).getHex()
       const ratio = rack.total_u ? rack.used_u / rack.total_u : 0
+      const powerRatio = rack.design_power ? rack.used_power / rack.design_power : 0
+      const pc = new THREE.Color(meta.usageColor(powerRatio)).getHex()
 
       const g = buildCabinet({
         width: RACK_W,
@@ -865,6 +870,8 @@ function buildRoomScene(onComplete) {
         showCasters: !lowDetail,
         statusColor: sc,
         occupancyRatio: ratio,
+        powerRatio,
+        powerColor: pc,
       })
       g.position.set(x, 0, z)
       g.rotation.y = rot
@@ -1177,6 +1184,7 @@ function showRackTooltip(e, rack) {
     <div style="font-weight:700;margin-bottom:2px">${escapeHtml(rack.name)}</div>
     <div style="color:#94a3b8">${escapeHtml(rack.column_code)} / ${escapeHtml(rack.code)}</div>
     <div style="margin-top:4px">状态：${escapeHtml(RACK_STATUS_LABELS[rack.status] || rack.status)} · ${rack.used_u}/${rack.total_u} U</div>
+    <div>功率：${rack.design_power ? formatPower(rack.used_power) + ' / ' + formatPower(rack.design_power) + '（' + Math.round((rack.used_power / rack.design_power) * 100) + '%）' : '—'}</div>
     <div>设备数：${dc != null ? dc : '…'}</div>`
   tooltipVisible.value = true
   tooltipStyle.value = { left: e.clientX + 14 + 'px', top: e.clientY + 14 + 'px' }

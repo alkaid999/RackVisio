@@ -133,7 +133,9 @@ function glassMaterial() {
 //   sidePanel: 'solid' | 'perforated' | 'glass'
 //   showBack/showRails/showCasters: 是否显示对应部件
 //   statusColor: 顶部状态灯颜色（hex 数值）
-//   occupancyRatio: 0~1，用于前侧占用条高度
+//   occupancyRatio: 0~1，用于前侧左立柱「U 位占用条」高度
+//   powerRatio: 0~1，用于前侧右立柱「功率占用条」高度（与 U 位条对称）
+//   powerColor: 功率条颜色（hex 数值），建议取使用率配色
 export function buildCabinet(options = {}) {
   const w = options.width ?? RACK_W
   const d = options.depth ?? RACK_D
@@ -148,6 +150,8 @@ export function buildCabinet(options = {}) {
   const showCasters = options.showCasters !== false
   const statusColor = options.statusColor ?? 0x67c23a
   const occupancyRatio = Math.max(0, Math.min(1, options.occupancyRatio ?? 0))
+  const powerRatio = Math.max(0, Math.min(1, options.powerRatio ?? 0))
+  const powerColor = options.powerColor ?? 0xffa500
 
   const group = new THREE.Group()
   const halfW = w / 2
@@ -274,11 +278,18 @@ export function buildCabinet(options = {}) {
   const ledMat = new THREE.MeshStandardMaterial({ color: statusColor, emissive: statusColor, emissiveIntensity: 1.8 })
   addPart(ledMat, new THREE.BoxGeometry(0.16, 0.07, 0.07), -halfW + 0.25, y0 + h + 0.12, halfD + 0.04)
 
-  // 10. 前侧占用条（左侧立柱，按 occupancyRatio 显示高度）
+  // 10. 前侧左立柱「U 位占用条」（按 occupancyRatio 显示高度）
   if (occupancyRatio > 0.001) {
     const stripH = Math.max(0.02, occupancyRatio * h * 0.92)
     const stripMat = new THREE.MeshStandardMaterial({ color: statusColor, emissive: statusColor, emissiveIntensity: 0.5, transparent: true, opacity: 0.92 })
     addPart(stripMat, new THREE.BoxGeometry(0.08, stripH, 0.04), -halfW + 0.06, y0 + 0.1 + stripH / 2, halfD + 0.03)
+  }
+
+  // 11. 前侧右立柱「功率占用条」（按 powerRatio 显示高度，与 U 位条对称）
+  if (powerRatio > 0.001) {
+    const stripH = Math.max(0.02, powerRatio * h * 0.92)
+    const stripMat = new THREE.MeshStandardMaterial({ color: powerColor, emissive: powerColor, emissiveIntensity: 0.5, transparent: true, opacity: 0.92 })
+    addPart(stripMat, new THREE.BoxGeometry(0.08, stripH, 0.04), halfW - 0.06, y0 + 0.1 + stripH / 2, halfD + 0.03)
   }
 
   // —— 合并：每个材质桶 → 单个 Mesh（降 Draw Call）——
