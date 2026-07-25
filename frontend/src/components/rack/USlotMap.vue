@@ -20,7 +20,7 @@
         :x2="svgWidth"
         :y1="uTop(u)"
         :y2="uTop(u)"
-        :stroke="u === totalU ? '#cbd5e1' : '#eef2f7'"
+        :style="{ stroke: u === totalU ? 'var(--u-grid-top)' : 'var(--u-grid)' }"
         stroke-width="1"
       />
 
@@ -45,8 +45,7 @@
             :width="unitW"
             :height="seg.h - gap"
             rx="4"
-            fill="#f4f6fa"
-            stroke="#dcdfe6"
+            :style="{ fill: 'var(--u-free-fill)', stroke: 'var(--u-free-stroke)' }"
             stroke-width="1"
             stroke-dasharray="3 3"
             class="u-rect free"
@@ -73,7 +72,7 @@
             :height="seg.h - gap"
             rx="4"
             :fill="deviceColor(seg.deviceType)"
-            stroke="#303133"
+            :style="{ stroke: 'var(--u-dev-stroke)' }"
             stroke-width="1"
             :class="overlapIds.has(seg.deviceId) ? 'u-rect occupied u-overlap' : 'u-rect occupied'"
             @click="onRectClick(seg)"
@@ -369,21 +368,47 @@ function onDrop(e) {
 <style scoped>
 .u-slot-map {
   position: relative;
+  /* 主题令牌：浅色模式默认值；深色模式由下方 .dark / [data-theme="dark"] 选择器覆盖 */
+  --u-svg-bg: #ffffff;
+  --u-svg-border: #ebeef5;
+  --u-grid: #eef2f7;
+  --u-grid-top: #cbd5e1;
+  --u-free-fill: #f4f6fa;
+  --u-free-stroke: #dcdfe6;
+  --u-label: #909399;
+  --u-free-text: #c0c4cc;
+  --u-dev-stroke: #303133;
+  --u-drop-bg: #f5faff;
+  --u-drop-outline: #409eff;
+}
+.dark .u-slot-map,
+[data-theme='dark'] .u-slot-map {
+  --u-svg-bg: hsl(var(--card));
+  --u-svg-border: hsl(var(--border));
+  --u-grid: rgba(255, 255, 255, 0.06);
+  --u-grid-top: rgba(255, 255, 255, 0.14);
+  --u-free-fill: rgba(255, 255, 255, 0.04);
+  --u-free-stroke: rgba(255, 255, 255, 0.14);
+  --u-label: #94a3b8;
+  --u-free-text: #64748b;
+  --u-dev-stroke: rgba(255, 255, 255, 0.22);
+  --u-drop-bg: hsl(var(--primary) / 0.16);
+  --u-drop-outline: hsl(var(--primary));
 }
 .u-svg {
   display: block;
-  background: #fff;
-  border: 1px solid #ebeef5;
+  background: var(--u-svg-bg);
+  border: 1px solid var(--u-svg-border);
   border-radius: 6px;
 }
 .u-svg.is-drop-target {
-  outline: 2px dashed #409eff;
+  outline: 2px dashed var(--u-drop-outline);
   outline-offset: -3px;
-  background: #f5faff;
+  background: var(--u-drop-bg);
 }
 .u-label {
   font-size: 11px;
-  fill: #909399;
+  fill: var(--u-label);
   font-variant-numeric: tabular-nums;
   font-weight: 500;
 }
@@ -400,7 +425,7 @@ function onDrop(e) {
 }
 .u-free {
   font-size: 12px;
-  fill: #c0c4cc;
+  fill: var(--u-free-text);
   pointer-events: none;
 }
 .u-rect {
@@ -415,7 +440,7 @@ function onDrop(e) {
 }
 .u-drop-hint {
   font-size: 12px;
-  fill: #409eff;
+  fill: var(--u-drop-outline);
   font-weight: 600;
   pointer-events: none;
 }
