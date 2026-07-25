@@ -86,7 +86,7 @@ export const rackImportConfig = {
       key: 'status',
       label: '状态',
       required: false,
-      hint: '可用/不可用/维护中/空调柜/电柜，默认可用',
+      hint: '可用/不可用/制冷机柜/配电机柜，默认可用',
     },
     { key: 'grid_row', label: '平面行', required: false, type: 'integer' },
     { key: 'grid_col', label: '平面列', required: false, type: 'integer' },

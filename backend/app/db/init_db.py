@@ -358,12 +358,37 @@ async def _migrate_rack_status(session: AsyncSession) -> None:
     """机柜业务状态迁移：删除「空闲」状态，历史「空闲」机柜统一归并为「可用」。
 
     业务状态 ``status`` 为 VARCHAR 字符串列，无需加列；仅将存量 ``空闲`` 值
-    UPDATE 为 ``可用``，使枚举取值收敛到新的合法集合（可用/不可用/维护中/空调柜/电柜）。
-    新导入或新建的机柜不再可能出现「空闲」。
+    UPDATE 为 ``可用``，使枚举取值收敛到当时的合法集合（可用/不可用/维护中/空调柜/电柜）。
+    后续 ``0005_status_rename`` 进一步将「维护中」归并、「空调柜/电柜」重命名为现枚举
+    （可用/不可用/制冷机柜/配电机柜）。新导入或新建的机柜不再可能出现「空闲」。
     """
     await session.execute(
         text("UPDATE racks SET status=:new WHERE status=:old"),
         {"old": "空闲", "new": "可用"},
+    )
+    await session.flush()
+
+
+async def _migrate_status_rename(session: AsyncSession) -> None:
+    """机柜业务状态重命名迁移（0005）：收敛历史枚举取值到新命名。
+
+    - 已删除的「维护中」归并为「可用」（维护态不再作为独立枚举，避免存量机柜悬空）。
+    - 「空调柜」重命名为「制冷机柜」。
+    - 「电柜」重命名为「配电机柜」。
+    ``status`` 为 VARCHAR 字符串列，无需加列；仅 UPDATE 存量取值以对齐新枚举
+    （可用/不可用/制冷机柜/配电机柜）。幂等：重复执行对这些值无副作用。
+    """
+    await session.execute(
+        text("UPDATE racks SET status=:new WHERE status=:old"),
+        {"old": "维护中", "new": "可用"},
+    )
+    await session.execute(
+        text("UPDATE racks SET status=:new WHERE status=:old"),
+        {"old": "空调柜", "new": "制冷机柜"},
+    )
+    await session.execute(
+        text("UPDATE racks SET status=:new WHERE status=:old"),
+        {"old": "电柜", "new": "配电机柜"},
     )
     await session.flush()
 
@@ -458,4 +483,5 @@ MIGRATIONS: list = [
     ("0002_facility", _migrate_facility),
     ("0003_power", _migrate_power),
     ("0004_rack_status", _migrate_rack_status),
+    ("0005_status_rename", _migrate_status_rename),
 ]

@@ -223,9 +223,8 @@ function utilColor(rack) {
   return meta.usageColor(u)
 }
 function tileBorder(rack) {
-  if (rack.status === '维护中') return 'border-amber-300'
   if (rack.status === '不可用') return 'border-red-400'
-  if (rack.status === '空调柜' || rack.status === '电柜') return 'border-sky-300'
+  if (rack.status === '制冷机柜' || rack.status === '配电机柜') return 'border-sky-300'
   return 'border-border'
 }
 

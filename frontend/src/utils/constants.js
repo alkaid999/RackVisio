@@ -25,27 +25,24 @@ export const ROOM_STATUS_OPTIONS = [
 ]
 
 // ============ 机柜业务状态（用户维护枚举，支持后续扩展）============
-// 可用=绿、不可用=红、维护中=橙、空调柜=蓝、电柜=琥珀（与后端 RackBizStatus 取值严格一致）
+// 可用=绿、不可用=红、制冷机柜=蓝、配电机柜=琥珀（与后端 RackBizStatus 取值严格一致）
 export const RACK_STATUS_OPTIONS = [
   { value: '可用', label: '可用' },
   { value: '不可用', label: '不可用' },
-  { value: '维护中', label: '维护中' },
-  { value: '空调柜', label: '空调柜' },
-  { value: '电柜', label: '电柜' },
+  { value: '制冷机柜', label: '制冷机柜' },
+  { value: '配电机柜', label: '配电机柜' },
 ]
 export const RACK_STATUS_COLORS = reactive({
   可用: '#22c55e',
   不可用: '#ef4444',
-  维护中: '#e6a23c',
-  空调柜: '#38bdf8',
-  电柜: '#f59e0b',
+  制冷机柜: '#38bdf8',
+  配电机柜: '#f59e0b',
 })
 export const RACK_STATUS_LABELS = reactive({
   可用: '可用',
   不可用: '不可用',
-  维护中: '维护中',
-  空调柜: '空调柜',
-  电柜: '电柜',
+  制冷机柜: '制冷机柜',
+  配电机柜: '配电机柜',
 })
 
 // ============ 设备类型（与 backend DeviceType 取值严格一致）============

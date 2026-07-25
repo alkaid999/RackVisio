@@ -47,9 +47,8 @@ FACILITY_TYPES = {k for k, v in DEVICE_TYPE_META.items() if v.get("asset") is Fa
 RACK_STATUS_META: dict[str, dict] = {
     "可用": {"label": "可用", "color": "#22c55e"},
     "不可用": {"label": "不可用", "color": "#ef4444"},
-    "维护中": {"label": "维护中", "color": "#e6a23c"},
-    "空调柜": {"label": "空调柜", "color": "#38bdf8"},
-    "电柜": {"label": "电柜", "color": "#f59e0b"},
+    "制冷机柜": {"label": "制冷机柜", "color": "#38bdf8"},
+    "配电机柜": {"label": "配电机柜", "color": "#f59e0b"},
 }
 
 # 机柜使用率阈值（%）：低于 warn 绿、warn~crit 黄、高于 crit 红。

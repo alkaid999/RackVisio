@@ -66,6 +66,7 @@ node_modules/
 .cache/
 dist/
 dist_bak/
+dist_old_*/
 dist-verify/
 dist-prod/
 build/

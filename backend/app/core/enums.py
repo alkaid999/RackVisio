@@ -20,15 +20,14 @@ class RoomStatus(str, Enum):
 class RackBizStatus(str, Enum):
     """机柜业务状态（用户维护，可扩展）。
 
-    面向政企自建机房 / IDC 租用场景：可用、不可用、维护中、空调柜、电柜。
+    面向政企自建机房 / IDC 租用场景：可用、不可用、制冷机柜、配电机柜。
     新增状态只需在此追加枚举值，并同步前端 ``RACK_STATUS_OPTIONS`` 即可（枚举即配置）。
     """
 
     AVAILABLE = "可用"
     UNAVAILABLE = "不可用"
-    MAINTENANCE = "维护中"
-    AC = "空调柜"
-    POWER = "电柜"
+    AC = "制冷机柜"
+    POWER = "配电机柜"
 
 
 class RackStatus(str, Enum):
