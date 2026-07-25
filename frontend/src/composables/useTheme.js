@@ -13,7 +13,7 @@ mql.addEventListener('change', (e) => {
 const isDark = computed(() => theme.value === 'dark' || (theme.value === 'system' && systemDark.value))
 
 let first = true
-function apply() {
+function applyTheme() {
   const html = document.documentElement
   if (first) {
     // 首帧不播过渡，避免加载闪烁（index.html 内联脚本已先置好 class）
@@ -21,11 +21,17 @@ function apply() {
     first = false
     return
   }
-  html.classList.add('theme-transition')
-  html.classList.toggle('dark', isDark.value)
-  window.setTimeout(() => html.classList.remove('theme-transition'), 420)
+  // 用 View Transitions API 做整页交叉淡入：仅一次合成层变换（GPU 合成），
+  // 不再给全页每个元素挂 0.4s 过渡，彻底消除逐节点重绘掉帧的卡顿。
+  // 不支持的浏览器直接切换 class：瞬时完成、零延迟、无掉帧。
+  const swap = () => html.classList.toggle('dark', isDark.value)
+  if (typeof document.startViewTransition === 'function') {
+    document.startViewTransition(swap)
+  } else {
+    swap()
+  }
 }
-watch(isDark, apply)
+watch(isDark, applyTheme)
 
 export function useTheme() {
   function setTheme(value) {

@@ -81,13 +81,12 @@
     @apply bg-background text-foreground font-sans antialiased;
     font-feature-settings: 'cv11', 'ss01';
   }
-  /* 主题切换期间的平滑过渡（由 useTheme 短暂挂载 .theme-transition） */
-  html.theme-transition,
-  html.theme-transition *,
-  html.theme-transition *::before,
-  html.theme-transition *::after {
-    transition: background-color 0.4s ease, border-color 0.4s ease, color 0.4s ease,
-      fill 0.4s ease, stroke 0.4s ease !important;
+  /* 主题切换：优先 View Transitions API（整页快照交叉淡入，GPU 合成，无逐元素重绘卡顿）。
+     不支持的浏览器由 useTheme 直接切换 class，瞬时完成、零延迟、无掉帧。
+     不再使用全局 * 过渡（旧实现会让页面每个元素都跑 0.4s 过渡，导致明显卡顿）。 */
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation-duration: 0.22s;
   }
   /* 选中态配色跟随主题 */
   ::selection {
