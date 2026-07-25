@@ -204,6 +204,7 @@
               <span v-if="lk.cable_length" class="text-xs text-muted-foreground">{{ lk.cable_length }}</span>
             </div>
             <div v-if="canEditLink" class="link-view__actions">
+              <Button variant="ghost" size="icon-sm" aria-label="编辑" title="编辑" @click="openEditLink(lk)"><Pencil class="h-3.5 w-3.5" /></Button>
               <Button variant="ghost" size="icon-sm" class="text-destructive hover:text-destructive" aria-label="断开" title="断开" @click="onUnlink(lk)"><Unlink class="h-3.5 w-3.5" /></Button>
             </div>
           </li>
@@ -309,6 +310,16 @@
           </div>
         </template>
       </Dialog>
+
+      <!-- 编辑链路弹窗（设备视角：复用连接总览的 LinkFormDialog，编辑模式仅改链路属性） -->
+      <LinkFormDialog
+        v-model:visible="linkEditVisible"
+        mode="edit"
+        :link-id="linkEditTarget?.id"
+        :link="linkEditTarget"
+        :context-device-id="deviceId"
+        @saved="onLinkSaved"
+      />
     </template>
   </div>
 </template>
@@ -333,6 +344,7 @@ import InterfaceDetailDialog from '@/components/device/InterfaceDetailDialog.vue
 import DeviceTypeTag from '@/components/device/DeviceTypeTag.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import DeviceForm from '@/views/device/DeviceForm.vue'
+import LinkFormDialog from '@/views/link/LinkFormDialog.vue'
 import { Network, ServerCog, Cable, ArrowRight, Unlink } from 'lucide-vue-next'
 import {
   Pencil,
@@ -402,6 +414,9 @@ const listRef = ref(null)
 // 设备视角链路（本设备接口 → 对端设备/接口）。
 const links = ref([])
 const linkLoading = ref(false)
+// 链路编辑弹窗状态（复用连接总览的 LinkFormDialog，编辑模式仅改链路属性，不改两端）。
+const linkEditVisible = ref(false)
+const linkEditTarget = ref(null)
 
 // 添加 / 编辑接口弹窗状态。
 const formOpen = ref(false)
@@ -479,6 +494,34 @@ async function onUnlink(lk) {
   } catch (e) {
     // 拦截器提示
   }
+}
+// 设备视角链路为 DeviceLinkView（local_*/peer_* 归一），转成 LinkFormDialog 编辑模式期望的 LinkDetailOut 形状。
+// local = 本设备（source），peer = 对端（target）；半链路（无 peer_device_id）时 target_external 取对端名。
+function toLinkDetail(lk) {
+  const isHalf = !lk.peer_device_id
+  return {
+    id: lk.link_id,
+    source_device_id: deviceId,
+    source_device_name: device.value?.name || '',
+    source_interface_id: lk.local_interface_id,
+    source_interface_name: lk.local_interface_name,
+    target_device_id: lk.peer_device_id || null,
+    target_device_name: lk.peer_device_name || null,
+    target_interface_id: lk.peer_interface_id || null,
+    target_interface_name: lk.peer_interface_name || null,
+    target_external: isHalf ? (lk.peer_device_name || '外部') : null,
+    medium: lk.medium,
+    connector_type: lk.connector_type,
+    cable_length: lk.cable_length,
+    remark: lk.remark,
+  }
+}
+function openEditLink(lk) {
+  linkEditTarget.value = toLinkDetail(lk)
+  linkEditVisible.value = true
+}
+function onLinkSaved() {
+  fetchLinks()
 }
 
 // —— 接口数据（自由排布，无模板）——

@@ -84,7 +84,7 @@
           <TableRow>
             <TableHead class="w-36">本端设备</TableHead>
             <TableHead class="w-28">本端接口</TableHead>
-            <TableHead class="w-24">介质</TableHead>
+            <TableHead class="w-32">介质</TableHead>
             <TableHead class="w-24">连接器</TableHead>
             <TableHead class="w-24">线缆长度</TableHead>
             <TableHead class="w-36">对端设备</TableHead>
@@ -110,6 +110,7 @@
                 <Badge
                   :style="{ backgroundColor: (LINK_MEDIUM_COLORS[row.medium] || '#909399') + '22', color: LINK_MEDIUM_COLORS[row.medium] || '#909399' }"
                   variant="outline"
+                  class="whitespace-nowrap"
                 >{{ LINK_MEDIUM_LABELS[row.medium] || row.medium }}</Badge>
               </template>
               <span v-else class="text-xs text-muted-foreground">—</span>
