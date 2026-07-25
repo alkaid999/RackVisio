@@ -146,11 +146,14 @@ function buildItems() {
   return items
 }
 
-// 关闭时清空错误提示，方便下次重填。
+// 关闭时清空错误提示；锁定机房打开时预填机房并禁用修改。
 watch(
   () => props.visible,
   (v) => {
-    if (!v) errors.room_id = ''
+    if (!v) {
+      errors.room_id = ''
+      return
+    }
   }
 )
 
