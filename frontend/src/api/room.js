@@ -30,6 +30,10 @@ export default {
   racks(id) {
     return http.get(`/rooms/${id}/racks`)
   },
+  // 整机房设备一次性返回（替代逐机柜 N+1 请求）。data = [DeviceOut]，每条含 current_rack_id / current_start_u。
+  devicesInRoom(id) {
+    return http.get(`/rooms/${id}/devices`)
+  },
   // 在机房下创建机柜（room_id 由路径提供）。
   createRack(id, payload) {
     return http.post(`/rooms/${id}/racks`, payload)

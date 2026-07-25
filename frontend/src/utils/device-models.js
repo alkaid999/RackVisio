@@ -26,58 +26,72 @@ const BEZEL = 0x0d1117        // 前面板内嵌深色
 const FRAME = 0x11151d        // 机柜框架
 const DARK_METAL = 0x1f2633   // 金属件
 
-// 穿孔金属贴图（用于前门、侧板、后门）。每次新建，避免 dispose 时误删共享纹理。
+// 穿孔金属贴图（用于前门、侧板、后门）。全局单例共享：每台机柜多次引用同一贴图，
+// 避免重复创建 Canvas + 重复上传 GPU（机柜多时为最大纹理开销来源之一）。
+let _perfTexture = null
 function perfTexture() {
-  return makeCanvasTexture(
-    (ctx, w, h) => {
-      ctx.fillStyle = '#2a3242'
-      ctx.fillRect(0, 0, w, h)
-      ctx.fillStyle = '#070a10'
-      const step = 9
-      for (let y = step / 2; y < h; y += step) {
-        for (let x = step / 2; x < w; x += step) {
-          ctx.beginPath()
-          ctx.arc(x, y, 2.0, 0, Math.PI * 2)
-          ctx.fill()
+  if (!_perfTexture) {
+    _perfTexture = makeCanvasTexture(
+      (ctx, w, h) => {
+        ctx.fillStyle = '#2a3242'
+        ctx.fillRect(0, 0, w, h)
+        ctx.fillStyle = '#070a10'
+        const step = 9
+        for (let y = step / 2; y < h; y += step) {
+          for (let x = step / 2; x < w; x += step) {
+            ctx.beginPath()
+            ctx.arc(x, y, 2.0, 0, Math.PI * 2)
+            ctx.fill()
+          }
         }
-      }
-    },
-    64,
-    128
-  )
+      },
+      64,
+      128
+    )
+    _perfTexture.__shared = true
+  }
+  return _perfTexture
 }
 
 // 方孔导轨贴图（竖向两列方孔 + 每个 U 编号），U1 在底部、向上递增（与设备落位方向一致）。
 // 画布高度随 U 数动态加高，保证每个 U 的编号字号可读（不再像以前每 5U 才标一个）。
+// 按 totalU 缓存共享：同 U 数机柜（绝大多数同机房一致）复用同一贴图，避免重复上传 GPU。
+const _railTextureCache = new Map()
 function railTexture(totalU = 42) {
-  const W = 64
-  const H = 512 * Math.ceil(totalU / 21) // 每 ~21U 给 512px 高度，确保 11px 字号不拥挤
-  return makeCanvasTexture(
-    (ctx, w, h) => {
-      ctx.fillStyle = '#9ca6b8'
-      ctx.fillRect(0, 0, w, h)
-      const hole = 7
-      const pad = 12
-      const mx = 10
-      const gap = (h - 2 * pad) / totalU
-      // 方孔 + U 编号：U1 在底部向上排布，每个 U 都标注
-      ctx.font = 'bold 11px sans-serif'
-      ctx.textAlign = 'center'
-      ctx.textBaseline = 'middle'
-      for (let u = 1; u <= totalU; u++) {
-        const y = h - pad - (u - 1) * gap
-        // 方孔（左右两列）
-        ctx.fillStyle = '#0b0f17'
-        ctx.fillRect(mx, y, hole, hole)
-        ctx.fillRect(w - mx - hole, y, hole, hole)
-        // 每个 U 编号（深色，落在两列方孔之间）
-        ctx.fillStyle = '#1a2333'
-        ctx.fillText(String(u), w / 2, y + hole / 2)
-      }
-    },
-    W,
-    H
-  )
+  let tex = _railTextureCache.get(totalU)
+  if (!tex) {
+    const W = 64
+    const H = 512 * Math.ceil(totalU / 21) // 每 ~21U 给 512px 高度，确保 11px 字号不拥挤
+    tex = makeCanvasTexture(
+      (ctx, w, h) => {
+        ctx.fillStyle = '#9ca6b8'
+        ctx.fillRect(0, 0, w, h)
+        const hole = 7
+        const pad = 12
+        const mx = 10
+        const gap = (h - 2 * pad) / totalU
+        // 方孔 + U 编号：U1 在底部向上排布，每个 U 都标注
+        ctx.font = 'bold 11px sans-serif'
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+        for (let u = 1; u <= totalU; u++) {
+          const y = h - pad - (u - 1) * gap
+          // 方孔（左右两列）
+          ctx.fillStyle = '#0b0f17'
+          ctx.fillRect(mx, y, hole, hole)
+          ctx.fillRect(w - mx - hole, y, hole, hole)
+          // 每个 U 编号（深色，落在两列方孔之间）
+          ctx.fillStyle = '#1a2333'
+          ctx.fillText(String(u), w / 2, y + hole / 2)
+        }
+      },
+      W,
+      H
+    )
+    tex.__shared = true
+    _railTextureCache.set(totalU, tex)
+  }
+  return tex
 }
 
 // 材质工厂
@@ -438,7 +452,7 @@ export function setDeviceSelected(group, on, color = SELECT_COLOR) {
   if (plane && plane.material) {
     const d = group.userData.device
     const tex = badgeTexture(d, group.userData.accentHex, on, color)
-    if (plane.material.map) plane.material.map.dispose()
+    if (plane.material.map && !plane.material.map.__shared) plane.material.map.dispose()
     plane.material.map = tex
     plane.material.needsUpdate = true
   }
@@ -723,38 +737,50 @@ function drawGenericFace(ctx, W, H, ac) {  const padX = W * 0.1
 }
 
 // 真实前面板贴图（按类型选择细节绘制）
+// 真实前面板贴图：按「类型 + 粗粒度宽高比」缓存共享，避免逐设备重复上传 GPU
+// （数百台设备 → 仅若干张贴图）。accent 由类型决定（DEVICE_TYPE_COLORS[type]），
+// 同 key 内一致；选中态仅改材质 emissive，不替换此贴图，故可安全跨设备共享。
+const _faceTextureCache = new Map()
 function realisticFaceTexture(device, w, h, accentHex) {
   const type = device.device_type || 'other'
-  const ac = '#' + (accentHex & 0xffffff).toString(16).padStart(6, '0')
-  const cw = 1024
-  const ch = Math.max(160, Math.round((1024 * h) / w))
-  return makeCanvasTexture(
-    (ctx, W, H) => {
-      const grad = ctx.createLinearGradient(0, 0, 0, H)
-      grad.addColorStop(0, '#222a38')
-      grad.addColorStop(0.5, '#161c27')
-      grad.addColorStop(1, '#0d1219')
-      ctx.fillStyle = grad
-      ctx.fillRect(0, 0, W, H)
-      ctx.strokeStyle = 'rgba(255,255,255,0.06)'
-      ctx.lineWidth = 4
-      ctx.strokeRect(6, 6, W - 12, H - 12)
-      // 顶部类型色品牌条（暗示类型/品牌，无英文）
-      ctx.fillStyle = ac
-      ctx.fillRect(0, 0, W, 10)
-      if (type === 'server') drawServerFace(ctx, W, H, ac)
-      else if (type === 'switch') drawSwitchFace(ctx, W, H, ac)
-      else if (type === 'router') drawRouterFace(ctx, W, H, ac)
-      else if (type === 'security') drawSecurityFace(ctx, W, H, ac)
-      else if (type === 'patch') drawPatchFace(ctx, W, H, ac)
-      else if (type === 'odf') drawOdfFace(ctx, W, H, ac)
-      // 其他设施（非资产）前面板近似配线架
-      else if (type === 'other_facility') drawPatchFace(ctx, W, H, ac)
-      else drawGenericFace(ctx, W, H, ac)
-    },
-    cw,
-    ch
-  )
+  const aspect = w / h
+  const key = type + '@' + aspect.toFixed(2)
+  let tex = _faceTextureCache.get(key)
+  if (!tex) {
+    const ac = '#' + (accentHex & 0xffffff).toString(16).padStart(6, '0')
+    const cw = 1024
+    const ch = Math.max(160, Math.round((1024 * h) / w))
+    tex = makeCanvasTexture(
+      (ctx, W, H) => {
+        const grad = ctx.createLinearGradient(0, 0, 0, H)
+        grad.addColorStop(0, '#222a38')
+        grad.addColorStop(0.5, '#161c27')
+        grad.addColorStop(1, '#0d1219')
+        ctx.fillStyle = grad
+        ctx.fillRect(0, 0, W, H)
+        ctx.strokeStyle = 'rgba(255,255,255,0.06)'
+        ctx.lineWidth = 4
+        ctx.strokeRect(6, 6, W - 12, H - 12)
+        // 顶部类型色品牌条（暗示类型/品牌，无英文）
+        ctx.fillStyle = ac
+        ctx.fillRect(0, 0, W, 10)
+        if (type === 'server') drawServerFace(ctx, W, H, ac)
+        else if (type === 'switch') drawSwitchFace(ctx, W, H, ac)
+        else if (type === 'router') drawRouterFace(ctx, W, H, ac)
+        else if (type === 'security') drawSecurityFace(ctx, W, H, ac)
+        else if (type === 'patch') drawPatchFace(ctx, W, H, ac)
+        else if (type === 'odf') drawOdfFace(ctx, W, H, ac)
+        // 其他设施（非资产）前面板近似配线架
+        else if (type === 'other_facility') drawPatchFace(ctx, W, H, ac)
+        else drawGenericFace(ctx, W, H, ac)
+      },
+      cw,
+      ch
+    )
+    tex.__shared = true
+    _faceTextureCache.set(key, tex)
+  }
+  return tex
 }
 
 // 真实前面板平面（覆盖 bezel 前缘，支持选中 emissive 发光）

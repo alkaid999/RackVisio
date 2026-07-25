@@ -671,21 +671,26 @@ async function loadRoom(id) {
     room.value = r
     racks.value = rk
     stats.value = st
-    // 加载每个机柜的设备（用于机房内挂载展示 + 设备总览）
-    const devLists = await Promise.all(
-      rk.map((rack) => rackApi.devices(rack.id).catch(() => []))
-    )
+    // 整机房设备一次性拉取（单请求替代逐机柜 N+1），按 current_rack_id 分组到各机柜
+    const devs = await roomApi.devicesInRoom(id)
     const map = {}
     const counts = {}
-    rk.forEach((rack, i) => {
-      map[rack.id] = devLists[i] || []
-      counts[rack.id] = (devLists[i] || []).length
+    rk.forEach((rack) => {
+      const list = (devs || []).filter((d) => d.current_rack_id === rack.id)
+      map[rack.id] = list
+      counts[rack.id] = list.length
     })
     rackDevices.value = map
     deviceCountCache.value = counts
-    if (engine) buildScene()
-  } finally {
+    if (engine) {
+      // 分帧渐进构建；loading 由构建完成回调关闭（见 buildScene → buildRoomScene）
+      buildScene()
+    } else {
+      loading.value = false
+    }
+  } catch (e) {
     loading.value = false
+    console.error('[Room3D] loadRoom failed', e)
   }
 }
 
@@ -727,24 +732,30 @@ function buildScene() {
   hoveredRackId.value = null
   hoveredDeviceId.value = null
 
-  buildRoomScene()
-
-  // 重建后恢复已选中设备的高亮（描边 + 自发光 + 书签高亮），避免切换场景后丢失
-  if (selectedDeviceId.value) {
-    const g = deviceMeshes.find((m) => m.userData.id === selectedDeviceId.value)
-    if (g) setDeviceSelected(g, true)
-    else selectedDeviceId.value = null // 设备已不在当前场景，清除脏选中态
-  }
-
-  // 若当前已选中设备，重建其关联链路 3D 线缆
-  if (selectedDeviceId.value && selectedDeviceDetail.value) buildCables()
+  buildRoomScene(() => {
+    // 重建后恢复已选中设备的高亮（描边 + 自发光 + 书签高亮），避免切换场景后丢失
+    if (selectedDeviceId.value) {
+      const g = deviceMeshes.find((m) => m.userData.id === selectedDeviceId.value)
+      if (g) setDeviceSelected(g, true)
+      else selectedDeviceId.value = null // 设备已不在当前场景，清除脏选中态
+    }
+    // 若当前已选中设备，重建其关联链路 3D 线缆
+    if (selectedDeviceId.value && selectedDeviceDetail.value) buildCables()
+    // 分帧渐进构建完成 → 关闭加载遮罩（首屏 engine 初始化时 loading 已为 false，属幂等）
+    loading.value = false
+  })
 }
 
 // —— 机房总览场景：机柜按真实比例建模、列内无间隙紧密排列、正面朝走廊，内部挂载设备 ——
-function buildRoomScene() {
+// onComplete：全部分帧构建完成后的回调（恢复选中高亮 + 关 loading）。
+let buildSeq = 0 // 构建序列号：切换机房时自增，使旧的渐进构建自动作废
+function buildRoomScene(onComplete) {
   const room_ = room.value
   const ra = racks.value
-  if (!room_ || !ra.length) return
+  if (!room_ || !ra.length) {
+    if (onComplete) onComplete()
+    return
+  }
 
   const { map: layout, cols: colN, rows: rowN, aisleZs } = computeRackLayout(ra)
 
@@ -806,64 +817,81 @@ function buildRoomScene() {
   // 场景建完后立即应用当前主题配色
   apply3DTheme(isDark.value)
 
+  // —— 分帧渐进构建机柜 + 设备 ——
+  // 地面/墙体/灯光同步建（对象少）；机柜（每台 20+ Mesh）按时间预算分批，
+  // 每帧最多约 8ms 后让出主线程，避免机柜多时页面冻结卡死。
+  const mySeq = ++buildSeq
+  let i = 0
+  const total = ra.length
+  function step() {
+    if (mySeq !== buildSeq || disposed) return // 已被新一次构建取代（切换机房）→ 作废
+    const t0 = performance.now()
+    while (i < total) {
+      const rack = ra[i++]
+      const { x, z, rot } = layout[rack.id]
+      const h = (rack.total_u || 42) * U_H
+      maxH = Math.max(maxH, h)
 
-  // 机柜：正面无门（直视内部设备），左右/后面为穿孔板遮挡；内部挂载设备；列内无间隙、正面朝走廊。
-  ra.forEach((rack) => {
-    const { x, z, rot } = layout[rack.id]
-    const h = (rack.total_u || 42) * U_H
-    maxH = Math.max(maxH, h)
+      const sc = new THREE.Color(statusColor(rack.status)).getHex()
+      const ratio = rack.total_u ? rack.used_u / rack.total_u : 0
 
-    const sc = new THREE.Color(statusColor(rack.status)).getHex()
-    const ratio = rack.total_u ? rack.used_u / rack.total_u : 0
-
-    const g = buildCabinet({
-      width: RACK_W,
-      depth: RACK_D,
-      height: h,
-      uHeight: U_H,
-      plinthHeight: PLINTH_H,
-      totalU: rack.total_u || 42,
-      frontDoor: 'none',
-      sidePanel: 'perforated',
-      showBack: true,
-      showRails: true,
-      showCasters: true,
-      statusColor: sc,
-      occupancyRatio: ratio,
-    })
-    g.position.set(x, 0, z)
-    g.rotation.y = rot
-    g.userData.rack = rack
-    g.userData.id = rack.id
-
-    // 机柜内挂载设备（设备与机柜关联完整呈现）
-    const devs = rackDevices.value[rack.id] || []
-    devs.forEach((d) => {
-      if (d.current_start_u == null || d.u_height == null) return
-      const dg = buildDevice(d, {
+      const g = buildCabinet({
+        width: RACK_W,
+        depth: RACK_D,
+        height: h,
         uHeight: U_H,
-        width: RACK_W * 0.9,
-        depth: RACK_D * 0.82,
-        height: d.u_height * U_H * 0.92,
+        plinthHeight: PLINTH_H,
+        totalU: rack.total_u || 42,
+        frontDoor: 'none',
+        sidePanel: 'perforated',
+        showBack: true,
+        showRails: true,
+        showCasters: true,
+        statusColor: sc,
+        occupancyRatio: ratio,
       })
-      setDevicePosition(dg, d.current_start_u, d.u_height, { uH: U_H, plinthH: PLINTH_H })
-      g.add(dg)
-      // 同时登记到 deviceMeshes，使总览模式下的设备悬停 / 选中高亮可定位（与设备总览模式共用同一注册表）
-      deviceMeshes.push(dg)
-    })
+      g.position.set(x, 0, z)
+      g.rotation.y = rot
+      g.userData.rack = rack
+      g.userData.id = rack.id
 
-    rackGroups.push(g)
-    worldGroup.add(g)
+      // 机柜内挂载设备（设备与机柜关联完整呈现）
+      const devs = rackDevices.value[rack.id] || []
+      devs.forEach((d) => {
+        if (d.current_start_u == null || d.u_height == null) return
+        const dg = buildDevice(d, {
+          uHeight: U_H,
+          width: RACK_W * 0.9,
+          depth: RACK_D * 0.82,
+          height: d.u_height * U_H * 0.92,
+        })
+        setDevicePosition(dg, d.current_start_u, d.u_height, { uH: U_H, plinthH: PLINTH_H })
+        g.add(dg)
+        // 同时登记到 deviceMeshes，使总览模式下的设备悬停 / 选中高亮可定位（与设备总览模式共用同一注册表）
+        deviceMeshes.push(dg)
+      })
 
-    // 机柜名称标签：与设备书签同款卡片（毛玻璃 + 3px 状态色左边框 + 圆角），
-    // 悬浮于柜顶；CSS2D 始终正对相机且不被 3D 几何遮挡，随视角自适应可见。
-    const rackLabel = makeRackLabel(rack.name, { accentColor: '#' + sc.toString(16).padStart(6, '0') })
-    rackLabel.position.set(0, h + PLINTH_H + 0.45, 0)
-    g.add(rackLabel)
-  })
+      rackGroups.push(g)
+      worldGroup.add(g)
 
-  // 相机取景（拉近以放大机房整体视觉占比）
-  frameRoomView()
+      // 机柜名称标签：与设备书签同款卡片（毛玻璃 + 3px 状态色左边框 + 圆角），
+      // 悬浮于柜顶；CSS2D 始终正对相机且不被 3D 几何遮挡，随视角自适应可见。
+      const rackLabel = makeRackLabel(rack.name, { accentColor: '#' + sc.toString(16).padStart(6, '0') })
+      rackLabel.position.set(0, h + PLINTH_H + 0.45, 0)
+      g.add(rackLabel)
+
+      // 时间预算耗尽 → 让出主线程，下一帧继续
+      if (performance.now() - t0 > 8) break
+    }
+    if (i < total) {
+      requestAnimationFrame(step)
+    } else {
+      // 相机取景（拉近以放大机房整体视觉占比）
+      frameRoomView()
+      if (onComplete) onComplete()
+    }
+  }
+  requestAnimationFrame(step)
 }
 
 // —— 设备总览场景：设备按所属机柜的实际位置摆放在对应坐标（不构建机柜模型、不显示机柜名称标签） ——
@@ -1487,7 +1515,7 @@ function disposeWorld(group) {
       mats.forEach((m) => {
         for (const key in m) {
           const val = m[key]
-          if (val && val.isTexture) val.dispose()
+          if (val && val.isTexture && !val.__shared) val.dispose()
         }
         m.dispose()
       })

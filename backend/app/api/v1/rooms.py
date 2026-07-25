@@ -13,6 +13,7 @@ from app.schemas.common import ImportResult, ok, paginated
 from app.schemas.rack import RackCreate, RackOut
 from app.schemas.room import RoomCreate, RoomImportRowsRequest, RoomOut, RoomStats, RoomUpdate
 from app.services.dashboard_service import DashboardService
+from app.services.device_service import DeviceService
 from app.services.rack_service import RackService
 from app.services.room_service import RoomService
 
@@ -107,6 +108,18 @@ async def room_racks(room_id: str, db: AsyncSession = Depends(get_db)):
     await svc.get_room(room_id)  # 校验存在
     racks = await RackService(db).list_racks(room_id)
     return ok([RackOut.model_validate(r) for r in racks])
+
+
+@router.get("/{room_id}/devices", dependencies=[Depends(require_permission("room:view"))])
+async def room_devices(room_id: str, db: AsyncSession = Depends(get_db)):
+    """整机房设备一次性返回（替代前端逐机柜 N+1 请求）。
+
+    返回该机房内所有已上架设备，每条携带 ``current_rack_id`` / ``current_start_u``，
+    前端按 ``current_rack_id`` 分组即可定位到具体机柜与 U 位。
+    """
+    await RoomService(db).get_room(room_id)  # 校验存在
+    devices, _ = await DeviceService(db).list_devices(room_id=room_id, size=100000)
+    return ok([d.model_dump() for d in devices])
 
 
 @router.post("/{room_id}/racks", dependencies=[Depends(require_permission("rack:edit"))])

@@ -449,7 +449,7 @@ function disposeWorld(group) {
       mats.forEach((m) => {
         for (const key in m) {
           const val = m[key]
-          if (val && val.isTexture) val.dispose()
+          if (val && val.isTexture && !val.__shared) val.dispose()
         }
         m.dispose()
       })
