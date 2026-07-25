@@ -9,6 +9,7 @@
 //
 // 视图层只需调用 buildCabinet / buildDevice / setDevicePosition，并摆放返回的 Group。
 import * as THREE from 'three'
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { DEVICE_TYPE_COLORS, DEVICE_TYPE_LABELS, isFacilityType } from '@/utils/constants'
 import { makeCanvasTexture } from '@/utils/three-setup'
 
@@ -153,19 +154,34 @@ export function buildCabinet(options = {}) {
   const halfD = d / 2
   const y0 = plinthH
 
+  // —— 几何合并：按材质分桶收集各部件几何（已烘焙其局部变换），
+  //    构建完成后每个材质桶 merge 为单个 Mesh，将机柜 Draw Call 从 ~20 降到 ~8。
+  //    关键：每个材质仍为「每台机柜独立实例」(不跨机柜共享)，否则 hover/选中的
+  //    per-object 自发光高亮会串色（一台高亮、整片发光）。 ——
+  const buckets = new Map()
+  // addPart 直接对传入几何烘焙变换（每个部件独立 new 几何，不复用，避免二次平移错误）
+  function addPart(mat, geo, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0) {
+    if (rx) geo.rotateX(rx)
+    if (ry) geo.rotateY(ry)
+    if (rz) geo.rotateZ(rz)
+    geo.translate(x, y, z)
+    let arr = buckets.get(mat)
+    if (!arr) { arr = []; buckets.set(mat, arr) }
+    arr.push(geo)
+  }
+
+  // 每台机柜独立材质实例（不跨机柜共享，保证高亮不串色）
+  const frameMat = frameMetal()
+  const darkMat = darkMetal()
+  const postMat = new THREE.MeshStandardMaterial({ color: 0x0b0f17, metalness: 0.7, roughness: 0.35 })
+
   // 1. 底座
-  const plinthGeo = new THREE.BoxGeometry(w * 1.04, plinthH, d * 1.04)
-  const plinth = new THREE.Mesh(plinthGeo, frameMetal())
-  plinth.position.y = plinthH / 2
-  plinth.receiveShadow = true
-  group.add(plinth)
+  addPart(frameMat, new THREE.BoxGeometry(w * 1.04, plinthH, d * 1.04), 0, plinthH / 2, 0)
 
   // 2. 脚轮（参考图：四个带滚轮的支撑脚）
   if (showCasters) {
     const bracketMat = new THREE.MeshStandardMaterial({ color: 0x080a0e, metalness: 0.3, roughness: 0.8 })
     const wheelMat = new THREE.MeshStandardMaterial({ color: 0x7a7a7a, metalness: 0.7, roughness: 0.4 })
-    const bracketGeo = new THREE.BoxGeometry(0.14, 0.14, 0.14)
-    const wheelGeo = new THREE.CylinderGeometry(0.07, 0.07, 0.1, 16)
     const offsets = [
       [-halfW + 0.2, -halfD + 0.2],
       [halfW - 0.2, -halfD + 0.2],
@@ -173,21 +189,14 @@ export function buildCabinet(options = {}) {
       [halfW - 0.2, halfD - 0.2],
     ]
     offsets.forEach(([x, z]) => {
-      const b = new THREE.Mesh(bracketGeo, bracketMat)
-      b.position.set(x, 0.08, z)
-      group.add(b)
-      const wheel = new THREE.Mesh(wheelGeo, wheelMat)
-      wheel.rotation.z = Math.PI / 2
-      wheel.position.set(x, 0.07, z)
-      group.add(wheel)
+      addPart(bracketMat, new THREE.BoxGeometry(0.14, 0.14, 0.14), x, 0.08, z)
+      addPart(wheelMat, new THREE.CylinderGeometry(0.07, 0.07, 0.1, 16), x, 0.07, z, 0, 0, Math.PI / 2)
     })
   }
 
   // 3. 四角立柱
   const postW = 0.12
   const postD = 0.12
-  const postGeo = new THREE.BoxGeometry(postW, h, postD)
-  const postMat = new THREE.MeshStandardMaterial({ color: 0x0b0f17, metalness: 0.7, roughness: 0.35 })
   const px = halfW - postW / 2
   const pz = halfD - postD / 2
   ;[
@@ -196,55 +205,29 @@ export function buildCabinet(options = {}) {
     [-px, pz],
     [px, pz],
   ].forEach(([x, z]) => {
-    const p = new THREE.Mesh(postGeo, postMat)
-    p.position.set(x, y0 + h / 2, z)
-    p.castShadow = true
-    group.add(p)
+    addPart(postMat, new THREE.BoxGeometry(postW, h, postD), x, y0 + h / 2, z)
   })
 
   // 4. 顶框与底框
-  const topCap = new THREE.Mesh(new THREE.BoxGeometry(w * 1.02, 0.18, d * 1.02), frameMetal())
-  topCap.position.set(0, y0 + h + 0.09, 0)
-  topCap.castShadow = true
-  group.add(topCap)
+  addPart(frameMat, new THREE.BoxGeometry(w * 1.02, 0.18, d * 1.02), 0, y0 + h + 0.09, 0)
+  addPart(darkMat, new THREE.BoxGeometry(w, 0.1, d), 0, y0 + 0.05, 0)
 
-  const bottomFrame = new THREE.Mesh(new THREE.BoxGeometry(w, 0.1, d), darkMetal())
-  bottomFrame.position.set(0, y0 + 0.05, 0)
-  group.add(bottomFrame)
-
-  // 5. 前门（穿孔或玻璃）+ 门框 + 把手
+  // 5. 前门（穿孔或玻璃）+ 门框 + 把手（总览视图 frontDoor 恒为 'none'，此处逻辑保留）
   let frontDoorMesh = null
   if (frontDoor !== 'none') {
     const doorW = w * 0.95
     const doorH = h * 0.98
     const doorZ = halfD + 0.02
     const doorMat = frontDoor === 'glass' ? glassMaterial() : perfMetal()
-    const door = new THREE.Mesh(new THREE.PlaneGeometry(doorW, doorH), doorMat)
-    door.position.set(0, y0 + h / 2, doorZ)
-    group.add(door)
-    frontDoorMesh = door
-
-    // 门框
-    const frameMat = darkMetal()
+    addPart(doorMat, new THREE.PlaneGeometry(doorW, doorH), 0, y0 + h / 2, doorZ)
+    // 门框 + 把手（与底框同为深金属，复用 darkMat；合并进同一材质桶）
     const frameThick = 0.08
     const frameDeep = 0.06
-    const fTop = new THREE.Mesh(new THREE.BoxGeometry(doorW, frameThick, frameDeep), frameMat)
-    fTop.position.set(0, y0 + h - frameThick / 2, doorZ)
-    group.add(fTop)
-    const fBot = new THREE.Mesh(new THREE.BoxGeometry(doorW, frameThick, frameDeep), frameMat)
-    fBot.position.set(0, y0 + frameThick / 2, doorZ)
-    group.add(fBot)
-    const fLeft = new THREE.Mesh(new THREE.BoxGeometry(frameThick, doorH, frameDeep), frameMat)
-    fLeft.position.set(-doorW / 2 + frameThick / 2, y0 + h / 2, doorZ)
-    group.add(fLeft)
-    const fRight = new THREE.Mesh(new THREE.BoxGeometry(frameThick, doorH, frameDeep), frameMat)
-    fRight.position.set(doorW / 2 - frameThick / 2, y0 + h / 2, doorZ)
-    group.add(fRight)
-
-    // 把手（左侧竖柄）
-    const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.55, 12), frameMat)
-    handle.position.set(-doorW / 2 + 0.2, y0 + h / 2, doorZ + 0.06)
-    group.add(handle)
+    addPart(darkMat, new THREE.BoxGeometry(doorW, frameThick, frameDeep), 0, y0 + h - frameThick / 2, doorZ)
+    addPart(darkMat, new THREE.BoxGeometry(doorW, frameThick, frameDeep), 0, y0 + frameThick / 2, doorZ)
+    addPart(darkMat, new THREE.BoxGeometry(frameThick, doorH, frameDeep), -doorW / 2 + frameThick / 2, y0 + h / 2, doorZ)
+    addPart(darkMat, new THREE.BoxGeometry(frameThick, doorH, frameDeep), doorW / 2 - frameThick / 2, y0 + h / 2, doorZ)
+    addPart(darkMat, new THREE.CylinderGeometry(0.025, 0.025, 0.55, 12), -doorW / 2 + 0.2, y0 + h / 2, doorZ + 0.06, 0, 0, Math.PI / 2)
   }
 
   // 6. 侧板
@@ -254,16 +237,8 @@ export function buildCabinet(options = {}) {
   if (sidePanel === 'glass') sideMat = glassMaterial()
   else if (sidePanel === 'perforated') sideMat = perfMetal()
   else sideMat = new THREE.MeshStandardMaterial({ color: DARK_METAL, metalness: 0.55, roughness: 0.5, side: THREE.DoubleSide })
-
-  const sideGeo = new THREE.PlaneGeometry(sideD, sideH)
-  const left = new THREE.Mesh(sideGeo, sideMat)
-  left.rotation.y = Math.PI / 2
-  left.position.set(-halfW - 0.01, y0 + h / 2, 0)
-  group.add(left)
-  const right = new THREE.Mesh(sideGeo, sideMat)
-  right.rotation.y = -Math.PI / 2
-  right.position.set(halfW + 0.01, y0 + h / 2, 0)
-  group.add(right)
+  addPart(sideMat, new THREE.PlaneGeometry(sideD, sideH), -halfW - 0.01, y0 + h / 2, 0, 0, Math.PI / 2, 0)
+  addPart(sideMat, new THREE.PlaneGeometry(sideD, sideH), halfW + 0.01, y0 + h / 2, 0, 0, -Math.PI / 2, 0)
 
   // 7. 后门
   if (showBack) {
@@ -271,9 +246,7 @@ export function buildCabinet(options = {}) {
       sidePanel === 'perforated'
         ? perfMetal()
         : new THREE.MeshStandardMaterial({ color: 0x101520, metalness: 0.5, roughness: 0.6, side: THREE.DoubleSide })
-    const back = new THREE.Mesh(new THREE.PlaneGeometry(w * 0.95, h * 0.98), backMat)
-    back.position.set(0, y0 + h / 2, -halfD - 0.01)
-    group.add(back)
+    addPart(backMat, new THREE.PlaneGeometry(w * 0.95, h * 0.98), 0, y0 + h / 2, -halfD - 0.01)
   }
 
   // 8. 安装导轨（前后各一对）
@@ -288,36 +261,36 @@ export function buildCabinet(options = {}) {
       roughness: 0.5,
       side: THREE.DoubleSide,
     })
-    const railGeo = new THREE.PlaneGeometry(railW, railH)
     const rx = halfW - 0.18
     const zFront = halfD - 0.12
     const zBack = -halfD + 0.12
     ;[-1, 1].forEach((s) => {
-      const frontRail = new THREE.Mesh(railGeo, railMat)
-      frontRail.position.set(s * rx, y0 + h / 2, zFront)
-      group.add(frontRail)
-      const backRail = new THREE.Mesh(railGeo, railMat)
-      backRail.position.set(s * rx, y0 + h / 2, zBack)
-      group.add(backRail)
+      addPart(railMat, new THREE.PlaneGeometry(railW, railH), s * rx, y0 + h / 2, zFront)
+      addPart(railMat, new THREE.PlaneGeometry(railW, railH), s * rx, y0 + h / 2, zBack)
     })
   }
 
   // 9. 顶部状态灯（前左上角）
   const ledMat = new THREE.MeshStandardMaterial({ color: statusColor, emissive: statusColor, emissiveIntensity: 1.8 })
-  const led = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.07, 0.07), ledMat)
-  led.position.set(-halfW + 0.25, y0 + h + 0.12, halfD + 0.04)
-  group.add(led)
+  addPart(ledMat, new THREE.BoxGeometry(0.16, 0.07, 0.07), -halfW + 0.25, y0 + h + 0.12, halfD + 0.04)
 
   // 10. 前侧占用条（左侧立柱，按 occupancyRatio 显示高度）
   if (occupancyRatio > 0.001) {
     const stripH = Math.max(0.02, occupancyRatio * h * 0.92)
-    const strip = new THREE.Mesh(
-      new THREE.BoxGeometry(0.08, stripH, 0.04),
-      new THREE.MeshStandardMaterial({ color: statusColor, emissive: statusColor, emissiveIntensity: 0.5, transparent: true, opacity: 0.92 })
-    )
-    strip.position.set(-halfW + 0.06, y0 + 0.1 + stripH / 2, halfD + 0.03)
-    group.add(strip)
+    const stripMat = new THREE.MeshStandardMaterial({ color: statusColor, emissive: statusColor, emissiveIntensity: 0.5, transparent: true, opacity: 0.92 })
+    addPart(stripMat, new THREE.BoxGeometry(0.08, stripH, 0.04), -halfW + 0.06, y0 + 0.1 + stripH / 2, halfD + 0.03)
   }
+
+  // —— 合并：每个材质桶 → 单个 Mesh（降 Draw Call）——
+  const castMats = new Set([frameMat, darkMat, postMat]) // 仅实心金属件投射阴影
+  buckets.forEach((geos, mat) => {
+    const merged = mergeGeometries(geos, false)
+    geos.forEach((g) => g.dispose())
+    const mesh = new THREE.Mesh(merged, mat)
+    mesh.castShadow = castMats.has(mat)
+    mesh.receiveShadow = !mat.isMeshPhysicalMaterial // 玻璃不接收阴影（透明）
+    group.add(mesh)
+  })
 
   group.userData = { kind: 'cabinet', pickMesh: frontDoorMesh }
   return group
@@ -867,31 +840,39 @@ export function buildDevice(device, opts = {}) {
 
   const g = new THREE.Group()
 
-  // 机箱本体（拾取 + 高亮目标）
-  const chassis = new THREE.Mesh(
-    new THREE.BoxGeometry(width, height, depth),
-    new THREE.MeshStandardMaterial({ color: chassisColor, metalness: 0.7, roughness: 0.42 })
-  )
-  chassis.castShadow = true
-  chassis.receiveShadow = true
-  g.add(chassis)
-
-  // 前面板（内嵌）
-  const face = new THREE.Mesh(
-    new THREE.BoxGeometry(width * 0.95, height * 0.88, 0.03),
-    new THREE.MeshStandardMaterial({ color: BEZEL, metalness: 0.35, roughness: 0.6 })
-  )
-  face.position.z = depth / 2 + 0.005
-  g.add(face)
-
-  // 挂耳（左右安装耳，前侧）
+  // 设备主体合并：机箱 + 前面板 + 左右挂耳 合并为单个 Mesh（含材质数组），
+  // Draw Call 由 4 降到 1，且保留独立可拾取对象（作为 pickMesh）。
+  // 合并用 useGroups=true 保留各子几何的分组，使不同材质（机箱/面板/挂耳）各取所需，
+  // 同时 setDeviceEmissive 仍可遍历材质数组对其统一施加选中自发光。
+  const chassisMat = new THREE.MeshStandardMaterial({ color: chassisColor, metalness: 0.7, roughness: 0.42 })
+  const faceMat = new THREE.MeshStandardMaterial({ color: BEZEL, metalness: 0.35, roughness: 0.6 })
   const earMat = new THREE.MeshStandardMaterial({ color: 0x151b26, metalness: 0.6, roughness: 0.5 })
+  const chassisGeo = new THREE.BoxGeometry(width, height, depth)
+  const faceGeo = new THREE.BoxGeometry(width * 0.95, height * 0.88, 0.03)
   const earGeo = new THREE.BoxGeometry(width * 0.04, height * 0.88, 0.05)
-  ;[-1, 1].forEach((s) => {
-    const ear = new THREE.Mesh(earGeo, earMat)
-    ear.position.set(s * width * 0.48, 0, depth / 2 + 0.01)
-    g.add(ear)
-  })
+  const chassisMesh = new THREE.Mesh(chassisGeo)
+  chassisMesh.castShadow = true
+  chassisMesh.receiveShadow = true
+  const faceMesh = new THREE.Mesh(faceGeo)
+  faceMesh.position.z = depth / 2 + 0.005
+  const earL = new THREE.Mesh(earGeo)
+  earL.position.set(-width * 0.48, 0, depth / 2 + 0.01)
+  const earR = new THREE.Mesh(earGeo)
+  earR.position.set(width * 0.48, 0, depth / 2 + 0.01)
+  const bodyParts = [chassisMesh, faceMesh, earL, earR]
+  bodyParts.forEach((p) => p.updateMatrix())
+  const bodyGeo = mergeGeometries(
+    bodyParts.map((p) => p.geometry.clone().applyMatrix4(p.matrix)),
+    true
+  )
+  // 释放源几何（合并后的 bodyGeo 已包含其数据）
+  chassisGeo.dispose()
+  faceGeo.dispose()
+  earGeo.dispose()
+  const body = new THREE.Mesh(bodyGeo, [chassisMat, faceMat, earMat, earMat])
+  body.castShadow = true
+  body.receiveShadow = true
+  g.add(body)
 
   // 前面板：所有设备统一「真实前面板（程序化端口阵列）+ 左上角中文类型徽标」。
   // 薄设备(≤2U)徽标按机箱高度自动收敛为小标签，真实端口阵列照常绘制，不牺牲可读性。
@@ -905,7 +886,7 @@ export function buildDevice(device, opts = {}) {
     kind: 'device',
     id: device.id,
     device,
-    pickMesh: chassis,
+    pickMesh: body,
     typeFacePlane: labelMesh,
     faceIsBadge: true,
     realisticFace,
@@ -930,4 +911,19 @@ export function findDeviceGroup(obj) {
   let o = obj
   while (o && !(o.userData && o.userData.device)) o = o.parent
   return o || null
+}
+
+// —— 冻结世界矩阵 ——
+// 静态场景（机柜/设备/标签）构建完成后调用一次：先强制更新一次世界矩阵，
+// 再对所有静态后代关闭 matrixAutoUpdate，使后续每帧渲染不再重算上千个对象的
+// world matrix（此项在数百机柜场景下是 CPU 端最重的逐帧开销之一）。
+// 动态对象（线缆 Line / 流动箭头）按其类型或 userData.dynamic 跳过，保持逐帧更新。
+export function freezeWorld(group) {
+  if (!group) return
+  group.updateMatrixWorld(true)
+  group.traverse((o) => {
+    if (o === group) return // 保留根容器自身自动更新（如需整体平移仍可联动子节点）
+    if (o.isLine || o.isLineSegments || o.userData?.dynamic) return // 跳过线缆等动态对象
+    o.matrixAutoUpdate = false
+  })
 }

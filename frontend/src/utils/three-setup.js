@@ -97,6 +97,11 @@ export function createEngine(container, opts = {}) {
   const fov = opts.fov ?? 50
   const freeMove = opts.freeMove ?? true
   const moveSpeed = opts.moveSpeed ?? 26
+  // 渲染器调优选项（供大场景降级，避免数百机柜时 GPU 过载）：
+  //   antialias     —— 默认开启 MSAA；机柜数很大时可关闭以省像素着色
+  //   shadowMapSize —— 阴影贴图分辨率（默认 2048；大场景可降到 1024）
+  const antialias = opts.antialias !== false
+  const shadowMapSize = opts.shadowMapSize || 2048
   let onTick = typeof opts.onTick === 'function' ? opts.onTick : null
 
   const getW = () => Math.max(1, container.clientWidth || window.innerWidth)
@@ -112,7 +117,7 @@ export function createEngine(container, opts = {}) {
   camera.position.set(cameraPosition[0], cameraPosition[1], cameraPosition[2])
 
   // 渲染器
-  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' })
+  const renderer = new THREE.WebGLRenderer({ antialias, alpha: false, powerPreference: 'high-performance' })
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
   renderer.setSize(getW(), getH())
   renderer.shadowMap.enabled = true
@@ -152,7 +157,7 @@ export function createEngine(container, opts = {}) {
   const key = new THREE.DirectionalLight(0xffffff, 1.15)
   key.position.set(24, 44, 28)
   key.castShadow = true
-  key.shadow.mapSize.set(2048, 2048)
+  key.shadow.mapSize.set(shadowMapSize, shadowMapSize)
   key.shadow.camera.near = 1
   key.shadow.camera.far = 300
   key.shadow.camera.left = -80
@@ -488,5 +493,18 @@ export function createEngine(container, opts = {}) {
   renderer.domElement.addEventListener('webglcontextlost', onContextLost, false)
   renderer.domElement.addEventListener('webglcontextrestored', onContextRestored, false)
 
-  return { renderer, scene, camera, controls, container, setCursor, clearLabels, setOnTick, setMoveBounds, dispose }
+  // —— 阴影一次性烘焙 ——
+  // 静态场景构建完成后调用：关闭阴影贴图的逐帧自动更新，并强制渲染一帧阴影，
+  // 之后阴影保持静止、不再每帧重算（数百机柜场景下省下可观的 GPU 时间）。
+  // 重新构建场景前应先调用 setShadowAutoUpdate(true) 恢复自动更新，确保新场景阴影正确。
+  function setShadowAutoUpdate(on) {
+    if (key) key.shadow.autoUpdate = !!on
+  }
+  function bakeShadow() {
+    if (!key) return
+    key.shadow.autoUpdate = false
+    key.shadow.needsUpdate = true
+  }
+
+  return { renderer, scene, camera, controls, container, setCursor, clearLabels, setOnTick, setMoveBounds, setShadowAutoUpdate, bakeShadow, dispose }
 }

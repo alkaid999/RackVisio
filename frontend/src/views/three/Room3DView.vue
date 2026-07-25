@@ -338,6 +338,7 @@ import {
   setDeviceSelected,
   setDeviceEmissive,
   clearDeviceEmissive,
+  freezeWorld,
   RACK_W,
   RACK_D,
   U_H,
@@ -715,6 +716,10 @@ async function exportDrawio() {
 function buildScene() {
   if (!engine) return
 
+  // 重建场景前恢复阴影自动更新，确保新场景（机柜/设备）在构建帧内正常投影阴影；
+  // 全部分帧构建完成后再由 buildRoomScene 的完成回调调用 bakeShadow() 一次性烘焙并关闭自动更新。
+  if (engine.setShadowAutoUpdate) engine.setShadowAutoUpdate(true)
+
   // 重建前先清空上一批动态线缆（其对象属于旧 worldGroup，将被一并 dispose）
   clearCables()
   if (worldGroup) {
@@ -741,6 +746,10 @@ function buildScene() {
     }
     // 若当前已选中设备，重建其关联链路 3D 线缆
     if (selectedDeviceId.value && selectedDeviceDetail.value) buildCables()
+    // 分帧渐进构建完成 → 冻结世界矩阵（静态场景不再每帧重算 world matrix，
+    // 上千对象可将矩阵更新开销从 O(N)/帧 降到 0），并一次性烘焙阴影贴图后关闭自动更新。
+    if (freezeWorld) freezeWorld(worldGroup)
+    if (engine && engine.bakeShadow) engine.bakeShadow()
     // 分帧渐进构建完成 → 关闭加载遮罩（首屏 engine 初始化时 loading 已为 false，属幂等）
     loading.value = false
   })
@@ -823,10 +832,17 @@ function buildRoomScene(onComplete) {
   const mySeq = ++buildSeq
   let i = 0
   const total = ra.length
+  // LOD：机柜数量很大时省略脚轮等装饰网格，显著降低几何与绘制开销（阈值按规模测算）
+  const lowDetail = total > 150
+  let firstFrame = true
   function step() {
     if (mySeq !== buildSeq || disposed) return // 已被新一次构建取代（切换机房）→ 作废
+    // 自适应分帧预算：首帧仅构建少量机柜尽快出图（交互立即可用），
+    // 后续帧批量填充以缩短整体构建时长；单帧设 16ms 安全上限防单柜含多设备卡顿。
+    const frameBudget = firstFrame ? 4 : 12
+    let built = 0
     const t0 = performance.now()
-    while (i < total) {
+    while (i < total && built < frameBudget) {
       const rack = ra[i++]
       const { x, z, rot } = layout[rack.id]
       const h = (rack.total_u || 42) * U_H
@@ -846,7 +862,7 @@ function buildRoomScene(onComplete) {
         sidePanel: 'perforated',
         showBack: true,
         showRails: true,
-        showCasters: true,
+        showCasters: !lowDetail,
         statusColor: sc,
         occupancyRatio: ratio,
       })
@@ -880,9 +896,11 @@ function buildRoomScene(onComplete) {
       rackLabel.position.set(0, h + PLINTH_H + 0.45, 0)
       g.add(rackLabel)
 
-      // 时间预算耗尽 → 让出主线程，下一帧继续
-      if (performance.now() - t0 > 8) break
+      // 本帧预算用尽或单帧时间上限到达 → 让出主线程，下一帧继续
+      built++
+      if (performance.now() - t0 > 16) break
     }
+    firstFrame = false
     if (i < total) {
       requestAnimationFrame(step)
     } else {
@@ -1542,7 +1560,12 @@ function initEngine() {
   if (!canvasWrap.value) return
   if (disposed) return // 组件已卸载，放弃初始化，避免挂载后创建游离 WebGL 上下文
   try {
+    // 按机房规模自适应渲染器：机柜数较大时关闭 MSAA、降低阴影贴图分辨率，
+    // 把像素着色与阴影开销压下来（阈值与 LOD 的 150 台保持一致）。
+    const rackCount = (racks.value || []).length
     engine = createEngine(canvasWrap.value, {
+      antialias: rackCount <= 150,
+      shadowMapSize: rackCount > 150 ? 1024 : 2048,
       background: 0x0b1220,
       fog: true,
       fogNear: 40,

@@ -81,6 +81,7 @@ import {
   setDeviceSelected,
   setDeviceEmissive,
   clearDeviceEmissive,
+  freezeWorld,
   RACK_W,
   RACK_D,
   U_H,
@@ -192,6 +193,9 @@ function refreshHighlights() {
 
 function buildScene() {
   if (!engine || !rack.value) return
+  // 重建场景前恢复阴影自动更新，确保新机柜/设备在构建后正常投影阴影；
+  // 构建完成后再由下方 freezeWorld + bakeShadow 一次性烘焙并关闭自动更新。
+  if (engine.setShadowAutoUpdate) engine.setShadowAutoUpdate(true)
   if (worldGroup) {
     engine.scene.remove(worldGroup)
     disposeWorld(worldGroup)
@@ -281,6 +285,11 @@ function buildScene() {
 
   // 相机取景：按机柜实际尺寸自动适配，确保完整内容单屏可见
   frameRackView()
+
+  // 单柜场景为静态：冻结世界矩阵（不再每帧重算 world matrix）并一次性烘焙阴影贴图后关闭自动更新，
+  // 把后续每帧的矩阵与阴影开销降到 0，交互依旧流畅。
+  if (freezeWorld) freezeWorld(worldGroup)
+  if (engine && engine.bakeShadow) engine.bakeShadow()
 }
 
 function resetView() {
