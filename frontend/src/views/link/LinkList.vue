@@ -66,7 +66,7 @@
     <!-- 连接总览（扁平全局表） -->
     <Card class="mb-5">
       <template #header>
-        <span class="section-title">连接总览（{{ rows.length }} 条）</span>
+        <span class="section-title">连接总览（{{ totalCount }} 条）</span>
       </template>
 
       <div v-if="loading" class="flex justify-center py-16">
@@ -95,7 +95,7 @@
         </TableHeader>
         <TableBody>
           <TableRow
-            v-for="row in rows"
+            v-for="row in pagedRows"
             :key="row.key"
             :class="{ 'row--orphan': row.kind === 'orphan' }"
           >
@@ -158,6 +158,7 @@
           </TableRow>
         </TableBody>
       </Table>
+      <ListPager v-if="totalCount > pageSize" :total="totalCount" :page="page" :page-size="pageSize" @change="goPage" />
     </Card>
 
     <!-- 新建 / 编辑链路弹窗 -->
@@ -209,6 +210,7 @@ import TableHead from '@/components/ui/table-head.vue'
 import TableCell from '@/components/ui/table-cell.vue'
 import Badge from '@/components/ui/badge.vue'
 import Spinner from '@/components/ui/spinner.vue'
+import ListPager from '@/components/common/ListPager.vue'
 
 const { success } = useToast()
 const { confirm } = useConfirm()
@@ -225,8 +227,11 @@ const connectorOptions = computed(() => [
 
 // 全量链路（按筛选条件拉取后客户端归一直表）。
 const allLinks = ref([])
-const total = ref(0)
 const loading = ref(false)
+
+// 客户端分页：数据已全量拉取，按页切片渲染（孤儿口混合场景同样适用）。
+const page = ref(1)
+const pageSize = ref(20)
 
 // 孤儿口（未连线接口）。
 const orphans = ref([])
@@ -264,6 +269,21 @@ const rows = computed(() => {
   }
   return linkRows
 })
+
+// 全量条数（含孤儿口），供分页器显示。
+const totalCount = computed(() => rows.value.length)
+
+// 当前页切片（客户端分页）。
+const pagedRows = computed(() => {
+  const start = (page.value - 1) * pageSize.value
+  return rows.value.slice(start, start + pageSize.value)
+})
+
+// 翻页：数据已在内存，仅切换页码（ListPager 抛出 change 事件）。
+function goPage(p) {
+  const max = Math.max(1, Math.ceil(totalCount.value / pageSize.value))
+  if (p >= 1 && p <= max) page.value = p
+}
 
 // 链路资格：是否存在「已上架且含接口」的设备，决定「新建链路」是否可用。
 const devices = ref([])
@@ -313,13 +333,14 @@ const editLink = ref(null)
 // 拉取「全部」符合条件的链路（循环翻页直到取完），再客户端归一直表。
 async function loadAll() {
   loading.value = true
+  page.value = 1
   try {
     const collected = []
-    let page = 1
+    let p = 1
     const size = 200
     while (true) {
       const data = await linkApi.list({
-        page,
+        page: p,
         size,
         keyword: filter.keyword || undefined,
         medium: filter.medium === SELECT_ALL ? undefined : filter.medium,
@@ -327,9 +348,8 @@ async function loadAll() {
       })
       const items = (data && data.items) || []
       collected.push(...items)
-      total.value = (data && data.total) || 0
       if (items.length < size) break
-      page += 1
+      p += 1
     }
     allLinks.value = collected
     // 孤儿口：仅在开关开启且未做介质/连接器筛选时拉取。
