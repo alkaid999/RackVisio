@@ -166,6 +166,51 @@
         @mutated="onInterfacesMutated"
       />
 
+      <!-- 链路（设备视角：本设备接口 → 对端设备/接口；设施不建链路，隐藏） -->
+      <Card v-if="!isFacility" class="mb-5">
+        <template #header>
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <span class="section-title flex items-center gap-1.5">
+              <Cable class="h-4 w-4" />链路（{{ links.length }}）
+            </span>
+            <span class="text-xs text-muted-foreground">本设备 {{ links.length }} 条连接</span>
+          </div>
+        </template>
+
+        <div v-if="linkLoading" class="flex justify-center py-10">
+          <Spinner class="h-6 w-6 text-primary" />
+        </div>
+        <ul v-else-if="links.length" class="link-view">
+          <li v-for="lk in links" :key="lk.link_id" class="link-view__row">
+            <div class="flex items-center gap-1.5 link-view__iface">
+              <Network class="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              <span class="font-medium">{{ lk.local_interface_name }}</span>
+              <ArrowRight class="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            </div>
+            <div class="link-view__peer">
+              <template v-if="lk.peer_device_id">
+                <button class="font-medium text-primary hover:underline" @click="goPeer(lk.peer_device_id)">{{ lk.peer_device_name }}</button>
+              </template>
+              <span v-else class="font-medium">{{ lk.peer_device_name }}</span>
+              <span v-if="lk.peer_interface_name" class="text-muted-foreground">· {{ lk.peer_interface_name }}</span>
+              <span v-else class="text-xs text-muted-foreground">（外部对端）</span>
+            </div>
+            <div class="flex flex-wrap items-center gap-1.5 link-view__meta">
+              <Badge
+                :style="{ backgroundColor: (LINK_MEDIUM_COLORS[lk.medium] || '#909399') + '22', color: LINK_MEDIUM_COLORS[lk.medium] || '#909399' }"
+                variant="outline"
+              >{{ LINK_MEDIUM_LABELS[lk.medium] || lk.medium }}</Badge>
+              <span v-if="lk.connector_type" class="font-mono text-xs text-muted-foreground">{{ CONNECTOR_TYPE_LABELS[lk.connector_type] || lk.connector_type }}</span>
+              <span v-if="lk.cable_length" class="text-xs text-muted-foreground">{{ lk.cable_length }}</span>
+            </div>
+            <div v-if="canEditLink" class="link-view__actions">
+              <Button variant="ghost" size="icon-sm" class="text-destructive hover:text-destructive" aria-label="断开" title="断开" @click="onUnlink(lk)"><Unlink class="h-3.5 w-3.5" /></Button>
+            </div>
+          </li>
+        </ul>
+        <EmptyState v-else title="该设备暂无链路" />
+      </Card>
+
       <!-- 上下架记录：按类型分栏（上架 / 下架）展示 + 独立分页 -->
       <Card class="mb-5">
         <template #header>
@@ -242,51 +287,6 @@
           </section>
         </div>
         <EmptyState v-else title="暂无上下架记录" />
-      </Card>
-
-      <!-- 链路（设备视角：本设备接口 → 对端设备/接口；设施不建链路，隐藏） -->
-      <Card v-if="!isFacility" class="mb-5">
-        <template #header>
-          <div class="flex flex-wrap items-center justify-between gap-3">
-            <span class="section-title flex items-center gap-1.5">
-              <Cable class="h-4 w-4" />链路（{{ links.length }}）
-            </span>
-            <span class="text-xs text-muted-foreground">本设备 {{ links.length }} 条连接</span>
-          </div>
-        </template>
-
-        <div v-if="linkLoading" class="flex justify-center py-10">
-          <Spinner class="h-6 w-6 text-primary" />
-        </div>
-        <ul v-else-if="links.length" class="link-view">
-          <li v-for="lk in links" :key="lk.link_id" class="link-view__row">
-            <div class="flex items-center gap-1.5 link-view__iface">
-              <Network class="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-              <span class="font-medium">{{ lk.local_interface_name }}</span>
-              <ArrowRight class="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-            </div>
-            <div class="link-view__peer">
-              <template v-if="lk.peer_device_id">
-                <button class="font-medium text-primary hover:underline" @click="goPeer(lk.peer_device_id)">{{ lk.peer_device_name }}</button>
-              </template>
-              <span v-else class="font-medium">{{ lk.peer_device_name }}</span>
-              <span v-if="lk.peer_interface_name" class="text-muted-foreground">· {{ lk.peer_interface_name }}</span>
-              <span v-else class="text-xs text-muted-foreground">（外部对端）</span>
-            </div>
-            <div class="flex flex-wrap items-center gap-1.5 link-view__meta">
-              <Badge
-                :style="{ backgroundColor: (LINK_MEDIUM_COLORS[lk.medium] || '#909399') + '22', color: LINK_MEDIUM_COLORS[lk.medium] || '#909399' }"
-                variant="outline"
-              >{{ LINK_MEDIUM_LABELS[lk.medium] || lk.medium }}</Badge>
-              <span v-if="lk.connector_type" class="font-mono text-xs text-muted-foreground">{{ CONNECTOR_TYPE_LABELS[lk.connector_type] || lk.connector_type }}</span>
-              <span v-if="lk.cable_length" class="text-xs text-muted-foreground">{{ lk.cable_length }}</span>
-            </div>
-            <div v-if="canEditLink" class="link-view__actions">
-              <Button variant="ghost" size="icon-sm" class="text-destructive hover:text-destructive" aria-label="断开" title="断开" @click="onUnlink(lk)"><Unlink class="h-3.5 w-3.5" /></Button>
-            </div>
-          </li>
-        </ul>
-        <EmptyState v-else title="该设备暂无链路" />
       </Card>
 
       <!-- 编辑设备弹窗（open 由 openDeviceForm() 在编辑按钮手势内同步触发） -->
