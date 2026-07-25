@@ -108,6 +108,12 @@ const routes = [
     component: () => import('@/views/consumable/ConsumableList.vue'),
     meta: { title: '耗材管理', requiresAuth: true, permission: 'consumable:view' },
   },
+  {
+    path: '/consumables/types',
+    name: 'ConsumableTypeManager',
+    component: () => import('@/views/consumable/ConsumableTypeManager.vue'),
+    meta: { title: '类型与分类', requiresAuth: true, permission: 'consumable:edit' },
+  },
 ]
 
 const router = createRouter({

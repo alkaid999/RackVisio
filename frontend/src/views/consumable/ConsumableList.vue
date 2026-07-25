@@ -24,7 +24,7 @@
             <List class="h-4 w-4" />表格
           </button>
         </div>
-        <Button v-if="canEdit" variant="outline" @click="openTypeManager"><Tags class="h-4 w-4" />类型与分类</Button>
+        <Button v-if="canEdit" variant="outline" @click="goTypeManager"><Tags class="h-4 w-4" />类型与分类</Button>
         <Button v-if="canEdit" class="ml-auto" @click="openCreate"><Plus class="h-4 w-4" />新建耗材</Button>
       </div>
     </div>
@@ -178,13 +178,12 @@
     <ConsumableStockDialog v-model:visible="stockVisible" :item="stockItem" @saved="load" />
     <!-- 变动历史弹窗 -->
     <ConsumableHistoryDialog v-model:visible="historyVisible" :item="historyItem" />
-    <!-- 类型与分类管理弹窗 -->
-    <ConsumableTypeManager v-model:visible="typeMgrVisible" @changed="onTypesChanged" />
   </div>
 </template>
 
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import {
   LayoutGrid, List, Plus, Package, Search, Filter, Undo2, ArrowLeftRight,
   History, Pencil, Trash2, Tags, Layers,
@@ -194,7 +193,6 @@ import { useAuthStore } from '@/stores/auth'
 import ConsumableForm from '@/views/consumable/ConsumableForm.vue'
 import ConsumableStockDialog from '@/views/consumable/ConsumableStockDialog.vue'
 import ConsumableHistoryDialog from '@/views/consumable/ConsumableHistoryDialog.vue'
-import ConsumableTypeManager from '@/views/consumable/ConsumableTypeManager.vue'
 import consumableApi from '@/api/consumable'
 import { useToast } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
@@ -221,6 +219,7 @@ import SelectItem from '@/components/ui/select-item.vue'
 
 const store = useConsumableStore()
 const auth = useAuthStore()
+const router = useRouter()
 const { success } = useToast()
 const { confirm } = useConfirm()
 
@@ -298,7 +297,6 @@ const stockVisible = ref(false)
 const stockItem = ref(null)
 const historyVisible = ref(false)
 const historyItem = ref(null)
-const typeMgrVisible = ref(false)
 
 function openCreate() {
   formMode.value = 'create'
@@ -318,8 +316,8 @@ function openHistory(item) {
   historyItem.value = item
   historyVisible.value = true
 }
-function openTypeManager() {
-  typeMgrVisible.value = true
+function goTypeManager() {
+  router.push('/consumables/types')
 }
 // 表格操作列的扩展动作（历史/变动），复用 EntityActions 紧凑图标按钮样式，与各列表表格一致。
 function rowExtraActions(item) {
@@ -328,13 +326,6 @@ function rowExtraActions(item) {
     acts.push({ key: 'stock', label: '库存变动', icon: ArrowLeftRight, onClick: () => openStock(item) })
   }
   return acts
-}
-async function onTypesChanged() {
-  // 类型 / 分类增删改后，刷新类型下拉并重置分类筛选。
-  await store.fetchTypes()
-  filter.categoryId = SELECT_ALL
-  await store.fetchCategories(typeSelected.value ? filter.typeId : '')
-  load()
 }
 
 async function onDelete(item) {

@@ -16,6 +16,7 @@ import {
   UserCog,
   Package,
   History,
+  Tags,
 } from 'lucide-vue-next'
 
 const props = defineProps({ collapsed: { type: Boolean, default: false } })
@@ -51,6 +52,7 @@ const nav = [
     label: '耗材管理',
     icon: Package,
     children: [
+      { to: '/consumables/types', label: '类型与分类', icon: Tags, permission: 'consumable:edit' },
       { to: '/consumables', label: '耗材列表', icon: Package, permission: 'consumable:view' },
     ],
   },
@@ -85,7 +87,8 @@ function syncOpen() {
 syncOpen()
 watch(() => route.fullPath, syncOpen)
 
-const childActive = (c) => route.path.startsWith(c.to)
+// 精确匹配：避免 /consumables/types 访问时把「耗材列表」也高亮。
+const childActive = (c) => route.path === c.to
 const groupActive = (g) => !!g.children?.some(childActive)
 
 function onGroupClick(g) {
