@@ -82,18 +82,18 @@
             @click="goRack(r.id)"
           >
             <div class="flex items-center justify-between mb-2">
-              <span class="font-semibold text-slate-800 truncate">{{ r.name }}</span>
+              <span class="font-semibold text-foreground truncate">{{ r.name }}</span>
               <StatusBadge type="rack" :value="r.status" />
             </div>
-            <div class="text-xs text-slate-400">{{ r.column_code }} / {{ r.code }}</div>
-            <div class="text-xs text-slate-500 mt-1 flex items-center gap-1">
+            <div class="text-xs text-muted-foreground">{{ r.column_code }} / {{ r.code }}</div>
+            <div class="text-xs text-muted-foreground mt-1 flex items-center gap-1">
               <MapPin class="w-3 h-3" />
               <span v-if="r.rack_group">{{ r.rack_group }}</span>
-              <span v-else class="text-slate-400">未分组</span>
+              <span v-else class="text-muted-foreground">未分组</span>
             </div>
-            <div class="mt-2 flex items-center justify-between text-xs text-slate-500 tabular-nums">
+            <div class="mt-2 flex items-center justify-between text-xs text-muted-foreground tabular-nums">
               <span>{{ r.used_u }} / {{ r.total_u }}U</span>
-              <span class="font-medium text-slate-700">{{ fillPct(r) }}%</span>
+              <span class="font-medium text-foreground">{{ fillPct(r) }}%</span>
             </div>
             <div class="rack-mini-bar">
               <div class="rack-mini-fill" :style="{ width: fillPct(r) + '%', background: capColor(r) }" />
@@ -274,22 +274,22 @@ onMounted(async () => {
 
 <style scoped>
 .rack-mini-card {
-  border: 1px solid #e2e8f0;
+  border: 1px solid hsl(var(--border));
   border-radius: 12px;
   padding: 12px;
-  background: #fff;
+  background: hsl(var(--card));
   transition: box-shadow 0.2s, transform 0.2s, border-color 0.2s;
 }
 .rack-mini-card:hover {
-  box-shadow: 0 8px 30px -12px rgb(15 23 42 / 0.18);
+  box-shadow: 0 8px 30px -12px rgb(0 0 0 / 0.5);
   transform: translateY(-2px);
-  border-color: #cbd5e1;
+  border-color: hsl(var(--border));
 }
 .rack-mini-bar {
   margin-top: 8px;
   height: 6px;
   border-radius: 9999px;
-  background: #f1f5f9;
+  background: hsl(var(--muted));
   overflow: hidden;
 }
 .rack-mini-fill {

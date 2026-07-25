@@ -2,19 +2,19 @@
   <nav class="flex items-center gap-1.5 text-sm min-w-0 leading-none" aria-label="breadcrumb">
     <router-link
       to="/dashboard"
-      class="flex items-center justify-center text-slate-400 hover:text-slate-600 transition-colors shrink-0"
+      class="flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors shrink-0"
       aria-label="首页"
     >
       <Home class="w-4 h-4 block" />
     </router-link>
     <template v-for="(c, i) in crumbs" :key="c.to">
-      <ChevronRight class="w-3.5 h-3.5 text-slate-300 shrink-0" />
+      <ChevronRight class="w-3.5 h-3.5 text-muted-foreground shrink-0" />
       <router-link
         v-if="i < crumbs.length - 1"
         :to="c.to"
-        class="text-slate-500 hover:text-brand-600 transition-colors truncate"
+        class="text-muted-foreground hover:text-foreground transition-colors truncate"
       >{{ c.label }}</router-link>
-      <span v-else class="text-slate-800 font-medium truncate">{{ c.label }}</span>
+      <span v-else class="text-foreground font-medium truncate">{{ c.label }}</span>
     </template>
   </nav>
 </template>
