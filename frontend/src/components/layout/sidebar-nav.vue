@@ -15,6 +15,8 @@ import {
   Settings,
   UserCog,
   Package,
+  PackageOpen,
+  HardDrive,
   History,
   Tags,
 } from 'lucide-vue-next'
@@ -43,7 +45,7 @@ const nav = [
     label: '设备管理',
     icon: Cpu,
     children: [
-      { to: '/devices', label: '设备列表', icon: Cpu, permission: 'device:view' },
+      { to: '/devices', label: '设备列表', icon: HardDrive, permission: 'device:view' },
       { to: '/mount-records', label: '上下架记录', icon: History, permission: 'device:view' },
       { to: '/links', label: '连接总览', icon: Share2, permission: 'link:view' },
     ],
@@ -53,7 +55,7 @@ const nav = [
     icon: Package,
     children: [
       { to: '/consumables/types', label: '类型与分类', icon: Tags, permission: 'consumable:edit' },
-      { to: '/consumables', label: '耗材列表', icon: Package, permission: 'consumable:view' },
+      { to: '/consumables', label: '耗材列表', icon: PackageOpen, permission: 'consumable:view' },
     ],
   },
   {
