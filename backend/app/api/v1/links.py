@@ -11,6 +11,7 @@ from app.core.deps import get_db
 from app.core.rbac import require_permission
 from app.schemas.common import ok, paginated
 from app.schemas.link import (
+    DeviceLinkView,
     LinkCreate,
     LinkDetailOut,
     LinkOut,
@@ -29,6 +30,8 @@ async def list_links(
     room_id: Optional[str] = None,
     rack_id: Optional[str] = None,
     keyword: Optional[str] = Query(None, alias="keyword"),
+    medium: Optional[str] = Query(None, alias="medium"),
+    connector_type: Optional[str] = Query(None, alias="connector_type"),
 ):
     svc = LinkService(db)
     # 返回联表详情（含本端/对端设备名与端口名），便于列表直接展示。
@@ -36,6 +39,8 @@ async def list_links(
         room_id=room_id,
         rack_id=rack_id,
         keyword=keyword,
+        medium=medium,
+        connector_type=connector_type,
         page=page,
         size=size,
     )
@@ -70,6 +75,16 @@ async def update_link(
     svc = LinkService(db)
     link = await svc.update_link(link_id, payload)
     return ok(LinkOut.model_validate(link))
+
+
+@router.get("/by-device/{device_id}", dependencies=[Depends(require_permission("link:view"))])
+async def links_by_device(
+    device_id: str, db: AsyncSession = Depends(get_db)
+):
+    """查询某设备作为本端或对端的全部链路（设备视角，含对端信息）。"""
+    svc = LinkService(db)
+    items = await svc.list_links_by_device(device_id)
+    return ok([i.model_dump() for i in items])
 
 
 @router.delete("/{link_id}", dependencies=[Depends(require_permission("link:edit"))])

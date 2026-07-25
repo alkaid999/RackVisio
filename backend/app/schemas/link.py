@@ -86,6 +86,28 @@ class LinkDetailOut(BaseModel):
     updated_at: Optional[datetime] = None
 
 
+class DeviceLinkView(BaseModel):
+    """设备视角链路（钻取层）：归一到「本设备接口 + 对端（或外部）」。
+
+    用于设备详情页「链路」Card：本端角色由当前设备决定，peer 展示对端
+    （系统内设备名/接口，或半链路外部文本），便于单设备连接总览浏览。
+    """
+
+    link_id: str
+    local_interface_id: str
+    local_interface_name: str
+    peer_device_id: Optional[str] = None
+    peer_device_name: str
+    peer_interface_id: Optional[str] = None
+    peer_interface_name: Optional[str] = None
+    is_half: bool = False
+    medium: str
+    connector_type: Optional[str] = None
+    cable_length: Optional[str] = None
+    remark: Optional[str] = None
+    created_at: Optional[datetime] = None
+
+
 class TopologyNode(BaseModel):
     """拓扑节点（设备）。"""
 

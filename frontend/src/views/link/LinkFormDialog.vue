@@ -48,7 +48,7 @@
 
       <!-- 新建模式：左右两栏分别展示本端 / 对端，清晰区分两端 -->
       <template v-else>
-        <!-- 链路资格门控（详细引导统一在「链路管理」二级菜单）：此处仅简洁拦截 -->
+        <!-- 链路资格门控（详细引导统一在「连接总览」二级菜单）：此处仅简洁拦截 -->
         <div
           v-if="linkBlocked"
           class="mb-4 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-700"

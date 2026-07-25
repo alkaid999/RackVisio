@@ -18,4 +18,8 @@ export default {
   remove(id) {
     return http.delete(`/links/${id}`)
   },
+  // 设备视角链路：本设备作为本端/对端的所有链路（含对端信息）。
+  byDevice(deviceId) {
+    return http.get(`/links/by-device/${deviceId}`)
+  },
 }

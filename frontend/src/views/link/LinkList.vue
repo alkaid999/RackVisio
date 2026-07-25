@@ -2,8 +2,8 @@
   <div class="link-list">
     <div class="page-head">
       <div>
-        <h2 class="page-title">链路管理</h2>
-        <p class="page-sub">记录设备间物理连接（本端/对端设备与接口、连接介质、线缆长度）</p>
+        <h2 class="page-title">连接总览</h2>
+        <p class="page-sub">设备间物理连接全景（本端/对端设备与接口、连接介质、线缆长度）；可勾选「孤儿口」查看尚未连线的接口</p>
       </div>
       <Button
         v-if="canEdit"
@@ -33,22 +33,22 @@
           <Input v-model="filter.keyword" placeholder="设备名 / 接口名" class="w-48" @keyup.enter="loadAll" />
         </div>
         <div class="flex flex-col gap-1">
-          <Label>机房</Label>
-          <Select v-model="filter.roomId" class="w-40" @update:model-value="onRoomChange">
+          <Label>连接介质</Label>
+          <Select v-model="filter.medium" class="w-36" @update:model-value="loadAll">
             <SelectTrigger placeholder="全部" />
             <SelectContent>
               <SelectItem :value="SELECT_ALL">全部</SelectItem>
-              <SelectItem v-for="r in roomOptions" :key="r.id" :value="r.id">{{ r.name }}（{{ r.code }}）</SelectItem>
+              <SelectItem v-for="m in LINK_MEDIUM_OPTIONS" :key="m.value" :value="m.value">{{ m.label }}</SelectItem>
             </SelectContent>
           </Select>
         </div>
         <div class="flex flex-col gap-1">
-          <Label>机柜</Label>
-          <Select v-model="filter.rackId" class="w-40" :disabled="!toFilterParam(filter.roomId)" @update:model-value="loadAll">
+          <Label>连接器</Label>
+          <Select v-model="filter.connector" class="w-36" :disabled="!connectorOptions.length" @update:model-value="loadAll">
             <SelectTrigger placeholder="全部" />
             <SelectContent>
               <SelectItem :value="SELECT_ALL">全部</SelectItem>
-              <SelectItem v-for="r in rackOptions" :key="r.id" :value="r.id">{{ r.code }} {{ r.name }}</SelectItem>
+              <SelectItem v-for="c in connectorOptions" :key="c.value" :value="c.value">{{ c.label }}</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -56,20 +56,17 @@
           <Button @click="loadAll">查询</Button>
           <Button variant="outline" @click="resetFilter">重置</Button>
         </div>
+        <label class="flex items-center gap-2 pb-1 text-sm text-muted-foreground">
+          <Switch v-model="filter.showOrphans" @update:model-value="loadAll" />
+          显示孤儿口（未连线）
+        </label>
       </div>
     </div>
 
-    <!-- 链路分组（按设备折叠） -->
+    <!-- 连接总览（扁平全局表） -->
     <Card class="mb-5">
       <template #header>
-        <div class="flex items-center justify-between gap-3">
-          <span class="section-title">链路列表（{{ total }} 条 · {{ groups.length }} 个设备）</span>
-          <button
-            v-if="groups.length"
-            class="text-xs text-primary hover:underline"
-            @click="allExpanded ? collapseAll() : expandAll()"
-          >{{ allExpanded ? '收起全部' : '展开全部' }}</button>
-        </div>
+        <span class="section-title">连接总览（{{ rows.length }} 条）</span>
       </template>
 
       <div v-if="loading" class="flex justify-center py-16">
@@ -77,70 +74,90 @@
       </div>
 
       <!-- 空状态 -->
-      <div v-else-if="groups.length === 0" class="py-16 text-center text-sm text-muted-foreground">
-        暂无符合条件的链路。点击右上角「新建链路」添加设备间物理连接。
+      <div v-else-if="rows.length === 0" class="py-16 text-center text-sm text-muted-foreground">
+        暂无符合条件的连接。点击右上角「新建链路」添加设备间物理连接。
       </div>
 
-      <!-- 设备分组 -->
-      <div v-else class="link-groups">
-        <section v-for="g in groups" :key="g.id" class="link-group">
-          <!-- 一级标题：设备名（可点击折叠/展开） -->
-          <button class="link-group__head" :aria-expanded="!!expanded[g.id]" @click="toggleDevice(g.id)">
-            <ChevronRight class="link-group__chevron" :class="{ 'rotate-90': expanded[g.id] }" />
-            <span class="link-group__name">{{ g.name }}</span>
-            <Badge variant="secondary" class="link-group__count">{{ g.links.length }}</Badge>
-          </button>
-
-          <!-- 二级菜单：该设备下的所有链路 -->
-          <div v-if="expanded[g.id]" class="link-group__body">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead class="w-36">对端设备</TableHead>
-                  <TableHead class="w-28">本端接口</TableHead>
-                  <TableHead class="w-28">对端接口</TableHead>
-                  <TableHead class="w-28">连接介质</TableHead>
-                  <TableHead class="w-24">连接器</TableHead>
-                  <TableHead class="w-24">线缆长度</TableHead>
-                  <TableHead class="w-40">备注</TableHead>
-                  <TableHead class="text-right">操作</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                <TableRow v-for="lk in g.links" :key="lk.id">
-                  <TableCell>
-                    <span v-if="lk.peerId" class="link-device" @click="goDevice(lk.peerId)">{{ lk.peerName }}</span>
-                    <span v-else>{{ lk.peerName || '—' }}</span>
-                  </TableCell>
-                  <TableCell>{{ lk.localIface }}</TableCell>
-                  <TableCell>{{ lk.peerIface || '—' }}</TableCell>
-                  <TableCell>
-                    <Badge
-                      :style="{ backgroundColor: (LINK_MEDIUM_COLORS[lk.medium] || '#909399') + '22', color: LINK_MEDIUM_COLORS[lk.medium] || '#909399' }"
-                      variant="outline"
-                    >
-                      {{ LINK_MEDIUM_LABELS[lk.medium] || lk.medium }}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <span v-if="lk.connector_type" class="font-mono text-xs">{{ CONNECTOR_TYPE_LABELS[lk.connector_type] || lk.connector_type }}</span>
-                    <span v-else class="text-xs text-muted-foreground">—</span>
-                  </TableCell>
-                  <TableCell>{{ lk.cable_length || '—' }}</TableCell>
-                  <TableCell class="truncate" :title="lk.remark">{{ lk.remark || '—' }}</TableCell>
-                  <TableCell class="text-right">
-                    <div class="flex justify-end gap-1">
-                      <Button variant="ghost" size="icon" aria-label="查看" title="查看" @click="openView(lk)"><Eye class="h-4 w-4" /></Button>
-                      <Button v-if="canEdit" variant="ghost" size="icon" aria-label="编辑" title="编辑" @click="openEdit(lk)"><Pencil class="h-4 w-4" /></Button>
-                      <Button v-if="canEdit" variant="ghost" size="icon" class="text-destructive hover:text-destructive" aria-label="删除" title="删除" @click="onDelete(lk)"><Trash2 class="h-4 w-4" /></Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              </TableBody>
-            </Table>
-          </div>
-        </section>
-      </div>
+      <!-- 扁平表 -->
+      <Table v-else>
+        <TableHeader>
+          <TableRow>
+            <TableHead class="w-36">本端设备</TableHead>
+            <TableHead class="w-28">本端接口</TableHead>
+            <TableHead class="w-24">介质</TableHead>
+            <TableHead class="w-24">连接器</TableHead>
+            <TableHead class="w-24">线缆长度</TableHead>
+            <TableHead class="w-36">对端设备</TableHead>
+            <TableHead class="w-28">对端接口</TableHead>
+            <TableHead class="w-40">备注</TableHead>
+            <TableHead class="text-right">操作</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          <TableRow
+            v-for="row in rows"
+            :key="row.key"
+            :class="{ 'row--orphan': row.kind === 'orphan' }"
+          >
+            <!-- 本端设备 -->
+            <TableCell>
+              <button class="link-device" @click="goDevice(row.sourceDeviceId)">{{ row.sourceDeviceName }}</button>
+            </TableCell>
+            <TableCell>{{ row.sourceInterfaceName }}</TableCell>
+            <!-- 介质 / 连接器 / 线缆长度 -->
+            <TableCell>
+              <template v-if="row.kind === 'link'">
+                <Badge
+                  :style="{ backgroundColor: (LINK_MEDIUM_COLORS[row.medium] || '#909399') + '22', color: LINK_MEDIUM_COLORS[row.medium] || '#909399' }"
+                  variant="outline"
+                >{{ LINK_MEDIUM_LABELS[row.medium] || row.medium }}</Badge>
+              </template>
+              <span v-else class="text-xs text-muted-foreground">—</span>
+            </TableCell>
+            <TableCell>
+              <template v-if="row.kind === 'link' && row.connectorType">
+                <span class="font-mono text-xs">{{ CONNECTOR_TYPE_LABELS[row.connectorType] || row.connectorType }}</span>
+              </template>
+              <span v-else class="text-xs text-muted-foreground">—</span>
+            </TableCell>
+            <TableCell>
+              <span v-if="row.kind === 'link' && row.cableLength">{{ row.cableLength }}</span>
+              <span v-else class="text-xs text-muted-foreground">—</span>
+            </TableCell>
+            <!-- 对端设备 -->
+            <TableCell>
+              <template v-if="row.kind === 'link'">
+                <span v-if="row.targetDeviceId" class="link-device" @click="goDevice(row.targetDeviceId)">{{ row.targetDeviceName }}</span>
+                <span v-else>{{ row.targetDeviceName }}</span>
+              </template>
+              <span v-else>
+                <span class="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium" style="background: hsl(var(--muted)); color: hsl(var(--muted-foreground))">
+                  <Unplug class="h-3 w-3" />未连线
+                </span>
+              </span>
+            </TableCell>
+            <TableCell>
+              <span v-if="row.kind === 'link'">{{ row.targetInterfaceName || '—' }}</span>
+              <span v-else class="text-xs text-muted-foreground">—</span>
+            </TableCell>
+            <TableCell class="truncate" :title="row.kind === 'link' ? row.remark : ''">
+              <span v-if="row.kind === 'link'">{{ row.remark || '—' }}</span>
+              <span v-else class="text-xs text-muted-foreground">尚未建立连接的接口</span>
+            </TableCell>
+            <!-- 操作 -->
+            <TableCell class="text-right">
+              <div class="flex justify-end gap-1">
+                <template v-if="row.kind === 'link'">
+                  <Button variant="ghost" size="icon" aria-label="查看" title="查看" @click="openView(row)"><Eye class="h-4 w-4" /></Button>
+                  <Button v-if="canEdit" variant="ghost" size="icon" aria-label="编辑" title="编辑" @click="openEdit(row)"><Pencil class="h-4 w-4" /></Button>
+                  <Button v-if="canEdit" variant="ghost" size="icon" class="text-destructive hover:text-destructive" aria-label="删除" title="删除" @click="onDelete(row)"><Trash2 class="h-4 w-4" /></Button>
+                </template>
+                <Button v-else variant="ghost" size="icon" aria-label="查看设备" title="查看设备" @click="goDevice(row.sourceDeviceId)"><ExternalLink class="h-4 w-4" /></Button>
+              </div>
+            </TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>
     </Card>
 
     <!-- 新建 / 编辑链路弹窗 -->
@@ -161,18 +178,19 @@ import { useRouter } from 'vue-router'
 import { useToast } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
 import linkApi from '@/api/link'
+import interfaceApi from '@/api/interface'
 import deviceApi from '@/api/device'
-import roomApi from '@/api/room'
-import { useRoomStore } from '@/stores/room'
 import { useAuthStore } from '@/stores/auth'
 import LinkFormDialog from '@/views/link/LinkFormDialog.vue'
-import { ChevronRight, Eye, Pencil, Trash2, TriangleAlert } from 'lucide-vue-next'
+import { Eye, Pencil, Trash2, TriangleAlert, Unplug, ExternalLink } from 'lucide-vue-next'
 import {
   LINK_MEDIUM_LABELS,
   LINK_MEDIUM_COLORS,
+  LINK_MEDIUM_OPTIONS,
   CONNECTOR_TYPE_LABELS,
+  CONNECTOR_TYPE_TP_OPTIONS,
+  CONNECTOR_TYPE_FIBER_OPTIONS,
   SELECT_ALL,
-  toFilterParam,
 } from '@/utils/constants'
 import Button from '@/components/ui/button.vue'
 import Input from '@/components/ui/input.vue'
@@ -181,6 +199,7 @@ import Select from '@/components/ui/select.vue'
 import SelectTrigger from '@/components/ui/select-trigger.vue'
 import SelectContent from '@/components/ui/select-content.vue'
 import SelectItem from '@/components/ui/select-item.vue'
+import Switch from '@/components/ui/switch.vue'
 import Card from '@/components/ui/card.vue'
 import Table from '@/components/ui/table.vue'
 import TableHeader from '@/components/ui/table-header.vue'
@@ -191,8 +210,6 @@ import TableCell from '@/components/ui/table-cell.vue'
 import Badge from '@/components/ui/badge.vue'
 import Spinner from '@/components/ui/spinner.vue'
 
-const roomStore = useRoomStore()
-
 const { success } = useToast()
 const { confirm } = useConfirm()
 const auth = useAuthStore()
@@ -200,58 +217,53 @@ const router = useRouter()
 // 新建 / 编辑 / 删除链路需 link:edit；只读用户隐藏全部写操作按钮。
 const canEdit = computed(() => auth.hasPermission('link:edit'))
 
-// 全量链路（按筛选条件拉取后客户端分组）。
+// 连接器筛选选项：双绞线与光纤连接器合并（不随介质联动，仅作宽松过滤）。
+const connectorOptions = computed(() => [
+  ...CONNECTOR_TYPE_TP_OPTIONS,
+  ...CONNECTOR_TYPE_FIBER_OPTIONS,
+])
+
+// 全量链路（按筛选条件拉取后客户端归一直表）。
 const allLinks = ref([])
 const total = ref(0)
 const loading = ref(false)
 
-// 折叠状态：默认全部折叠。key = 设备 id，value = 是否展开。
-const expanded = ref({})
-const toggleDevice = (id) => { expanded.value[id] = !expanded.value[id] }
-const expandAll = () => {
-  const e = {}
-  groups.value.forEach((g) => { e[g.id] = true })
-  expanded.value = e
-}
-const collapseAll = () => { expanded.value = {} }
-const allExpanded = computed(() => groups.value.length > 0 && groups.value.every((g) => expanded.value[g.id]))
+// 孤儿口（未连线接口）。
+const orphans = ref([])
 
-// 按设备分组：链路归属到它连接的两端（source / target），故一条链路可能出现在两个设备分组下。
-const groups = computed(() => {
-  const map = new Map()
-  const ensure = (id, name) => {
-    if (!map.has(id)) map.set(id, { id, name: name || '未知设备', links: [] })
-    return map.get(id)
+// 筛选条件。
+const filter = reactive({ keyword: '', medium: SELECT_ALL, connector: SELECT_ALL, showOrphans: false })
+
+// 扁平表行：链路 +（可选）孤儿口，统一形状便于渲染。
+const rows = computed(() => {
+  const linkRows = allLinks.value.map((lk) => ({
+    key: 'l-' + lk.id,
+    kind: 'link',
+    id: lk.id,
+    sourceDeviceId: lk.source_device_id,
+    sourceDeviceName: lk.source_device_name,
+    sourceInterfaceName: lk.source_interface_name,
+    targetDeviceId: lk.target_device_id,
+    targetDeviceName: lk.target_device_name,
+    targetInterfaceName: lk.target_interface_name,
+    medium: lk.medium,
+    connectorType: lk.connector_type,
+    cableLength: lk.cable_length,
+    remark: lk.remark,
+  }))
+  // 孤儿口仅在「无介质/连接器筛选」时混入（孤儿口无介质，必然不匹配介质/连接器条件）。
+  if (filter.showOrphans && filter.medium === SELECT_ALL && filter.connector === SELECT_ALL) {
+    const orphanRows = orphans.value.map((o) => ({
+      key: 'o-' + o.interface_id,
+      kind: 'orphan',
+      sourceDeviceId: o.device_id,
+      sourceDeviceName: o.device_name,
+      sourceInterfaceName: o.interface_name,
+    }))
+    return [...linkRows, ...orphanRows]
   }
-  for (const link of allLinks.value) {
-    if (link.source_device_id) {
-      const g = ensure(link.source_device_id, link.source_device_name)
-      g.links.push({
-        ...link,
-        role: 'source',
-        peerName: link.target_device_name,
-        peerId: link.target_device_id,
-        localIface: link.source_interface_name,
-        peerIface: link.target_interface_name,
-      })
-    }
-    if (link.target_device_id && link.target_device_id !== link.source_device_id) {
-      const g = ensure(link.target_device_id, link.target_device_name)
-      g.links.push({
-        ...link,
-        role: 'target',
-        peerName: link.source_device_name,
-        peerId: link.source_device_id,
-        localIface: link.target_interface_name,
-        peerIface: link.source_interface_name,
-      })
-    }
-  }
-  return [...map.values()].sort((a, b) => String(a.name).localeCompare(String(b.name)))
+  return linkRows
 })
-
-const roomOptions = computed(() => roomStore.rooms)
-const rackOptions = computed(() => roomStore.racks)
 
 // 链路资格：是否存在「已上架且含接口」的设备，决定「新建链路」是否可用。
 const devices = ref([])
@@ -298,10 +310,7 @@ const dialogViewMode = ref(false)
 const editLinkId = ref('')
 const editLink = ref(null)
 
-const filter = reactive({ keyword: '', roomId: SELECT_ALL, rackId: SELECT_ALL })
-
-// 拉取「全部」符合条件的链路（循环翻页直到取完），再客户端按设备分组。
-// 链路数量在 IDC 规模下可控；分组视图天然不适合服务端分页，故一次性取全量。
+// 拉取「全部」符合条件的链路（循环翻页直到取完），再客户端归一直表。
 async function loadAll() {
   loading.value = true
   try {
@@ -312,9 +321,9 @@ async function loadAll() {
       const data = await linkApi.list({
         page,
         size,
-        room_id: toFilterParam(filter.roomId),
-        rack_id: toFilterParam(filter.rackId),
         keyword: filter.keyword || undefined,
+        medium: filter.medium === SELECT_ALL ? undefined : filter.medium,
+        connector_type: filter.connector === SELECT_ALL ? undefined : filter.connector,
       })
       const items = (data && data.items) || []
       collected.push(...items)
@@ -323,30 +332,33 @@ async function loadAll() {
       page += 1
     }
     allLinks.value = collected
+    // 孤儿口：仅在开关开启且未做介质/连接器筛选时拉取。
+    if (filter.showOrphans && filter.medium === SELECT_ALL && filter.connector === SELECT_ALL) {
+      try {
+        const u = await interfaceApi.unlinked()
+        orphans.value = Array.isArray(u) ? u : []
+      } catch (e) {
+        orphans.value = []
+      }
+    } else {
+      orphans.value = []
+    }
   } finally {
     loading.value = false
   }
 }
 function resetFilter() {
   filter.keyword = ''
-  filter.roomId = SELECT_ALL
-  filter.rackId = SELECT_ALL
-  roomStore.racks = []
+  filter.medium = SELECT_ALL
+  filter.connector = SELECT_ALL
+  filter.showOrphans = false
+  orphans.value = []
   loadAll()
 }
 // 点击本端/对端设备（系统内）跳转到对应设备详情页；外部对端 target_device_id 为空，不渲染链接。
 function goDevice(id) {
   if (!id) return
   router.push(`/devices/${id}`)
-}
-async function onRoomChange() {
-  filter.rackId = SELECT_ALL
-  if (toFilterParam(filter.roomId)) {
-    await roomStore.fetchRacks(filter.roomId)
-  } else {
-    roomStore.racks = []
-  }
-  loadAll()
 }
 function openCreate() {
   dialogMode.value = 'create'
@@ -372,7 +384,7 @@ function openView(row) {
 async function onDelete(row) {
   const ok = await confirm({
     title: '提示',
-    description: `确认删除链路「${row.source_device_name} ↔ ${row.target_device_name}」？`,
+    description: `确认删除链路「${row.sourceDeviceName} ↔ ${row.targetDeviceName}」？`,
     variant: 'danger',
     confirmText: '删除',
     cancelText: '取消',
@@ -391,7 +403,6 @@ function onSaved() {
 }
 
 onMounted(async () => {
-  await roomStore.fetchList({ page: 1, size: 200 })
   loadAll()
   // 拉取设备用于链路资格判定（已上架 + 含接口）。
   try {
@@ -424,7 +435,7 @@ onMounted(async () => {
 }
 .link-device {
   cursor: pointer;
-  color: oklch(var(--primary));
+  color: hsl(var(--primary));
 }
 .link-device:hover {
   opacity: 0.85;
@@ -438,45 +449,11 @@ onMounted(async () => {
   margin-bottom: 16px;
   backdrop-filter: blur(8px);
 }
-/* 设备分组折叠树 */
-.link-groups {
-  display: flex;
-  flex-direction: column;
+/* 孤儿口行：弱化呈现，与已连接链路区分 */
+.row--orphan {
+  background: oklch(var(--muted) / 0.35);
 }
-.link-group + .link-group {
-  border-top: 1px solid oklch(var(--border) / 0.5);
-}
-.link-group__head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 12px 16px;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  text-align: left;
-  transition: background 0.15s ease;
-}
-.link-group__head:hover {
-  background: oklch(var(--accent) / 0.5);
-}
-.link-group__chevron {
-  flex: none;
-  width: 16px;
-  height: 16px;
-  color: oklch(var(--muted-foreground));
-  transition: transform 0.2s ease;
-}
-.link-group__name {
-  font-size: 14px;
-  font-weight: 600;
-  color: oklch(var(--foreground));
-}
-.link-group__count {
-  font-size: 12px;
-}
-.link-group__body {
-  padding: 0 16px 12px;
+.row--orphan:hover {
+  background: oklch(var(--muted) / 0.55);
 }
 </style>

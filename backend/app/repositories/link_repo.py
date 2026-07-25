@@ -88,6 +88,8 @@ class LinkRepository:
         room_id: Optional[str] = None,
         rack_id: Optional[str] = None,
         keyword: Optional[str] = None,
+        medium: Optional[str] = None,
+        connector_type: Optional[str] = None,
         page: int = 1,
         size: int = 50,
     ) -> Tuple[list[dict], int]:
@@ -140,13 +142,20 @@ class LinkRepository:
             conditions.append(SDev.id.in_(device_ids))
         if keyword:
             like = f"%{keyword}%"
+            # 注意：必须用已 JOIN 的别名 SInterface / TInterface，不能引用未别名的
+            # DeviceInterface 基础表——否则 SQLAlchemy 会隐式笛卡尔扇出，导致同一链路
+            # 被复制成「接口总数」那么多行（搜索结果大量重复）。
             conditions.append(
                 (SDev.name.like(like))
                 | (TDev.name.like(like))
-                | (DeviceInterface.name.like(like))
+                | (SInterface.name.like(like))
                 | (TInterface.name.like(like))
                 | (DeviceLink.target_external.like(like))
             )
+        if medium:
+            conditions.append(DeviceLink.medium == medium)
+        if connector_type:
+            conditions.append(DeviceLink.connector_type == connector_type)
         if conditions:
             base = base.where(*conditions)
             count_base = count_base.where(*conditions)
@@ -216,6 +225,82 @@ class LinkRepository:
         )
         result = (await self.session.execute(stmt)).mappings().first()
         return self._normalize_detail(dict(result)) if result is not None else None
+
+    async def list_detailed_by_device(
+        self, device_id: str
+    ) -> list[dict]:
+        """返回某设备作为本端或对端的全部链路（归一到「设备视角」）。
+
+        用于设备详情页「链路」Card：每行包含本设备接口（local）与对端（peer）。
+        半链路（对端非系统内）时 peer 设备名退回 target_external 文本。
+        """
+        columns = [
+            DeviceLink.id,
+            DeviceLink.remark,
+            DeviceLink.medium,
+            DeviceLink.cable_length,
+            DeviceLink.connector_type,
+            DeviceLink.target_external,
+            DeviceLink.created_at,
+            DeviceLink.updated_at,
+            SInterface.id.label("source_interface_id"),
+            SInterface.name.label("source_interface_name"),
+            SDev.id.label("source_device_id"),
+            SDev.name.label("source_device_name"),
+            TInterface.id.label("target_interface_id"),
+            TInterface.name.label("target_interface_name"),
+            TDev.id.label("target_device_id"),
+            TDev.name.label("target_device_name"),
+        ]
+        stmt = (
+            select(*columns)
+            .select_from(DeviceLink)
+            .join(SInterface, DeviceLink.source_interface_id == SInterface.id)
+            .join(SDev, SInterface.device_id == SDev.id)
+            .outerjoin(TInterface, DeviceLink.target_interface_id == TInterface.id)
+            .outerjoin(TDev, TInterface.device_id == TDev.id)
+            .where((SDev.id == device_id) | (TDev.id == device_id))
+            .order_by(DeviceLink.created_at.desc())
+        )
+        rows = (await self.session.execute(stmt)).mappings().all()
+        return [self._normalize_device_link(dict(r), device_id) for r in rows]
+
+    @staticmethod
+    def _normalize_device_link(row: dict, device_id: str) -> dict:
+        """把一条链路归一到「本设备视角」：local=本设备接口，peer=对端（或外部）。"""
+        is_source = row.get("source_device_id") == device_id
+        if is_source:
+            local_iface_id = row.get("source_interface_id")
+            local_iface_name = row.get("source_interface_name")
+            peer_device_id = row.get("target_device_id")
+            peer_device_name = row.get("target_device_name")
+            peer_iface_id = row.get("target_interface_id")
+            peer_iface_name = row.get("target_interface_name")
+        else:
+            local_iface_id = row.get("target_interface_id")
+            local_iface_name = row.get("target_interface_name")
+            peer_device_id = row.get("source_device_id")
+            peer_device_name = row.get("source_device_name")
+            peer_iface_id = row.get("source_interface_id")
+            peer_iface_name = row.get("source_interface_name")
+        # 半链路：对端接口为空，设备名退回外部文本。
+        if not peer_iface_id:
+            peer_device_name = row.get("target_external") or "外部"
+        return {
+            "link_id": row.get("id"),
+            "local_interface_id": local_iface_id,
+            "local_interface_name": local_iface_name,
+            "peer_device_id": peer_device_id,
+            "peer_device_name": peer_device_name,
+            "peer_interface_id": peer_iface_id,
+            "peer_interface_name": peer_iface_name,
+            "is_half": not bool(peer_iface_id),
+            "medium": row.get("medium"),
+            "connector_type": row.get("connector_type"),
+            "cable_length": row.get("cable_length"),
+            "remark": row.get("remark"),
+            "created_at": row.get("created_at"),
+        }
 
     async def update(self, link: DeviceLink, data: LinkUpdate) -> DeviceLink:
         for field, value in data.model_dump(exclude_unset=True).items():

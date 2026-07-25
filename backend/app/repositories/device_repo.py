@@ -81,6 +81,7 @@ class DeviceRepository:
                 | (Device.model.like(like))
                 | (Device.sn.like(like))
                 | (Device.device_code.like(like))
+                | (Device.ip_address.like(like))
             )
 
         base = select(Device)

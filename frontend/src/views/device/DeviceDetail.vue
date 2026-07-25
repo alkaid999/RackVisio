@@ -244,6 +244,51 @@
         <EmptyState v-else title="暂无上下架记录" />
       </Card>
 
+      <!-- 链路（设备视角：本设备接口 → 对端设备/接口；设施不建链路，隐藏） -->
+      <Card v-if="!isFacility" class="mb-5">
+        <template #header>
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <span class="section-title flex items-center gap-1.5">
+              <Cable class="h-4 w-4" />链路（{{ links.length }}）
+            </span>
+            <span class="text-xs text-muted-foreground">本设备 {{ links.length }} 条连接</span>
+          </div>
+        </template>
+
+        <div v-if="linkLoading" class="flex justify-center py-10">
+          <Spinner class="h-6 w-6 text-primary" />
+        </div>
+        <ul v-else-if="links.length" class="link-view">
+          <li v-for="lk in links" :key="lk.link_id" class="link-view__row">
+            <div class="flex items-center gap-1.5 link-view__iface">
+              <Network class="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              <span class="font-medium">{{ lk.local_interface_name }}</span>
+              <ArrowRight class="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            </div>
+            <div class="link-view__peer">
+              <template v-if="lk.peer_device_id">
+                <button class="font-medium text-primary hover:underline" @click="goPeer(lk.peer_device_id)">{{ lk.peer_device_name }}</button>
+              </template>
+              <span v-else class="font-medium">{{ lk.peer_device_name }}</span>
+              <span v-if="lk.peer_interface_name" class="text-muted-foreground">· {{ lk.peer_interface_name }}</span>
+              <span v-else class="text-xs text-muted-foreground">（外部对端）</span>
+            </div>
+            <div class="flex flex-wrap items-center gap-1.5 link-view__meta">
+              <Badge
+                :style="{ backgroundColor: (LINK_MEDIUM_COLORS[lk.medium] || '#909399') + '22', color: LINK_MEDIUM_COLORS[lk.medium] || '#909399' }"
+                variant="outline"
+              >{{ LINK_MEDIUM_LABELS[lk.medium] || lk.medium }}</Badge>
+              <span v-if="lk.connector_type" class="font-mono text-xs text-muted-foreground">{{ CONNECTOR_TYPE_LABELS[lk.connector_type] || lk.connector_type }}</span>
+              <span v-if="lk.cable_length" class="text-xs text-muted-foreground">{{ lk.cable_length }}</span>
+            </div>
+            <div v-if="canEditLink" class="link-view__actions">
+              <Button variant="ghost" size="icon-sm" class="text-destructive hover:text-destructive" aria-label="断开" title="断开" @click="onUnlink(lk)"><Unlink class="h-3.5 w-3.5" /></Button>
+            </div>
+          </li>
+        </ul>
+        <EmptyState v-else title="该设备暂无链路" />
+      </Card>
+
       <!-- 编辑设备弹窗（open 由 openDeviceForm() 在编辑按钮手势内同步触发） -->
       <DeviceForm @saved="onDeviceSaved" />
 
@@ -279,6 +324,7 @@ import { useAuthStore } from '@/stores/auth'
 import deviceApi from '@/api/device'
 import rackApi from '@/api/rack'
 import interfaceApi from '@/api/interface'
+import linkApi from '@/api/link'
 import { formatDateTime } from '@/utils/datetime'
 import InterfaceList from '@/components/device/InterfaceList.vue'
 import InterfaceFrontPanel from '@/components/device/InterfaceFrontPanel.vue'
@@ -287,7 +333,7 @@ import InterfaceDetailDialog from '@/components/device/InterfaceDetailDialog.vue
 import DeviceTypeTag from '@/components/device/DeviceTypeTag.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import DeviceForm from '@/views/device/DeviceForm.vue'
-import { Network, ServerCog } from 'lucide-vue-next'
+import { Network, ServerCog, Cable, ArrowRight, Unlink } from 'lucide-vue-next'
 import {
   Pencil,
   Trash2,
@@ -312,10 +358,11 @@ import {
   Cpu,
 } from 'lucide-vue-next'
 import Button from '@/components/ui/button.vue'
-import { DEVICE_POWER_COLORS, isAssetDevice } from '@/utils/constants'
+import { DEVICE_POWER_COLORS, isAssetDevice, LINK_MEDIUM_LABELS, LINK_MEDIUM_COLORS, CONNECTOR_TYPE_LABELS } from '@/utils/constants'
 import Card from '@/components/ui/card.vue'
 import EmptyState from '@/components/ui/empty-state.vue'
 import Spinner from '@/components/ui/spinner.vue'
+import Badge from '@/components/ui/badge.vue'
 import Dialog from '@/components/ui/dialog.vue'
 import Form from '@/components/ui/form.vue'
 import FormItem from '@/components/ui/form-item.vue'
@@ -351,6 +398,10 @@ const interfaces = ref([])
 const panelLoading = ref(false)
 const viewMode = ref('panel') // panel | list
 const listRef = ref(null)
+
+// 设备视角链路（本设备接口 → 对端设备/接口）。
+const links = ref([])
+const linkLoading = ref(false)
 
 // 添加 / 编辑接口弹窗状态。
 const formOpen = ref(false)
@@ -394,6 +445,40 @@ function goRack() {
 
 function goRoom() {
   router.push(`/rooms/${device.value.current_room_id}`)
+}
+
+// —— 设备视角链路（钻取层）——
+async function fetchLinks() {
+  linkLoading.value = true
+  try {
+    const r = await linkApi.byDevice(deviceId)
+    links.value = Array.isArray(r) ? r : []
+  } catch (e) {
+    links.value = []
+  } finally {
+    linkLoading.value = false
+  }
+}
+function goPeer(id) {
+  if (!id) return
+  router.push(`/devices/${id}`)
+}
+async function onUnlink(lk) {
+  const ok = await confirm({
+    title: '断开链路',
+    description: `确认断开「${lk.local_interface_name} → ${lk.peer_device_name}」？断开后两端接口状态将回落为未连接。`,
+    variant: 'danger',
+    confirmText: '断开',
+    cancelText: '取消',
+  })
+  if (!ok) return
+  try {
+    await linkApi.remove(lk.link_id)
+    success('已断开')
+    await fetchLinks()
+  } catch (e) {
+    // 拦截器提示
+  }
 }
 
 // —— 接口数据（自由排布，无模板）——
@@ -565,6 +650,8 @@ onMounted(async () => {
     })
   // 接口数据：并行拉取，不阻塞详情渲染。
   fetchInterfaces()
+  // 设备视角链路：并行拉取（钻取层）。
+  fetchLinks()
   await store.fetchOne(deviceId)
   // 拉取所属机柜名称（非上架设备无需拉取）。
   if (device.value.current_rack_id) {
@@ -671,5 +758,47 @@ onMounted(async () => {
 .hist-pager__text {
   font-size: 12px;
   color: var(--muted-foreground, #71717a);
+}
+
+/* 设备视角链路列表 */
+.link-view {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.link-view__row {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) minmax(160px, 1.4fr) minmax(140px, 1fr) auto;
+  align-items: center;
+  gap: 10px 14px;
+  border: 1px solid var(--border, rgba(128, 128, 128, 0.18));
+  border-radius: 10px;
+  background: var(--background, #fff);
+  padding: 10px 12px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.link-view__row:hover {
+  border-color: color-mix(in srgb, var(--primary, #3b82f6) 40%, transparent);
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.06);
+}
+.link-view__peer {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  font-size: 13px;
+}
+.link-view__actions {
+  display: flex;
+  justify-content: flex-end;
+}
+@media (max-width: 640px) {
+  .link-view__row {
+    grid-template-columns: 1fr;
+  }
+  .link-view__actions {
+    justify-content: flex-start;
+  }
 }
 </style>

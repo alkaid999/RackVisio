@@ -53,7 +53,16 @@
             <Button variant="ghost" size="icon" class="lg:hidden" aria-label="打开菜单" @click="mobileOpen = true">
               <Menu class="h-5 w-5" />
             </Button>
-            <Breadcrumb />
+            <button
+              type="button"
+              class="hidden items-center gap-2 rounded-lg border border-border/60 bg-card/40 px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:border-border hover:bg-accent/50 md:flex md:w-56 lg:w-72"
+              @click="searchOpen = true"
+            >
+              <Search class="h-4 w-4" />
+              <span class="flex-1 truncate text-left">搜索设备、接口、IP…</span>
+              <Kbd>⌘K</Kbd>
+            </button>
+            <Breadcrumb class="min-w-0" />
           </div>
 
           <div class="flex shrink-0 items-center gap-1.5">
@@ -118,14 +127,15 @@
     <!-- 全局浮层 -->
     <Toaster />
     <ConfirmDialog />
+    <GlobalSearch v-model="searchOpen" />
   </TooltipProvider>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { TooltipProvider } from 'reka-ui'
-import { Menu, PanelLeftClose, PanelLeft, RefreshCw, LogOut } from 'lucide-vue-next'
+import { Menu, PanelLeftClose, PanelLeft, RefreshCw, LogOut, Search } from 'lucide-vue-next'
 import { useAuthStore } from '@/stores/auth'
 import { useMetaStore } from '@/stores/meta'
 import SidebarNav from '@/components/layout/sidebar-nav.vue'
@@ -142,6 +152,8 @@ import DropdownMenuSeparator from '@/components/ui/dropdown-menu-separator.vue'
 import Sheet from '@/components/ui/sheet.vue'
 import Toaster from '@/components/ui/toaster.vue'
 import ConfirmDialog from '@/components/ui/confirm-dialog.vue'
+import Kbd from '@/components/ui/kbd.vue'
+import GlobalSearch from '@/components/layout/GlobalSearch.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -160,6 +172,17 @@ const isFullscreen = computed(() => !!route.meta.fullscreen)
 
 const collapsed = ref(false)
 const mobileOpen = ref(false)
+const searchOpen = ref(false)
+
+// 全局命令面板快捷键：⌘K（macOS）/ Ctrl+K（Windows）唤起搜索 Hub。
+function onGlobalKeydown(e) {
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+    e.preventDefault()
+    searchOpen.value = true
+  }
+}
+onMounted(() => window.addEventListener('keydown', onGlobalKeydown))
+onUnmounted(() => window.removeEventListener('keydown', onGlobalKeydown))
 
 // 字母头像：由姓名生成首字母（英文多词取前两个词首字母，中文取首字），并按姓名哈希取确定性配色。
 const AVATAR_PALETTE = [

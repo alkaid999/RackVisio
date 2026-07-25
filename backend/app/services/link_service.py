@@ -15,7 +15,7 @@ from app.repositories.device_repo import DeviceRepository
 from app.repositories.interface_repo import InterfaceRepository
 from app.repositories.link_repo import LinkRepository
 from app.repositories.mount_record_repo import MountRecordRepository
-from app.schemas.link import LinkCreate, LinkDetailOut, LinkUpdate
+from app.schemas.link import LinkCreate, DeviceLinkView, LinkDetailOut, LinkUpdate
 
 
 class LinkService:
@@ -145,6 +145,8 @@ class LinkService:
         room_id: Optional[str] = None,
         rack_id: Optional[str] = None,
         keyword: Optional[str] = None,
+        medium: Optional[str] = None,
+        connector_type: Optional[str] = None,
         page: int = 1,
         size: int = 50,
     ):
@@ -153,9 +155,16 @@ class LinkService:
             room_id=room_id,
             rack_id=rack_id,
             keyword=keyword,
+            medium=medium,
+            connector_type=connector_type,
             page=page,
             size=size,
         )
+
+    async def list_links_by_device(self, device_id: str) -> list[DeviceLinkView]:
+        """返回某设备作为本端/对端的全部链路（设备视角），用于设备详情页展示。"""
+        rows = await self.link_repo.list_detailed_by_device(device_id)
+        return [DeviceLinkView.model_validate(r) for r in rows]
 
     async def update_link(self, link_id: str, data: LinkUpdate) -> DeviceLink:
         link = await self.get_link(link_id)

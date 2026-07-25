@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.device import Device
@@ -87,6 +87,43 @@ class InterfaceRepository:
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
+    async def list_all_with_device(
+        self, page: int, size: int, keyword: Optional[str] = None
+    ) -> tuple[list, int]:
+        """全局接口列表（含所属设备名），分页 + 关键字模糊匹配接口名/设备名。
+
+        返回 ``(rows, total)``，其中 ``rows`` 为 ``(DeviceInterface, device_name)`` 元组列表。
+        """
+        conds = []
+        if keyword:
+            kw = f"%{keyword}%"
+            conds.append(or_(DeviceInterface.name.ilike(kw), Device.name.ilike(kw)))
+        base_items = (
+            select(DeviceInterface, Device.name.label("device_name"))
+            .join(Device, Device.id == DeviceInterface.device_id)
+        )
+        base_count = (
+            select(func.count())
+            .select_from(DeviceInterface)
+            .join(Device, Device.id == DeviceInterface.device_id)
+        )
+        if conds:
+            base_items = base_items.where(*conds)
+            base_count = base_count.where(*conds)
+        items_stmt = (
+            base_items.order_by(
+                Device.name.asc(),
+                (DeviceInterface.interface_no == 0).asc(),
+                DeviceInterface.interface_no.asc(),
+                DeviceInterface.name.asc(),
+            )
+            .limit(size)
+            .offset((page - 1) * size)
+        )
+        rows = (await self.session.execute(items_stmt)).all()
+        total = int((await self.session.execute(base_count)).scalar() or 0)
+        return rows, total
+
     async def update(
         self, iface: DeviceInterface, data: InterfaceUpdate
     ) -> DeviceInterface:
@@ -112,3 +149,36 @@ class InterfaceRepository:
         await self.session.execute(link_stmt)
         await self.session.delete(iface)
         await self.session.flush()
+
+    async def list_unlinked(self) -> list[dict]:
+        """返回所有未建立链路的接口（未被任何链路作为源或对端引用）。
+
+        用于连接总览的「孤儿口」开关：展示尚未连线的接口，补全布线全景。
+        """
+        # 任一链路引用（本端或对端）的接口 id 集合（去重）。
+        linked_source = select(DeviceLink.source_interface_id).where(
+            DeviceLink.source_interface_id.isnot(None)
+        )
+        linked_target = select(DeviceLink.target_interface_id).where(
+            DeviceLink.target_interface_id.isnot(None)
+        )
+        linked_sub = linked_source.union(linked_target).subquery()
+        stmt = (
+            select(
+                DeviceInterface.id.label("interface_id"),
+                DeviceInterface.name.label("interface_name"),
+                DeviceInterface.interface_type.label("interface_type"),
+                Device.id.label("device_id"),
+                Device.name.label("device_name"),
+            )
+            .select_from(DeviceInterface)
+            .join(Device, DeviceInterface.device_id == Device.id)
+            .outerjoin(
+                linked_sub,
+                DeviceInterface.id == linked_sub.c.source_interface_id,
+            )
+            .where(linked_sub.c.source_interface_id.is_(None))
+            .order_by(Device.name, DeviceInterface.name)
+        )
+        rows = (await self.session.execute(stmt)).mappings().all()
+        return [dict(r) for r in rows]

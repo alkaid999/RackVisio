@@ -19,7 +19,10 @@ from app.repositories.link_repo import LinkRepository
 from app.schemas.interface import (
     InterfaceBatchCreate,
     InterfaceCreate,
+    InterfaceOut,
     InterfaceUpdate,
+    InterfaceWithDeviceOut,
+    UnlinkedInterfaceOut,
 )
 
 
@@ -84,6 +87,23 @@ class InterfaceService:
         if device is None:
             raise NotFoundError("设备不存在")
         return await self.interface_repo.list_by_device(device_id)
+
+    async def list_interfaces_global(
+        self, page: int, size: int, keyword: Optional[str] = None
+    ) -> tuple[list, int]:
+        """全局接口面板：分页拉取全部设备的接口，并附带所属设备名。"""
+        rows, total = await self.interface_repo.list_all_with_device(page, size, keyword)
+        items = []
+        for iface, device_name in rows:
+            data = InterfaceOut.model_validate(iface).model_dump()
+            data["device_name"] = device_name
+            items.append(InterfaceWithDeviceOut.model_validate(data))
+        return items, total
+
+    async def list_unlinked_interfaces(self) -> list:
+        """返回所有未连接链路（孤儿口）的接口，附带所属设备名。"""
+        rows = await self.interface_repo.list_unlinked()
+        return [UnlinkedInterfaceOut.model_validate(r) for r in rows]
 
     async def update_interface(
         self, interface_id: str, data: InterfaceUpdate

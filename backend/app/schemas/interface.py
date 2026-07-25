@@ -72,3 +72,19 @@ class InterfaceOut(BaseModel):
     ip_address: Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+
+
+class InterfaceWithDeviceOut(InterfaceOut):
+    """接口响应（含所属设备名），用于全局接口面板列表。"""
+
+    device_name: Optional[str] = None
+
+
+class UnlinkedInterfaceOut(BaseModel):
+    """未连接链路（孤儿口）接口响应：含所属设备信息，用于连接总览的孤儿口展示。"""
+
+    interface_id: str
+    interface_name: str
+    device_id: str
+    device_name: str
+    interface_type: Optional[str] = None

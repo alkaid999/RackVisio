@@ -44,7 +44,13 @@ const nav = [
     children: [
       { to: '/devices', label: '设备列表', icon: Cpu, permission: 'device:view' },
       { to: '/mount-records', label: '上下架记录', icon: History, permission: 'device:view' },
-      { to: '/links', label: '链路管理', icon: Share2, permission: 'link:view' },
+      { to: '/links', label: '连接总览', icon: Share2, permission: 'link:view' },
+    ],
+  },
+  {
+    label: '耗材管理',
+    icon: Package,
+    children: [
       { to: '/consumables', label: '耗材列表', icon: Package, permission: 'consumable:view' },
     ],
   },

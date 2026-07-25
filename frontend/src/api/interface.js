@@ -7,6 +7,10 @@ export default {
   list(deviceId) {
     return http.get(`/devices/${deviceId}/interfaces`)
   },
+  // 全局接口面板：分页拉取所有设备的接口（含 device_name）。data = { items, total, page, size }
+  listAll(params = {}) {
+    return http.get('/interfaces', { params })
+  },
   // 创建单个接口。payload = {name, interface_type, speed?, role?, interface_no?}
   create(deviceId, payload) {
     return http.post(`/devices/${deviceId}/interfaces`, payload)
@@ -26,5 +30,9 @@ export default {
   // 查询某接口当前所在 active 链路（无则 null）。data = LinkDetailOut | null
   linkByInterface(interfaceId) {
     return http.get(`/links/by-interface/${interfaceId}`)
+  },
+  // 未连接（孤儿口）接口列表：所有未被任何链路引用的接口。data = [UnlinkedInterfaceOut]
+  unlinked() {
+    return http.get('/interfaces/unlinked')
   },
 }
