@@ -46,7 +46,7 @@ FACILITY_TYPES = {k for k, v in DEVICE_TYPE_META.items() if v.get("asset") is Fa
 # 颜色与前端 utils/constants.js 的 RACK_STATUS_COLORS 保持一致。
 RACK_STATUS_META: dict[str, dict] = {
     "可用": {"label": "可用", "color": "#22c55e"},
-    "空闲": {"label": "空闲", "color": "#67c23a"},
+    "不可用": {"label": "不可用", "color": "#ef4444"},
     "维护中": {"label": "维护中", "color": "#e6a23c"},
     "空调柜": {"label": "空调柜", "color": "#38bdf8"},
     "电柜": {"label": "电柜", "color": "#f59e0b"},

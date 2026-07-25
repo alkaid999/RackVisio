@@ -150,6 +150,14 @@
                   <div class="h-full rounded-full" :style="{ width: fillPct(row) + '%', backgroundColor: capacityColor(row.used_u / row.total_u) }" />
                 </div>
               </template>
+              <template v-else-if="col.key === 'power'">
+                <div class="flex items-center gap-2">
+                  <div class="h-2.5 flex-1 overflow-hidden rounded-full bg-muted">
+                    <div class="h-full rounded-full" :style="{ width: powerPct(row) + '%', backgroundColor: powerColor(row) }" />
+                  </div>
+                  <span class="w-9 shrink-0 text-right text-xs text-muted-foreground">{{ row.design_power != null ? powerPct(row) + '%' : '—' }}</span>
+                </div>
+              </template>
               <template v-else-if="col.key === 'status'"><StatusBadge type="rack" :value="row.status" /></template>
             </TableCell>
             <TableCell class="text-right">
@@ -273,6 +281,7 @@ const rackColumns = [
   { key: 'room_name', label: '所属机房' },
   { key: 'capacity', label: '容量' },
   { key: 'usage', label: '使用率' },
+  { key: 'power', label: '功率' },
   { key: 'status', label: '状态' },
 ]
 const columns = rackColumns
@@ -313,6 +322,15 @@ function capacityColor(ratio) {
 }
 function fillPct(rack) {
   return rack.total_u ? Math.round((rack.used_u / rack.total_u) * 100) : 0
+}
+// 功率使用率：沿用 U 数同源的 usageColor 配色，保证卡片/表格两种视图进度条风格一致。
+function powerColor(rack) {
+  if (rack.design_power == null || rack.design_power <= 0) return meta.usageColor(0)
+  return meta.usageColor((Number(rack.used_power) || 0) / rack.design_power)
+}
+function powerPct(rack) {
+  if (rack.design_power == null || rack.design_power <= 0) return 0
+  return Math.min(100, Math.round((Number(rack.used_power) || 0) / rack.design_power * 100))
 }
 
 function goRack(id) {

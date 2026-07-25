@@ -6,19 +6,24 @@
     @update:model-value="(v) => emit('update:visible', v)"
   >
     <Form ref="formRef" :model="form" :rules="rules">
-      <FormItem label="所属机房" name="room_id" :icon="Building2">
-        <Select
-          v-model="form.room_id"
-          placeholder="选择机房"
-          :disabled="!!lockedRoomId || isEdit"
-          @update:model-value="onRoomChange"
-        >
-          <SelectTrigger placeholder="选择机房" />
-          <SelectContent>
-            <SelectItem v-for="r in roomOptions" :key="r.id" :value="r.id">{{ r.name }}（{{ r.code }}）</SelectItem>
-          </SelectContent>
-        </Select>
-      </FormItem>
+      <div class="grid grid-cols-2 gap-4">
+        <FormItem label="所属机房" name="room_id" :icon="Building2">
+          <Select
+            v-model="form.room_id"
+            placeholder="选择机房"
+            :disabled="!!lockedRoomId || isEdit"
+            @update:model-value="onRoomChange"
+          >
+            <SelectTrigger placeholder="选择机房" />
+            <SelectContent>
+              <SelectItem v-for="r in roomOptions" :key="r.id" :value="r.id">{{ r.name }}（{{ r.code }}）</SelectItem>
+            </SelectContent>
+          </Select>
+        </FormItem>
+        <FormItem label="机柜分组" name="rack_group" :icon="Users">
+          <Input v-model="form.rack_group" placeholder="如：某项目组 / 某公司 / 某部门（选填）" />
+        </FormItem>
+      </div>
 
       <div class="grid grid-cols-2 gap-4">
         <FormItem label="列编号" name="column_code" :icon="Columns3">
@@ -29,9 +34,14 @@
         </FormItem>
       </div>
 
-      <FormItem label="名称" name="name" :icon="Type">
-        <Input v-model="form.name" placeholder="留空则自动生成（列编号-机柜编号）" />
-      </FormItem>
+      <div class="grid grid-cols-2 gap-4">
+        <FormItem label="名称" name="name" :icon="Type">
+          <Input v-model="form.name" placeholder="留空则自动生成（列编号-机柜编号）" />
+        </FormItem>
+        <FormItem label="机架设计功率" name="design_power" :icon="Zap">
+          <Input type="number" :min="0" v-model="form.design_power" placeholder="该机柜允许接入的总额定功率上限，单位 W（选填）" />
+        </FormItem>
+      </div>
 
       <div class="grid grid-cols-2 gap-4">
         <FormItem label="机柜 U 数" name="total_u" :icon="Ruler">
@@ -46,14 +56,6 @@
           </Select>
         </FormItem>
       </div>
-
-      <FormItem label="机柜分组" name="rack_group" :icon="Users">
-        <Input v-model="form.rack_group" placeholder="如：某项目组 / 某公司 / 某部门（选填）" />
-      </FormItem>
-
-      <FormItem label="机架设计功率" name="design_power" :icon="Zap">
-        <Input type="number" :min="0" v-model="form.design_power" placeholder="该机柜允许接入的总额定功率上限，单位 W（选填）" />
-      </FormItem>
     </Form>
     <template #footer>
       <div class="flex justify-end gap-2">

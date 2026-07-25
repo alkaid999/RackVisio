@@ -9,6 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.rack import Rack
 from app.models.room import Room
+from app.models.device import Device
+from app.models.mount_record import MountRecord
 from app.schemas.rack import RackCreate, RackListItem, RackOut, RackUpdate
 
 
@@ -62,8 +64,31 @@ class RackRepository:
         page: int = 1,
         size: int = 200,
     ) -> tuple[list[RackListItem], int]:
-        """机柜管理列表：联表带上机房编号/名称，支持按机房、关键字（名称/编号）、状态过滤，并支持分页。"""
-        stmt = select(Rack, Room.code, Room.name).join(Room, Rack.room_id == Room.id)
+        """机柜管理列表：联表带上机房编号/名称，支持按机房、关键字（名称/编号）、状态过滤，并支持分页。
+
+        同时聚合「已用功率」= 该机柜内所有有效上架设备的额定功率之和（used_power）。
+        """
+        # 已用功率子查询：有效上架记录关联设备，累加额定功率
+        used_power_subq = (
+            select(
+                MountRecord.rack_id,
+                func.coalesce(func.sum(Device.rated_power), 0).label("used_power"),
+            )
+            .join(Device, Device.id == MountRecord.device_id)
+            .where(MountRecord.record_status == "有效")
+            .group_by(MountRecord.rack_id)
+            .subquery()
+        )
+        stmt = (
+            select(
+                Rack,
+                Room.code,
+                Room.name,
+                func.coalesce(used_power_subq.c.used_power, 0).label("used_power"),
+            )
+            .join(Room, Rack.room_id == Room.id)
+            .outerjoin(used_power_subq, used_power_subq.c.rack_id == Rack.id)
+        )
         count_stmt = select(func.count()).select_from(Rack).join(Room, Rack.room_id == Room.id)
         conditions = []
         if room_id:
@@ -85,6 +110,7 @@ class RackRepository:
                 **RackOut.model_validate(r[0]).model_dump(),
                 room_code=r[1],
                 room_name=r[2],
+                used_power=float(r[3]),
             )
             for r in rows
         ]

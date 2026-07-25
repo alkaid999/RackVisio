@@ -354,6 +354,20 @@ async def _migrate_power(session: AsyncSession) -> None:
     await session.flush()
 
 
+async def _migrate_rack_status(session: AsyncSession) -> None:
+    """机柜业务状态迁移：删除「空闲」状态，历史「空闲」机柜统一归并为「可用」。
+
+    业务状态 ``status`` 为 VARCHAR 字符串列，无需加列；仅将存量 ``空闲`` 值
+    UPDATE 为 ``可用``，使枚举取值收敛到新的合法集合（可用/不可用/维护中/空调柜/电柜）。
+    新导入或新建的机柜不再可能出现「空闲」。
+    """
+    await session.execute(
+        text("UPDATE racks SET status=:new WHERE status=:old"),
+        {"old": "空闲", "new": "可用"},
+    )
+    await session.flush()
+
+
 async def seed_data(session: AsyncSession) -> None:
     """初始化种子数据（幂等）。
 
@@ -443,4 +457,5 @@ MIGRATIONS: list = [
     ("0001_base", _migrate_base),
     ("0002_facility", _migrate_facility),
     ("0003_power", _migrate_power),
+    ("0004_rack_status", _migrate_rack_status),
 ]

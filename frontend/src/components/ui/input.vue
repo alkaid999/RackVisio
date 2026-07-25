@@ -26,3 +26,16 @@ const model = defineModel({
     "
   />
 </template>
+
+<style scoped>
+/* 隐藏数字输入框的原生上下数量加减按钮，与其他 UI 组件风格保持一致 */
+input[type='number']::-webkit-outer-spin-button,
+input[type='number']::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type='number'] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+</style>

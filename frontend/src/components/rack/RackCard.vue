@@ -35,6 +35,15 @@
       <div class="h-full rounded-full transition-all" :style="{ width: util + '%', backgroundColor: utilColor }" />
     </div>
 
+    <!-- 功率占用（design_power 已设置时展示进度条，样式与 U 位条保持一致；配色复用 meta.usageColor） -->
+    <div class="mt-2 flex items-center justify-between text-xs text-muted-foreground">
+      <span class="flex items-center gap-1"><Zap class="h-3.5 w-3.5" />{{ formatPower(rack.used_power) }} / {{ rack.design_power != null ? formatPower(rack.design_power) : '未设上限' }}</span>
+      <span v-if="rack.design_power != null" class="font-medium text-foreground">{{ powerPct }}%</span>
+    </div>
+    <div v-if="rack.design_power != null" class="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+      <div class="h-full rounded-full transition-all" :style="{ width: powerPct + '%', backgroundColor: powerColor }" />
+    </div>
+
     <!-- 底部操作：图标 + 文字，删除为红色（与「耗材列表」卡片一致；卡片可点击查看，故隐藏冗余「查看」） -->
     <div class="mt-2.5 flex justify-end gap-1 border-t border-border pt-2.5">
       <EntityActions
@@ -52,14 +61,15 @@
 
 <script setup>
 import { computed } from 'vue'
-import { MapPin, Ruler, Users, Building2 } from 'lucide-vue-next'
+import { MapPin, Ruler, Users, Building2, Zap } from 'lucide-vue-next'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import EntityActions from '@/components/common/EntityActions.vue'
 import Card from '@/components/ui/card.vue'
 import { useMetaStore } from '@/stores/meta'
+import { formatPower } from '@/utils/format'
 
 const props = defineProps({
-  // RackListItem：{id, name, code, column_code, total_u, used_u, status, rack_group, room_name, ...}
+  // RackListItem：{id, name, code, column_code, total_u, used_u, status, rack_group, room_name, design_power, used_power, ...}
   rack: { type: Object, required: true },
   // 是否允许编辑 / 删除（无 rack:edit 权限时隐藏写操作，避免点击后 403）。
   canEdit: { type: Boolean, default: true },
@@ -74,5 +84,19 @@ const util = computed(() =>
 const utilColor = computed(() => {
   const u = props.rack.total_u > 0 ? props.rack.used_u / props.rack.total_u : 0
   return meta.usageColor(u)
+})
+
+const powerPct = computed(() => {
+  const design = props.rack.design_power
+  if (design == null || design <= 0) return 0
+  const used = Number(props.rack.used_power) || 0
+  return Math.min(100, Math.round((used / design) * 100))
+})
+// 功率使用率配色复用 meta.usageColor（与 U 数同源，保证两视图配色一致）。
+const powerColor = computed(() => {
+  const design = props.rack.design_power
+  if (design == null || design <= 0) return meta.usageColor(0)
+  const used = Number(props.rack.used_power) || 0
+  return meta.usageColor(used / design)
 })
 </script>

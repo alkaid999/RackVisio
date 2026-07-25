@@ -150,6 +150,7 @@ class RackListItem(BaseModel):
     total_u: int
     used_u: int
     design_power: Optional[float] = None
+    used_power: Optional[float] = None
     rack_group: Optional[str] = None
     status: str
     grid_row: Optional[int] = None
@@ -240,7 +241,7 @@ class RackImportItem(BaseModel):
     - 以「机房编号(room_code)」而非 room_id 定位机房，更贴合表格用户；
       机房编号不存在时整行失败（行号 + 中文错误）。
     - 必填：room_code / column_code / code；其余选填。
-    - ``status`` 接受业务枚举中文值（可用/空闲/维护中/空调柜/电柜），缺省「可用」。
+    - ``status`` 接受业务枚举中文值（可用/不可用/维护中/空调柜/电柜），缺省「可用」。
     """
 
     room_code: Optional[str] = Field(default=None, max_length=64)

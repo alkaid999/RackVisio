@@ -13,7 +13,7 @@
           <p class="page-sub">
             坐标：{{ rack.column_code }} / {{ rack.code }} ·
             容量：{{ rack.used_u }} / {{ rack.total_u }}U ·
-            功率：{{ usedPower.toFixed(1) }} / {{ designPower != null ? designPower.toFixed(1) : '—' }} W ·
+            功率：{{ formatPower(usedPower) }} / {{ designPower != null ? formatPower(designPower) : '—' }} ·
             <StatusBadge type="rack" :value="rack.status" />
           </p>
         </div>
@@ -34,15 +34,15 @@
           <div class="kpi-grid">
             <div class="kpi-card">
               <span class="kpi-label">设计功率</span>
-              <span class="kpi-value">{{ designPower.toFixed(1) }} W</span>
+              <span class="kpi-value">{{ formatPower(designPower) }}</span>
             </div>
             <div class="kpi-card">
               <span class="kpi-label">已用功率</span>
-              <span class="kpi-value">{{ usedPower.toFixed(1) }} W</span>
+              <span class="kpi-value">{{ formatPower(usedPower) }}</span>
             </div>
             <div class="kpi-card">
               <span class="kpi-label">剩余功率</span>
-              <span class="kpi-value">{{ remainingPower.toFixed(1) }} W</span>
+              <span class="kpi-value">{{ formatPower(remainingPower) }}</span>
             </div>
             <div class="kpi-card">
               <span class="kpi-label">利用率</span>
@@ -215,6 +215,7 @@ import { useRackStore } from '@/stores/rack'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
+import { formatPower } from '@/utils/format'
 import USlotMap from '@/components/rack/USlotMap.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import DeviceTypeTag from '@/components/device/DeviceTypeTag.vue'
