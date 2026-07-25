@@ -13,6 +13,7 @@
           <p class="page-sub">
             坐标：{{ rack.column_code }} / {{ rack.code }} ·
             容量：{{ rack.used_u }} / {{ rack.total_u }}U ·
+            功率：{{ usedPower.toFixed(1) }} / {{ designPower != null ? designPower.toFixed(1) : '—' }} W ·
             <StatusBadge type="rack" :value="rack.status" />
           </p>
         </div>
@@ -23,6 +24,40 @@
           <Button variant="outline" @click="goBack"><ChevronLeft class="h-4 w-4" />返回</Button>
         </div>
       </div>
+
+      <!-- 功率统计（镜像机房 U 数统计：设计功率=总功率，机柜内额定功率累加=已用功率，利用率色条复用 meta.usageColor） -->
+      <Card class="mb-5">
+        <template #header>
+          <span class="section-title flex items-center gap-1.5"><Zap class="h-4 w-4" />功率统计</span>
+        </template>
+        <template v-if="designPower != null">
+          <div class="kpi-grid">
+            <div class="kpi-card">
+              <span class="kpi-label">设计功率</span>
+              <span class="kpi-value">{{ designPower.toFixed(1) }} W</span>
+            </div>
+            <div class="kpi-card">
+              <span class="kpi-label">已用功率</span>
+              <span class="kpi-value">{{ usedPower.toFixed(1) }} W</span>
+            </div>
+            <div class="kpi-card">
+              <span class="kpi-label">剩余功率</span>
+              <span class="kpi-value">{{ remainingPower.toFixed(1) }} W</span>
+            </div>
+            <div class="kpi-card">
+              <span class="kpi-label">利用率</span>
+              <span class="kpi-value" :style="{ color: powerColor }">{{ powerPctDisplay }}%</span>
+            </div>
+          </div>
+          <div class="mt-4">
+            <div class="h-3.5 w-full overflow-hidden rounded-full bg-muted">
+              <div class="h-full rounded-full transition-all" :style="{ width: powerBarWidth + '%', backgroundColor: powerColor }" />
+            </div>
+            <div class="mt-1 text-right text-xs text-muted-foreground">{{ powerPctDisplay }}%</div>
+          </div>
+        </template>
+        <p v-else class="text-sm text-muted-foreground">未设置机架设计功率，无法统计功率利用率。请在「编辑机柜」中填写设计功率上限。</p>
+      </Card>
 
       <!-- U 位图 + 架下设备（双栏：左 U 位图，右可拖拽的架下设备） -->
       <div class="grid grid-cols-1 gap-4 lg:grid-cols-5">
@@ -204,7 +239,8 @@ import TableCell from '@/components/ui/table-cell.vue'
 import EmptyState from '@/components/ui/empty-state.vue'
 import Spinner from '@/components/ui/spinner.vue'
 import { DEVICE_TYPE_OPTIONS, DEVICE_TYPE_COLORS, DEVICE_TYPE_LABELS } from '@/utils/constants'
-import { PackagePlus, Pencil, ChevronLeft, Grid3x3, ListOrdered, Eye, Trash2, PackageX } from 'lucide-vue-next'
+import { useMetaStore } from '@/stores/meta'
+import { PackagePlus, Pencil, ChevronLeft, Grid3x3, ListOrdered, Eye, Trash2, PackageX, Zap } from 'lucide-vue-next'
 
 const route = useRoute()
 const router = useRouter()
@@ -220,6 +256,28 @@ const rack = computed(() => store.currentRack)
 const devices = computed(() => store.devices)
 const candidates = computed(() => store.candidates)
 const uMap = computed(() => store.uMap)
+
+const meta = useMetaStore()
+
+// 功率统计（完全镜像机房 U 数统计逻辑）：design_power 作「总功率」，
+// 机柜内已上架设备的额定功率累加为「已用功率」，利用率 = 已用/设计 × 100%，
+// 色条配色复用 meta.usageColor（与 U 数同源）。
+const designPower = computed(() =>
+  rack.value && rack.value.design_power != null ? Number(rack.value.design_power) : null
+)
+const usedPower = computed(() =>
+  (devices.value || []).reduce((s, d) => s + (Number(d.rated_power) || 0), 0)
+)
+const remainingPower = computed(() =>
+  designPower.value != null ? Math.max(0, designPower.value - usedPower.value) : null
+)
+const powerPct = computed(() => {
+  if (designPower.value == null || designPower.value <= 0) return 0
+  return (usedPower.value / designPower.value) * 100
+})
+const powerPctDisplay = computed(() => powerPct.value.toFixed(1))
+const powerBarWidth = computed(() => Math.min(100, Math.max(0, powerPct.value)))
+const powerColor = computed(() => meta.usageColor(powerPct.value))
 // 页面级加载门控必须用【本地】loading，切勿绑定 store.loading。
 // 原因：RackForm 预填时会调 store.fetchOne（内部会翻转 store.loading），若本页 loading 依赖
 // store.loading，点击编辑会触发「store.loading=true→本页 v-if=loading 命中→含 RackForm 的内容区
@@ -384,6 +442,29 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+/* 功率统计 KPI（与机房 StatsPanel 同源结构，色条复用 meta.usageColor） */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+.kpi-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: hsl(var(--muted) / 0.5);
+}
+.kpi-label {
+  font-size: 12px;
+  color: hsl(var(--muted-foreground));
+}
+.kpi-value {
+  font-size: 18px;
+  font-weight: 700;
+  color: hsl(var(--foreground));
+}
 .offrack-scroll {
   /* 内部滚动，避免整页过长 */
 }

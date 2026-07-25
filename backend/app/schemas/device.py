@@ -31,6 +31,8 @@ class DeviceCreate(BaseModel):
     ip_address: Optional[str] = Field(default=None, max_length=64)
     warranty_expire: Optional[date] = None
     remark: Optional[str] = Field(default=None, max_length=512)
+    # 额定功率：设备厂家铭牌标注的满载工况下最大耗电功率（W），选填。
+    rated_power: Optional[float] = Field(default=None, ge=0)
     # 创建时状态默认「在库」；仅允许在库 / 待报废 / 借出（已上架/已下架由 mount 流程驱动）。
     status: DeviceStatus = DeviceStatus.IN_STOCK
     # 开关机状态：仅对「在架」设备有意义，默认「开机」。
@@ -54,6 +56,7 @@ class DeviceUpdate(BaseModel):
     ip_address: Optional[str] = Field(default=None, max_length=64)
     warranty_expire: Optional[date] = None
     remark: Optional[str] = Field(default=None, max_length=512)
+    rated_power: Optional[float] = Field(default=None, ge=0)
     status: Optional[DeviceStatus] = None
     power_status: Optional[DevicePowerStatus] = None
     # 是否计入资产（可选更新）；设施类型更新时由服务层强制为 False。
@@ -79,6 +82,8 @@ class DeviceOut(BaseModel):
     power_status: str = "开机"
     # 是否计入资产（默认 True）。设施恒为 False。
     is_asset: bool = True
+    # 额定功率：设备厂家铭牌标注的满载工况下最大耗电功率（W），选填。
+    rated_power: Optional[float] = None
     # —— 派生：当前有效上架记录的位置（无有效记录时为 None）——
     current_room_id: Optional[str] = None
     current_room_name: Optional[str] = None
@@ -110,6 +115,7 @@ class DeviceImportItem(BaseModel):
     ip_address: Optional[str] = Field(default=None, max_length=64)
     warranty_expire: Optional[date] = None
     remark: Optional[str] = Field(default=None, max_length=512)
+    rated_power: Optional[float] = Field(default=None, ge=0)
     status: Optional[str] = Field(default=None, max_length=32)
     power_status: Optional[str] = Field(default=None, max_length=32)
     is_asset: Optional[bool] = None

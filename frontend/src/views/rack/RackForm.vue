@@ -50,6 +50,10 @@
       <FormItem label="机柜分组" name="rack_group" :icon="Users">
         <Input v-model="form.rack_group" placeholder="如：某项目组 / 某公司 / 某部门（选填）" />
       </FormItem>
+
+      <FormItem label="机架设计功率" name="design_power" :icon="Zap">
+        <Input type="number" :min="0" v-model="form.design_power" placeholder="该机柜允许接入的总额定功率上限，单位 W（选填）" />
+      </FormItem>
     </Form>
     <template #footer>
       <div class="flex justify-end gap-2">
@@ -76,7 +80,7 @@ import SelectTrigger from '@/components/ui/select-trigger.vue'
 import SelectContent from '@/components/ui/select-content.vue'
 import SelectItem from '@/components/ui/select-item.vue'
 import Button from '@/components/ui/button.vue'
-import { Building2, Columns3, Tag, Type, Ruler, CircleDot, Users, CircleX, Save } from 'lucide-vue-next'
+import { Building2, Columns3, Tag, Type, Ruler, CircleDot, Users, CircleX, Save, Zap } from 'lucide-vue-next'
 import { RACK_STATUS_OPTIONS } from '@/utils/constants'
 
 const props = defineProps({
@@ -102,6 +106,7 @@ const emptyForm = () => ({
   code: '',
   name: '',
   total_u: 42,
+  design_power: '',
   rack_group: '',
   status: '可用',
 })
@@ -135,6 +140,7 @@ watch(
           code: r.code,
           name: r.name,
           total_u: r.total_u,
+          design_power: r.design_power ?? '',
           rack_group: r.rack_group || '',
           status: r.status || '可用',
         })
@@ -154,6 +160,7 @@ async function onSubmit() {
         column_code: form.column_code,
         code: form.code,
         total_u: Number(form.total_u),
+        design_power: form.design_power !== '' ? Number(form.design_power) : undefined,
         rack_group: form.rack_group || undefined,
         status: form.status,
       }

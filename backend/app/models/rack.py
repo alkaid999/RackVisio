@@ -16,7 +16,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base, utcnow
@@ -53,6 +53,8 @@ class Rack(Base):
     total_u: Mapped[int] = mapped_column(Integer, nullable=False, default=42)
     # 已用 U 位（后端按上架设备重算）。
     used_u: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # 机架设计功率：该机柜允许接入所有 IT 设备的总额定功率上限（W），选填。
+    design_power: Mapped[float | None] = mapped_column(Float, nullable=True)
     # 机柜分组：所属用户 / 公司 / 部门（如某项目组），选填。
     rack_group: Mapped[str | None] = mapped_column(String(128), nullable=True)
     # 机柜状态：业务枚举，选填，默认「可用」。

@@ -336,6 +336,24 @@ async def _migrate_facility(session: AsyncSession) -> None:
     await session.flush()
 
 
+async def _migrate_power(session: AsyncSession) -> None:
+    """功率字段迁移：racks 新增 design_power、devices 新增 rated_power（方言无关）。
+
+    - ``design_power``：机柜额定功率上限（W），可空，无需回填（存量机柜留空）。
+    - ``rated_power``：设备铭牌满载功率（W），可空，无需回填（存量设备留空）。
+    列均允许 NULL，幂等 ALTER，SQLite / PostgreSQL 通吃（REAL 与 Float 等价）。
+    """
+    rcols = await _existing_columns(session, "racks")
+    if "design_power" not in rcols:
+        await session.execute(text("ALTER TABLE racks ADD COLUMN design_power REAL"))
+    await session.flush()
+
+    dcols = await _existing_columns(session, "devices")
+    if "rated_power" not in dcols:
+        await session.execute(text("ALTER TABLE devices ADD COLUMN rated_power REAL"))
+    await session.flush()
+
+
 async def seed_data(session: AsyncSession) -> None:
     """初始化种子数据（幂等）。
 
@@ -424,4 +442,5 @@ async def seed_consumable_types(session: AsyncSession) -> None:
 MIGRATIONS: list = [
     ("0001_base", _migrate_base),
     ("0002_facility", _migrate_facility),
+    ("0003_power", _migrate_power),
 ]

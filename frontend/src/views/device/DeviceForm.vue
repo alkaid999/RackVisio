@@ -67,6 +67,9 @@
               <FormItem label="维保到期日" name="warranty_expire" :icon="CalendarClock">
                 <Input type="date" v-model="form.warranty_expire" />
               </FormItem>
+              <FormItem label="额定功率" name="rated_power" :icon="Zap">
+                <Input type="number" :min="0" v-model="form.rated_power" placeholder="厂家铭牌满载功率，单位 W（选填）" />
+              </FormItem>
               <FormItem v-if="!isMounted" label="设备状态" name="status" :icon="Signal">
                 <Select v-model="form.status">
                   <SelectTrigger placeholder="选择状态" />
@@ -143,6 +146,7 @@ import {
   Save,
   MapPin,
   ServerCog,
+  Zap,
 } from 'lucide-vue-next'
 import Dialog from '@/components/ui/dialog.vue'
 import Form from '@/components/ui/form.vue'
@@ -179,6 +183,7 @@ const emptyForm = () => ({
   sn: '',
   ip_address: '',
   warranty_expire: '',
+  rated_power: '',
   remark: '',
   status: '在库',
   power_status: '开机',
@@ -239,6 +244,7 @@ async function loadForm() {
     form.sn = d.sn || ''
     form.ip_address = d.ip_address || ''
     form.warranty_expire = d.warranty_expire || ''
+    form.rated_power = d.rated_power ?? ''
     form.remark = d.remark || ''
     form.status = d.status
     form.power_status = d.power_status || '开机'
@@ -284,6 +290,7 @@ async function onSubmit() {
       payload.model = form.model
       payload.sn = form.sn
       payload.ip_address = form.ip_address
+      payload.rated_power = form.rated_power ? Number(form.rated_power) : undefined
       // 日期字段清空时传 null（空串 '' 不是合法日期，会被校验拒绝）。
       payload.warranty_expire = form.warranty_expire ? form.warranty_expire : null
     }

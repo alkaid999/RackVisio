@@ -301,6 +301,7 @@ class RackService:
                 code=code,
                 column_code=col,
                 total_u=total_u,
+                design_power=item.design_power if item.design_power is not None else None,
                 rack_group=(item.rack_group or "").strip() or None,
                 status=status,
                 grid_row=grid_row,

@@ -43,6 +43,7 @@
           <div v-if="!isFacility" class="flex gap-2"><span class="shrink-0 text-muted-foreground flex items-center gap-1"><Cpu class="h-3.5 w-3.5" />设备型号</span><span>{{ device.model || '—' }}</span></div>
           <!-- 物理与位置 -->
           <div class="flex gap-2"><span class="shrink-0 text-muted-foreground flex items-center gap-1"><Ruler class="h-3.5 w-3.5" />设备 U 数</span><span>{{ device.u_height }}U</span></div>
+          <div v-if="!isFacility" class="flex gap-2"><span class="shrink-0 text-muted-foreground flex items-center gap-1"><Zap class="h-3.5 w-3.5" />额定功率</span><span>{{ device.rated_power != null ? device.rated_power + ' W' : '—' }}</span></div>
           <!-- 网络与资产 -->
           <div v-if="!isFacility" class="flex gap-2"><span class="shrink-0 text-muted-foreground flex items-center gap-1"><Globe class="h-3.5 w-3.5" />IP 地址</span><span>{{ device.ip_address || '—' }}</span></div>
           <div v-if="!isFacility" class="flex gap-2"><span class="shrink-0 text-muted-foreground flex items-center gap-1"><Barcode class="h-3.5 w-3.5" />序列号(SN)</span><span>{{ device.sn || '—' }}</span></div>
@@ -345,7 +346,7 @@ import DeviceTypeTag from '@/components/device/DeviceTypeTag.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import DeviceForm from '@/views/device/DeviceForm.vue'
 import LinkFormDialog from '@/views/link/LinkFormDialog.vue'
-import { Network, ServerCog, Cable, ArrowRight, Unlink } from 'lucide-vue-next'
+import { Network, ServerCog, Cable, ArrowRight, Unlink, Zap } from 'lucide-vue-next'
 import {
   Pencil,
   Trash2,

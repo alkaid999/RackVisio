@@ -198,6 +198,10 @@ function coerce(field, raw) {
       const n = Number(v)
       return Number.isFinite(n) ? n : v
     }
+    case 'number': {
+      const n = Number(v)
+      return Number.isFinite(n) ? n : undefined
+    }
     case 'boolean':
       return v === 'true' || v === '是' || v === '1' || v === 'yes' || v === 'y'
     default:

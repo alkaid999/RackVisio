@@ -239,6 +239,8 @@ class DeviceService:
                 raw["warranty_expire"] = item.warranty_expire
             if item.remark and item.remark.strip():
                 raw["remark"] = item.remark.strip()
+            if item.rated_power is not None:
+                raw["rated_power"] = item.rated_power
             if item.status and item.status.strip():
                 raw["status"] = item.status.strip()
             if item.power_status and item.power_status.strip():

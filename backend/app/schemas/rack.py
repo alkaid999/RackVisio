@@ -31,6 +31,8 @@ class RackCreate(BaseModel):
     column_code: str = Field(..., min_length=1, max_length=32)
     # 机柜 U 数：可用 U 位高度。
     total_u: int = Field(default=42, ge=1, le=60)
+    # 机架设计功率：该机柜允许接入所有 IT 设备的总额定功率上限（W），选填。
+    design_power: Optional[float] = Field(default=None, ge=0)
     # 机柜分组：所属用户 / 公司 / 部门。
     rack_group: Optional[str] = Field(default=None, max_length=128)
     # 机柜状态：业务枚举，选填。
@@ -47,6 +49,7 @@ class RackUpdate(BaseModel):
     code: Optional[str] = Field(default=None, min_length=1, max_length=64)
     column_code: Optional[str] = Field(default=None, min_length=1, max_length=32)
     total_u: Optional[int] = Field(default=None, ge=1, le=60)
+    design_power: Optional[float] = Field(default=None, ge=0)
     rack_group: Optional[str] = Field(default=None, max_length=128)
     status: Optional[RackBizStatus] = None
     grid_row: Optional[int] = None
@@ -65,6 +68,7 @@ class RackOut(BaseModel):
     column_code: str
     total_u: int
     used_u: int
+    design_power: Optional[float] = None
     rack_group: Optional[str] = None
     status: str
     grid_row: Optional[int] = None
@@ -145,6 +149,7 @@ class RackListItem(BaseModel):
     column_code: str
     total_u: int
     used_u: int
+    design_power: Optional[float] = None
     rack_group: Optional[str] = None
     status: str
     grid_row: Optional[int] = None
@@ -243,6 +248,7 @@ class RackImportItem(BaseModel):
     code: Optional[str] = Field(default=None, max_length=64)
     column_code: Optional[str] = Field(default=None, max_length=32)
     total_u: Optional[int] = Field(default=None, ge=1, le=60)
+    design_power: Optional[float] = Field(default=None, ge=0)
     rack_group: Optional[str] = Field(default=None, max_length=128)
     status: Optional[str] = Field(default=None, max_length=32)
     grid_row: Optional[int] = None
