@@ -106,12 +106,20 @@
             {{ showFacility ? '含设施' : '仅资产' }}
           </button>
         </div>
-        <div class="flex items-center gap-2 pb-1">
-          <Button @click="load"><Filter class="h-4 w-4" />查询</Button>
-          <Button variant="outline" @click="resetFilter"><Undo2 class="h-4 w-4" />重置</Button>
-        </div>
-      </div>
+    <div class="flex items-center gap-2 pb-1">
+      <Button @click="load"><Filter class="h-4 w-4" />查询</Button>
+      <Button variant="outline" @click="resetFilter"><Undo2 class="h-4 w-4" />重置</Button>
     </div>
+  </div>
+</div>
+
+<!-- 批量操作条：仅表格模式支持批量删除（卡片模式点击=进入，不做批量选择） -->
+<div v-if="canEdit && viewMode === 'table' && selected.size" class="batch-bar">
+  <span class="batch-count">已选 <b>{{ selected.size }}</b> 项</span>
+  <Button size="sm" variant="destructive" @click="batchDelete"><Trash2 class="h-4 w-4" />批量删除</Button>
+  <Button size="sm" variant="ghost" @click="toggleAllPage(true)">全选本页</Button>
+  <Button size="sm" variant="ghost" @click="clearSelection">取消选择</Button>
+</div>
 
     <!-- 卡片视图 -->
     <div v-if="viewMode === 'card'">
@@ -142,6 +150,13 @@
       <Table v-else>
         <TableHeader>
           <TableRow>
+            <TableHead v-if="canEdit" class="w-10 text-center">
+              <Checkbox
+                :model-value="allPageSelected"
+                :indeterminate="allPageIndeterminate"
+                @update:model-value="(v) => toggleAllPage(v)"
+              />
+            </TableHead>
             <TableHead v-for="col in deviceColumns" :key="col.key" :class="colWidthClass(col.key)">
               {{ col.label }}
             </TableHead>
@@ -149,7 +164,10 @@
           </TableRow>
         </TableHeader>
         <TableBody>
-          <TableRow v-for="d in store.devices" :key="d.id">
+          <TableRow v-for="d in store.devices" :key="d.id" :data-state="isSelected(d.id) ? 'selected' : null">
+            <TableCell v-if="canEdit" class="w-10 text-center">
+              <Checkbox :model-value="isSelected(d.id)" @update:model-value="() => toggleRow(d.id)" />
+            </TableCell>
             <TableCell
               v-for="col in deviceColumns"
               :key="col.key"
@@ -214,8 +232,9 @@ import TableBody from '@/components/ui/table-body.vue'
 import TableRow from '@/components/ui/table-row.vue'
 import TableHead from '@/components/ui/table-head.vue'
 import TableCell from '@/components/ui/table-cell.vue'
+import Checkbox from '@/components/ui/checkbox.vue'
 import { DEVICE_TYPE_OPTIONS, DEVICE_STATUS_OPTIONS, SELECT_ALL, toFilterParam } from '@/utils/constants'
-import { CirclePlus, Search, Filter, Undo2, Building, Boxes, SlidersHorizontal, Activity, LayoutGrid, List, ServerCog, Download, Upload, ChevronDown, FileSpreadsheet, FileText } from 'lucide-vue-next'
+import { CirclePlus, Search, Filter, Undo2, Building, Boxes, SlidersHorizontal, Activity, LayoutGrid, List, ServerCog, Download, Upload, ChevronDown, FileSpreadsheet, FileText, Trash2 } from 'lucide-vue-next'
 import { exportData } from '@/utils/excel'
 import { deviceImportConfig } from '@/utils/importConfig'
 import Button from '@/components/ui/button.vue'
@@ -396,6 +415,60 @@ async function onDelete(device) {
   }
 }
 
+// —— 批量选择（仅表格模式，针对当前表格数据生效）——
+const selected = ref(new Set())
+function isSelected(id) {
+  return selected.value.has(id)
+}
+function toggleRow(id) {
+  const next = new Set(selected.value)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  selected.value = next
+}
+function clearSelection() {
+  selected.value = new Set()
+}
+const allPageSelected = computed(
+  () => store.devices.length > 0 && store.devices.every((d) => selected.value.has(d.id))
+)
+const allPageIndeterminate = computed(() => {
+  const n = store.devices.filter((d) => selected.value.has(d.id)).length
+  return n > 0 && n < store.devices.length
+})
+// val=true 选中本页全部，false 取消本页全部（不影响其它页已选）。
+function toggleAllPage(val) {
+  const next = new Set(selected.value)
+  for (const d of store.devices) {
+    if (val) next.add(d.id)
+    else next.delete(d.id)
+  }
+  selected.value = next
+}
+// 批量删除：对选中设备逐个调用删除接口，结束后统一刷新并反馈结果（镜像机柜列表实现）。
+async function batchDelete() {
+  if (!selected.value.size) return
+  const ids = [...selected.value]
+  const ok = await confirm({
+    title: '批量删除设备',
+    description: `确认删除选中的 ${ids.length} 台设备？删除后其端口与链路将一并清理，此操作不可撤销。`,
+    variant: 'danger',
+    confirmText: '删除',
+    cancelText: '取消',
+  })
+  if (!ok) return
+  try {
+    const results = await Promise.allSettled(ids.map((id) => store.remove(id)))
+    const failed = results.filter((r) => r.status === 'rejected').length
+    if (failed === 0) success(`已删除 ${ids.length} 台设备`)
+    else success(`已删除 ${ids.length - failed} 台，失败 ${failed} 台`)
+    clearSelection()
+    load()
+  } catch (e) {
+    // Promise.allSettled 不会 reject，此处仅兜底
+  }
+}
+
 onMounted(async () => {
   await roomStore.fetchList({ page: 1, size: 200 })
   load()
@@ -434,5 +507,32 @@ onMounted(async () => {
 }
 .col-span-full {
   grid-column: 1 / -1;
+}
+.batch-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  border-radius: 12px;
+  border: 1px solid hsl(var(--destructive) / 0.3);
+  background: hsl(var(--destructive) / 0.08);
+  animation: batch-in 0.16s ease;
+}
+@keyframes batch-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.batch-count {
+  font-size: 13px;
+  color: hsl(var(--foreground));
+}
+.batch-count b {
+  color: hsl(var(--destructive));
+  font-weight: 700;
+}
+/* 表格中被选中的行高亮 */
+:deep(tr[data-state='selected']) {
+  background: hsl(var(--primary) / 0.06);
 }
 </style>
