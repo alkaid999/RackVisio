@@ -79,6 +79,12 @@ const routes = [
     meta: { title: '连接总览', requiresAuth: true, permission: 'link:view' },
   },
   {
+    path: '/topology',
+    name: 'Topology',
+    component: () => import('@/views/topology/TopologyView.vue'),
+    meta: { title: '拓扑视图', requiresAuth: true, permission: 'link:view' },
+  },
+  {
     path: '/3d',
     name: 'Room3D',
     component: () => import('@/views/three/Room3DView.vue'),
