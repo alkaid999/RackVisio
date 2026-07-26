@@ -237,6 +237,7 @@ import {
   Boxes,
   ArrowRight,
   Layers,
+  Zap,
 } from 'lucide-vue-next'
 import statsApi from '@/api/stats'
 import { useTheme } from '@/composables/useTheme'
@@ -277,6 +278,9 @@ const kpis = computed(() => {
   const statusMap = {}
   for (const s of o.device_status || []) statusMap[s.status] = s.count
   const util = o.overall_utilization ?? 0
+  const powerRated = o.power_rated ?? 0
+  const powerUsed = o.power_used ?? 0
+  const powerUtil = powerRated > 0 ? Math.round((powerUsed / powerRated) * 100) : 0
   return [
     { label: '机房数量', value: o.room_count ?? 0, icon: Building2, color: '#3b82f6' },
     { label: '机柜数量', value: o.rack_count ?? 0, icon: Server, color: '#13c2c2' },
@@ -293,6 +297,14 @@ const kpis = computed(() => {
     { label: '链路总数', value: o.link_count ?? 0, icon: Link2, color: '#06b6d4' },
     { label: '账号数', value: o.account_count ?? 0, icon: Users, color: '#f59e0b' },
     { label: '耗材条目', value: o.consumable_item_count ?? 0, icon: Package, color: '#eb4895' },
+    {
+      label: '功率预算',
+      value: (powerUsed / 1000).toFixed(1),
+      suffix: 'kW',
+      icon: Zap,
+      color: meta.usageColor(powerUtil),
+      hint: `已用 / 额定 ${(powerRated / 1000).toFixed(1)} kW`,
+    },
   ]
 })
 

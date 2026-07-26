@@ -57,3 +57,6 @@ class StatsOverview(BaseModel):
     consumable_item_count: int = 0
     consumable_total_quantity: int = 0
     device_type_distribution: list[DeviceTypeCount] = []
+    # 功率预算（仪表盘「功率预算」卡片用）：额定 = Σ 机柜 design_power，已用 = Σ 机柜 used_power。
+    power_rated: float = 0.0
+    power_used: float = 0.0

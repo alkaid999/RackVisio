@@ -9,6 +9,7 @@ from sqlalchemy import func, select
 from app.core.cache import cache
 from app.core.meta import DEVICE_STATUS_META, DEVICE_TYPE_META
 from app.models.device import Device
+from app.models.mount_record import MountRecord
 from app.models.rack import Rack
 from app.models.room import Room
 from app.repositories.device_repo import DeviceRepository
@@ -60,7 +61,9 @@ class StatsService:
         # 规模指标（DB 端 COUNT，按需加 WHERE）。
         room_count = int(
             (await session.execute(
-                select(func.count()).select_from(Room).where(Room.status == "active")
+                select(func.count())
+                .select_from(Room)
+                .where(Room.status == "active", Room.deleted_at.is_(None))
             )).scalar() or 0
         )
         rack_count = int(
@@ -160,6 +163,23 @@ class StatsService:
             await self.consumable_item_repo.count_all()
         )
 
+        # 功率预算：额定 = Σ 机柜 design_power（W）；已用 = Σ 当前有效上架设备 rated_power（W）。
+        # 已用功率与 rack_repo 的 used_power 同源（有效上架记录关联设备额定功率之和），
+        # 此处直接跨机柜/设备聚合，避免依赖非持久化派生字段。
+        power_rated = float(
+            (await session.execute(
+                select(func.coalesce(func.sum(Rack.design_power), 0))
+            )).scalar() or 0
+        )
+        power_used = float(
+            (await session.execute(
+                select(func.coalesce(func.sum(Device.rated_power), 0))
+                .select_from(MountRecord)
+                .join(Device, Device.id == MountRecord.device_id)
+                .where(MountRecord.record_status == "有效")
+            )).scalar() or 0
+        )
+
         result = StatsOverview(
             room_count=room_count,
             rack_count=rack_count,
@@ -176,6 +196,8 @@ class StatsService:
             consumable_item_count=consumable_item_count,
             consumable_total_quantity=consumable_total_quantity,
             device_type_distribution=device_type_distribution,
+            power_rated=power_rated,
+            power_used=power_used,
         )
         await cache.set(cache_key, result.model_dump())
         return result
