@@ -17,10 +17,10 @@ const DEVICE_TYPE_COLORS = {
   router: '#13C2C2',
   security: '#E6A23C',
   other: '#909399',
-  // 基础设施（非资产）
+  // 基础设施（非资产）—— 与 backend/app/core/meta.py / frontend/src/utils/constants.js 同源
   patch: '#64748b',
-  odf: '#64748b',
-  other_facility: '#94a3b8',
+  odf: '#94a3b8',
+  other_facility: '#a8a29e',
 }
 const DEVICE_TYPE_LABELS = {
   server: '服务器',
