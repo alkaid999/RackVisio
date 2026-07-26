@@ -93,11 +93,11 @@ export const DEVICE_TYPE_COLORS = reactive({
   switch: '#67C23A',
   router: '#13C2C2',
   security: '#E6A23C',
-  other: '#909399',
-  // 基础设施（非资产，中性灰）
+  other: '#6366f1',
+  // 基础设施（非资产，灰系浅色：深岩灰/浅岩灰/暖石灰，与「设施」属性一致、不与资产色混淆）
   patch: '#64748b',
-  odf: '#64748b',
-  other_facility: '#94a3b8',
+  odf: '#94a3b8',
+  other_facility: '#a8a29e',
 })
 
 // ============ 基础设施（非资产）============

@@ -31,11 +31,11 @@ DEVICE_TYPE_META: dict[str, dict] = {
     "switch": {"label": "交换机", "color": "#67C23A"},
     "router": {"label": "路由器", "color": "#13C2C2"},
     "security": {"label": "安全设备", "color": "#E6A23C"},
-    "other": {"label": "其他设备", "color": "#909399"},
+    "other": {"label": "其他设备", "color": "#6366f1"},
     # —— 基础设施（非资产）：占 U 位、不进资产统计、不建接口、不显设备编码 ——
     "patch": {"label": "配线架", "color": "#64748b", "asset": False},
-    "odf": {"label": "ODF配线架", "color": "#64748b", "asset": False},
-    "other_facility": {"label": "其他设施", "color": "#94a3b8", "asset": False},
+    "odf": {"label": "ODF配线架", "color": "#94a3b8", "asset": False},
+    "other_facility": {"label": "其他设施", "color": "#a8a29e", "asset": False},
 }
 
 # 设施类型集合（非资产基础设施），由 DEVICE_TYPE_META 中 asset=False 的项派生。
