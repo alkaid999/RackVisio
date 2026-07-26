@@ -124,6 +124,7 @@ class DeviceImportItem(BaseModel):
 class DeviceImportRowsRequest(BaseModel):
     """设备批量导入请求体：前端解析文件为行后，以 JSON 数组提交。"""
 
-    items: list[DeviceImportItem] = Field(
+    # items 声明为 list[dict]：逐行校验下沉到 service 层，单行非法仅计入 failures，不触发整批 422。
+    items: list[dict] = Field(
         ..., min_length=1, max_length=500, description="设备数据行，单次最多 500 条"
     )

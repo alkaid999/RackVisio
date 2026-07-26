@@ -139,7 +139,7 @@ class RoomService:
             return RoomStatus.DISABLED.value
         return RoomStatus.ACTIVE.value
 
-    async def import_rooms(self, items: list[RoomImportItem]) -> ImportResult:
+    async def import_rooms(self, items: list[dict]) -> ImportResult:
         """批量导入机房：逐行 ``begin_nested`` 保存点隔离，单条失败不影响其余。
 
         必填（名称/编号）与格式校验在前，唯一性（编号）在中；中间件冲突 / 其它异常
@@ -150,6 +150,13 @@ class RoomService:
         seen: set[str] = set()
         for idx, item in enumerate(items):
             row = idx + 1
+            try:
+                item = RoomImportItem.model_validate(item)
+            except Exception as exc:
+                result.failures.append(
+                    ImportFailure(row=row, errors=[f"数据格式不合法：{str(exc)[:150]}"])
+                )
+                continue
             name = (item.name or "").strip()
             code = (item.code or "").strip()
             errors: list[str] = []

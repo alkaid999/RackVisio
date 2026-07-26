@@ -257,8 +257,14 @@ class RackImportItem(BaseModel):
 
 
 class RackImportRowsRequest(BaseModel):
-    """机柜批量导入请求体：前端解析文件为行后，以 JSON 数组提交。"""
+    """机柜批量导入请求体：前端解析文件为行后，以 JSON 数组提交。
 
-    items: list[RackImportItem] = Field(
+    注：items 声明为 list[dict]，**不在请求级做逐行强约束校验**，
+    避免单行非法（如 total_u=0 / design_power=-100 / grid_row=1.5）
+    触发整批 422。逐行 Pydantic 校验在 rack_service.import_racks 内完成，
+    单行非法仅计入 failures、不波及其余行。
+    """
+
+    items: list[dict] = Field(
         ..., min_length=1, max_length=500, description="机柜数据行，单次最多 500 条"
     )

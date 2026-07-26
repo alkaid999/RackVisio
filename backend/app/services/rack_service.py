@@ -244,7 +244,7 @@ class RackService:
             await self._invalidate_room_cache(data.room_id)
         return result
 
-    async def import_racks(self, items: list[RackImportItem]) -> ImportResult:
+    async def import_racks(self, items: list[dict]) -> ImportResult:
         """批量导入机柜：按机房分组，逐行 ``begin_nested`` 保存点隔离。
 
         以「机房编号」定位机房（更贴合表格用户）；每组复用内存 grid 增量分配
@@ -259,6 +259,13 @@ class RackService:
 
         for idx, item in enumerate(items):
             row = idx + 1
+            try:
+                item = RackImportItem.model_validate(item)
+            except Exception as exc:
+                result.failures.append(
+                    ImportFailure(row=row, errors=[f"数据格式不合法：{str(exc)[:150]}"])
+                )
+                continue
             room_code = (item.room_code or "").strip()
             col = (item.column_code or "").strip()
             code = (item.code or "").strip()

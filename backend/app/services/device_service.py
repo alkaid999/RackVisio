@@ -203,7 +203,7 @@ class DeviceService:
             data = data.model_copy(update={"ip_address": None})
         return data
 
-    async def import_devices(self, items: list[DeviceImportItem]) -> ImportResult:
+    async def import_devices(self, items: list[dict]) -> ImportResult:
         """批量导入设备：逐行 ``begin_nested`` 保存点隔离，单条失败不影响其余。
 
         必填（名称）与类型/枚举/格式校验在前（复用 ``DeviceCreate``）；编号生成 /
@@ -213,6 +213,20 @@ class DeviceService:
         seen_codes: set[str] = set()
         for idx, item in enumerate(items):
             row = idx + 1
+            try:
+                item = DeviceImportItem.model_validate(item)
+            except PydanticValidationError as exc:
+                msgs = [
+                    f"{'.'.join(str(p) for p in e['loc'])}: {e['msg']}"
+                    for e in exc.errors()
+                ]
+                result.failures.append(ImportFailure(row=row, errors=msgs))
+                continue
+            except Exception as exc:
+                result.failures.append(
+                    ImportFailure(row=row, errors=[f"数据格式不合法：{str(exc)[:150]}"])
+                )
+                continue
             name = (item.name or "").strip()
             if not name:
                 result.failures.append(

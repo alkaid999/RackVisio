@@ -135,8 +135,12 @@ class RoomImportItem(BaseModel):
 
 
 class RoomImportRowsRequest(BaseModel):
-    """机房批量导入请求体：前端解析文件为行后，以 JSON 数组提交。"""
+    """机房批量导入请求体：前端解析文件为行后，以 JSON 数组提交。
 
-    items: list[RoomImportItem] = Field(
+    注：items 声明为 list[dict]，将逐行校验下沉到 room_service.import_rooms，
+    单行非法仅计入 failures，不触发整批 422。
+    """
+
+    items: list[dict] = Field(
         ..., min_length=1, max_length=500, description="机房数据行，单次最多 500 条"
     )
