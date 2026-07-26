@@ -291,6 +291,8 @@ const editRackId = ref('')
 // 批量新增弹窗 & 批量选择状态
 const batchCreateVisible = ref(false)
 const selected = ref(new Set())
+// 批量导入弹窗（与 DataImportDialog v-model:visible 绑定；缺失会导致点击导入无反应）
+const importVisible = ref(false)
 
 // 导出 / 导入状态
 const exporting = ref(false)
