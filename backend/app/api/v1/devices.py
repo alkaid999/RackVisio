@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.audit import log_audit
 from app.core.deps import get_db
 from app.core.enums import DeviceStatus, DeviceType
 from app.core.rbac import require_permission
@@ -48,14 +49,16 @@ async def list_devices(
     status_code=status.HTTP_201_CREATED,
     dependencies=[Depends(require_permission("device:edit"))],
 )
-async def create_device(payload: DeviceCreate, db: AsyncSession = Depends(get_db)):
+async def create_device(payload: DeviceCreate, request: Request, db: AsyncSession = Depends(get_db)):
     svc = DeviceService(db)
     device = await svc.create_device(payload)
+    await log_audit(request=request, module="device", action="create", object_type="设备", object_id=device.id, object_name=device.name or device.code)
     return ok(device)
 
 
 @router.get("/export", dependencies=[Depends(require_permission("device:view"))])
 async def export_devices(
+    request: Request,
     db: AsyncSession = Depends(get_db),
     room_id: Optional[str] = None,
     rack_id: Optional[str] = None,
@@ -76,12 +79,13 @@ async def export_devices(
         keyword=keyword,
         is_asset=is_asset,
     )
+    await log_audit(request=request, module="export", action="export", object_type="设备", detail=f"导出设备 {len(items)} 条")
     return ok([d.model_dump() for d in items])
 
 
 @router.post("/import", dependencies=[Depends(require_permission("device:edit"))])
 async def import_devices(
-    payload: DeviceImportRowsRequest, db: AsyncSession = Depends(get_db)
+    payload: DeviceImportRowsRequest, request: Request, db: AsyncSession = Depends(get_db)
 ):
     """批量导入设备：前端解析文件为 JSON 行后提交，后端逐行校验并创建。
 
@@ -89,6 +93,7 @@ async def import_devices(
     """
     svc = DeviceService(db)
     result = await svc.import_devices(payload.items)
+    await log_audit(request=request, module="import", action="import", object_type="设备", detail=f"导入设备：成功 {result.created} 条，失败 {result.failed} 条")
     return ok(ImportResult.model_validate(result))
 
 
@@ -101,17 +106,21 @@ async def get_device(device_id: str, db: AsyncSession = Depends(get_db)):
 
 @router.put("/{device_id}", dependencies=[Depends(require_permission("device:edit"))])
 async def update_device(
-    device_id: str, payload: DeviceUpdate, db: AsyncSession = Depends(get_db)
+    device_id: str, payload: DeviceUpdate, request: Request, db: AsyncSession = Depends(get_db)
 ):
     svc = DeviceService(db)
     device = await svc.update_device(device_id, payload)
+    await log_audit(request=request, module="device", action="update", object_type="设备", object_id=device.id, object_name=device.name or device.code, detail=f"更新设备（编号 {device.code}）")
     return ok(device)
 
 
 @router.delete("/{device_id}", dependencies=[Depends(require_permission("device:edit"))])
-async def delete_device(device_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_device(device_id: str, request: Request, db: AsyncSession = Depends(get_db)):
     svc = DeviceService(db)
+    device = await svc.get_device(device_id)
+    name = device.name or device.code
     await svc.delete_device(device_id)
+    await log_audit(request=request, module="device", action="delete", object_type="设备", object_id=device_id, object_name=name, detail=f"删除设备「{name}」")
     return ok()
 
 

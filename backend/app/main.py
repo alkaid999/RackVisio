@@ -19,6 +19,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.api.v1 import (
     accounts,
+    audit,
     auth,
     consumables,
     devices,
@@ -174,7 +175,7 @@ app.add_middleware(AuthMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
 
 # 挂载全部 v1 路由（前缀统一为 /api/v1）。
-for module in (rooms, racks, devices, interfaces, links, stats, mount_records, auth, accounts, consumables, meta):
+for module in (rooms, racks, devices, interfaces, links, stats, mount_records, auth, accounts, consumables, meta, audit):
     app.include_router(module.router, prefix=settings.API_PREFIX)
 
 

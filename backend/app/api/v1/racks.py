@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.audit import log_audit
 from app.core.deps import get_db
 from app.core.rbac import get_current_user, require_permission
 from app.repositories.mount_record_repo import MountRecordRepository
@@ -60,26 +61,29 @@ async def update_positions(
 
 
 @router.post("", dependencies=[Depends(require_permission("rack:edit"))])
-async def create_rack(payload: RackCreate, db: AsyncSession = Depends(get_db)):
+async def create_rack(payload: RackCreate, request: Request, db: AsyncSession = Depends(get_db)):
     """创建机柜（room_id 置于请求体）。"""
     svc = RackService(db)
     rack = await svc.create_rack(payload)
+    await log_audit(request=request, module="rack", action="create", object_type="机柜", object_id=rack.id, object_name=rack.name or rack.code)
     return ok(RackOut.model_validate(rack))
 
 
 @router.post("/batch", dependencies=[Depends(require_permission("rack:edit"))])
-async def create_racks_batch(payload: RackBatchCreate, db: AsyncSession = Depends(get_db)):
+async def create_racks_batch(payload: RackBatchCreate, request: Request, db: AsyncSession = Depends(get_db)):
     """批量新增机柜：一次请求一个事务，返回成功 / 失败明细。
 
     必须在 ``/{rack_id}`` 路由之前注册，避免被其路径模板拦截。
     """
     svc = RackService(db)
     result = await svc.create_racks_batch(payload)
+    await log_audit(request=request, module="rack", action="create", object_type="机柜", detail=f"批量新增机柜：成功 {result.created} 台，失败 {result.failed} 台")
     return ok(RackBatchResult.model_validate(result))
 
 
 @router.get("/export", dependencies=[Depends(require_permission("rack:view"))])
 async def export_racks(
+    request: Request,
     db: AsyncSession = Depends(get_db),
     room_id: Optional[str] = None,
     keyword: Optional[str] = None,
@@ -90,12 +94,13 @@ async def export_racks(
     items, _ = await svc.list_filtered(
         page=1, size=100000, room_id=room_id, keyword=keyword, status=status
     )
+    await log_audit(request=request, module="export", action="export", object_type="机柜", detail=f"导出机柜 {len(items)} 条")
     return ok([r.model_dump() for r in items])
 
 
 @router.post("/import", dependencies=[Depends(require_permission("rack:edit"))])
 async def import_racks(
-    payload: RackImportRowsRequest, db: AsyncSession = Depends(get_db)
+    payload: RackImportRowsRequest, request: Request, db: AsyncSession = Depends(get_db)
 ):
     """批量导入机柜：前端解析文件为 JSON 行后提交，后端逐行校验并创建。
 
@@ -103,6 +108,7 @@ async def import_racks(
     """
     svc = RackService(db)
     result = await svc.import_racks(payload.items)
+    await log_audit(request=request, module="import", action="import", object_type="机柜", detail=f"导入机柜：成功 {result.created} 台，失败 {result.failed} 台")
     return ok(ImportResult.model_validate(result))
 
 
@@ -115,17 +121,21 @@ async def get_rack(rack_id: str, db: AsyncSession = Depends(get_db)):
 
 @router.put("/{rack_id}", dependencies=[Depends(require_permission("rack:edit"))])
 async def update_rack(
-    rack_id: str, payload: RackUpdate, db: AsyncSession = Depends(get_db)
+    rack_id: str, payload: RackUpdate, request: Request, db: AsyncSession = Depends(get_db)
 ):
     svc = RackService(db)
     rack = await svc.update_rack(rack_id, payload)
+    await log_audit(request=request, module="rack", action="update", object_type="机柜", object_id=rack.id, object_name=rack.name or rack.code, detail=f"更新机柜（编号 {rack.code}）")
     return ok(RackOut.model_validate(rack))
 
 
 @router.delete("/{rack_id}", dependencies=[Depends(require_permission("rack:edit"))])
-async def delete_rack(rack_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_rack(rack_id: str, request: Request, db: AsyncSession = Depends(get_db)):
     svc = RackService(db)
+    rack = await svc.get_rack(rack_id)
+    name = rack.name or rack.code
     await svc.delete_rack(rack_id)
+    await log_audit(request=request, module="rack", action="delete", object_type="机柜", object_id=rack_id, object_name=name, detail=f"删除机柜「{name}」")
     return ok()
 
 
@@ -210,6 +220,7 @@ async def mount_device(
     await svc.mount_device(
         rack_id, payload.device_id, payload.start_u, mounted_by=operator
     )
+    await log_audit(request=request, module="rack", action="update", object_type="机柜", object_id=rack_id, object_name=rack_id, detail=f"上架设备 {payload.device_id} 到机柜（操作人：{operator}）")
     return ok()
 
 
@@ -217,6 +228,7 @@ async def mount_device(
 async def unmount_device(
     rack_id: str,
     payload: RackUnmountRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
@@ -227,6 +239,7 @@ async def unmount_device(
     svc = RackService(db)
     operator = current_user.get("user_name") or current_user.get("sub")
     await svc.unmount_device(rack_id, payload.device_id, unmounted_by=operator)
+    await log_audit(request=request, module="rack", action="update", object_type="机柜", object_id=rack_id, object_name=rack_id, detail=f"下架设备 {payload.device_id}（操作人：{operator}）")
     return ok()
 
 

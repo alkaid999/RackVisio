@@ -14,6 +14,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
+from app.core.audit import log_audit
 from app.core.exceptions import AppError
 from app.core.rbac import ROLE_LABELS, user_permission_map
 from app.core.security import TokenError, create_token, verify_password
@@ -98,6 +99,7 @@ async def login(body: LoginRequest, request: Request, session: AsyncSession = De
     # 登录成功：清空失败计数。
     _clear_login_failures(key)
     token = create_token(sub=user.id, username=user.username, role=user.role)
+    await log_audit(request=request, module="system", action="login", object_type="账号", object_id=user.id, object_name=user.username, detail="登录成功")
     return ok({"token": token, "user": _user_info(user)})
 
 

@@ -14,6 +14,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.audit import log_audit
 from app.core.deps import get_db
 from app.core.exceptions import AppError
 from app.core.rbac import (
@@ -65,7 +66,7 @@ async def list_accounts(
     "",
     dependencies=[Depends(require_permission("account:edit"))],
 )
-async def create_account(body: AccountCreate, session: AsyncSession = Depends(get_db)):
+async def create_account(body: AccountCreate, request: Request, session: AsyncSession = Depends(get_db)):
     repo = UserRepository(session)
     if await repo.get_by_username(body.username):
         raise AppError(status_code=409, code=409, message="用户名已存在")
@@ -88,6 +89,7 @@ async def create_account(body: AccountCreate, session: AsyncSession = Depends(ge
         permissions=permissions,
     )
     await session.commit()
+    await log_audit(request=request, module="account", action="create", object_type="账号", object_id=user.id, object_name=body.username, detail=f"创建账号（角色：{body.role}）")
     return ok(_to_out(user))
 
 
@@ -96,7 +98,7 @@ async def create_account(body: AccountCreate, session: AsyncSession = Depends(ge
     dependencies=[Depends(require_permission("account:edit"))],
 )
 async def update_account(
-    user_id: str, body: AccountUpdate, session: AsyncSession = Depends(get_db)
+    user_id: str, body: AccountUpdate, request: Request, session: AsyncSession = Depends(get_db)
 ):
     repo = UserRepository(session)
     user = await repo.get(user_id)
@@ -135,6 +137,7 @@ async def update_account(
             # 由 admin 降级为 user 且未提供权限 -> 默认只读
             user.permissions = default_permissions()
     await session.commit()
+    await log_audit(request=request, module="account", action="update", object_type="账号", object_id=user.id, object_name=user.username, detail=f"更新账号（角色：{user.role}）")
     return ok(_to_out(user))
 
 
@@ -163,6 +166,8 @@ async def delete_account(
                 message="至少需保留一名有效管理员，无法删除该账号",
             )
 
+    username = user.username
     await repo.delete(user)
     await session.commit()
+    await log_audit(request=request, module="account", action="delete", object_type="账号", object_id=user_id, object_name=username, detail=f"删除账号「{username}」")
     return ok(None)

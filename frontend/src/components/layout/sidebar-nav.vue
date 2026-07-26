@@ -19,6 +19,7 @@ import {
   HardDrive,
   History,
   Tags,
+  ScrollText,
 } from 'lucide-vue-next'
 
 const props = defineProps({ collapsed: { type: Boolean, default: false } })
@@ -61,10 +62,11 @@ const nav = [
   {
     label: '系统管理',
     icon: Settings,
-    children: [
-      { to: '/accounts', label: '账号管理', icon: UserCog, permission: 'account:view' },
-    ],
-  },
+      children: [
+        { to: '/accounts', label: '账号管理', icon: UserCog, permission: 'account:view' },
+        { to: '/audit-logs', label: '操作审计', icon: ScrollText, permission: 'account:view' },
+      ],
+    },
 ]
 
 // 按权限过滤后的可见导航（计算属性，随登录用户变化自动更新）。

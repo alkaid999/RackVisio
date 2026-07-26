@@ -103,6 +103,12 @@ const routes = [
     meta: { title: '账号管理', requiresAuth: true, permission: 'account:view' },
   },
   {
+    path: '/audit-logs',
+    name: 'AuditLog',
+    component: () => import('@/views/audit/AuditLog.vue'),
+    meta: { title: '操作审计', requiresAuth: true, permission: 'account:view' },
+  },
+  {
     path: '/consumables',
     name: 'ConsumableList',
     component: () => import('@/views/consumable/ConsumableList.vue'),

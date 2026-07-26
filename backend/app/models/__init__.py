@@ -6,6 +6,7 @@ from app.models.consumable import (
     ConsumableRecord,
     ConsumableType,
 )
+from app.models.audit_log import AuditLog
 from app.models.device import Device
 from app.models.interface import DeviceInterface
 from app.models.link import DeviceLink
@@ -22,6 +23,7 @@ __all__ = [
     "DeviceLink",
     "MountRecord",
     "User",
+    "AuditLog",
     "ConsumableType",
     "ConsumableCategory",
     "ConsumableItem",
