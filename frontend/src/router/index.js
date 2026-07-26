@@ -114,6 +114,14 @@ const routes = [
     component: () => import('@/views/consumable/ConsumableTypeManager.vue'),
     meta: { title: '类型与分类', requiresAuth: true, permission: 'consumable:edit' },
   },
+  // 全捕获路由：访问任何未注册的子路径都给到 404 反馈，而非白屏。
+  // 标记为 fullscreen + public，不走侧边栏布局、未登录也直接展示。
+  {
+    path: '/:pathMatch(.*)*',
+    name: 'NotFound',
+    component: () => import('@/views/NotFound.vue'),
+    meta: { title: '页面不存在', fullscreen: true, public: true },
+  },
 ]
 
 const router = createRouter({
