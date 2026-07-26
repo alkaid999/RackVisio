@@ -189,19 +189,6 @@ async def main() -> int:
                 return 1
             link_id = r.json()["data"]["id"]
 
-            # ⑦ 拓扑(按 room) 应含 A、B 与链路
-            r = await client.get("/api/v1/topology", params={"room_id": room_id})
-            check("⑦ 获取拓扑", r.status_code == 200, f"status={r.status_code}")
-            if r.status_code != 200:
-                return 1
-            topo = r.json()["data"]
-            node_ids = {n["id"] for n in topo["nodes"]}
-            has_a_b = A in node_ids and B in node_ids
-            edge_pairs = {(e["source"], e["target"]) for e in topo["edges"]}
-            link_in_topo = (A, B) in edge_pairs or (B, A) in edge_pairs
-            check("⑦ 拓扑含设备A与B", has_a_b, f"nodes={len(topo['nodes'])}")
-            check("⑦ 拓扑含链路", link_in_topo, f"edges={len(topo['edges'])} link_id={link_id}")
-
             # ⑧ 机房大屏 KPI
             r = await client.get(f"/api/v1/rooms/{room_id}/dashboard")
             check("⑧ 获取大屏", r.status_code == 200, f"status={r.status_code}")

@@ -97,14 +97,6 @@ class DashboardKPI(BaseModel):
     fault_count: int = 0
 
 
-class TopologyOverview(BaseModel):
-    """大屏拓扑概览。"""
-
-    node_count: int = 0
-    edge_count: int = 0
-    active_link_count: int = 0
-
-
 class RoomDashboard(BaseModel):
     """机房大屏聚合数据。"""
 
@@ -114,7 +106,6 @@ class RoomDashboard(BaseModel):
     rack_status_distribution: RackStatusDistribution
     device_status_distribution: DeviceStatusDistribution
     utilization: float = 0.0
-    topology_overview: TopologyOverview
 
 
 class RoomImportItem(BaseModel):

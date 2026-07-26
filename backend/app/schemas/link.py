@@ -107,32 +107,3 @@ class DeviceLinkView(BaseModel):
     remark: Optional[str] = None
     created_at: Optional[datetime] = None
 
-
-class TopologyNode(BaseModel):
-    """拓扑节点（设备）。"""
-
-    id: str
-    name: str
-    device_type: str
-    status: str
-    rack_id: Optional[str] = None
-
-
-class TopologyEdge(BaseModel):
-    """拓扑边（链路）。source / target 为设备 id。"""
-
-    id: str
-    source: str
-    target: str
-    source_interface: Optional[str] = None
-    target_interface: Optional[str] = None
-    remark: Optional[str] = None
-    medium: str = "tp"
-    cable_length: Optional[str] = None
-
-
-class TopologyResponse(BaseModel):
-    """拓扑数据（nodes + edges）。"""
-
-    nodes: list[TopologyNode] = []
-    edges: list[TopologyEdge] = []

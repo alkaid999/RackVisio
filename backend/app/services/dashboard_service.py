@@ -18,13 +18,11 @@ from app.schemas.room import (
     DeviceStatusDistribution,
     RackStatusDistribution,
     RoomDashboard,
-    TopologyOverview,
 )
-from app.services.topology_service import TopologyService
 
 
 class DashboardService:
-    """机房大屏数据聚合：KPI + 状态分布 + 利用率 + 拓扑概览。"""
+    """机房大屏数据聚合：KPI + 状态分布 + 利用率。"""
 
     def __init__(self, session: AsyncSession, cache: Optional[Cache] = None) -> None:
         self.session = session
@@ -32,7 +30,6 @@ class DashboardService:
         self.room_repo = RoomRepository(session)
         self.rack_repo = RackRepository(session)
         self.device_repo = DeviceRepository(session)
-        self.topology_service = TopologyService(session, self.cache)
 
     async def get_room_dashboard(self, room_id: str) -> RoomDashboard:
         """聚合机房大屏数据（先查缓存，未命中再聚合）。详见架构文档 §8。"""
@@ -76,13 +73,6 @@ class DashboardService:
             elif d.status == "maintenance":
                 device_status_dist.maintenance += 1
 
-        topology = await self.topology_service.get_topology(room_id=room_id)
-        topology_overview = TopologyOverview(
-            node_count=len(topology.nodes),
-            edge_count=len(topology.edges),
-            active_link_count=len(topology.edges),
-        )
-
         dashboard = RoomDashboard(
             room_id=room.id,
             room_name=room.name,
@@ -95,7 +85,6 @@ class DashboardService:
             rack_status_distribution=rack_status_dist,
             device_status_distribution=device_status_dist,
             utilization=utilization,
-            topology_overview=topology_overview,
         )
         await self.cache.set(cache_key, dashboard.model_dump(), ttl=settings.CACHE_TTL)
         return dashboard

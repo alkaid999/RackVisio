@@ -29,7 +29,6 @@ from app.api.v1 import (
     racks,
     rooms,
     stats,
-    topology,
 )
 from app.core.config import settings
 from app.core.database import async_session_factory, init_models
@@ -175,7 +174,7 @@ app.add_middleware(AuthMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
 
 # 挂载全部 v1 路由（前缀统一为 /api/v1）。
-for module in (rooms, racks, devices, interfaces, links, stats, topology, mount_records, auth, accounts, consumables, meta):
+for module in (rooms, racks, devices, interfaces, links, stats, mount_records, auth, accounts, consumables, meta):
     app.include_router(module.router, prefix=settings.API_PREFIX)
 
 

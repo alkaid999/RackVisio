@@ -323,7 +323,6 @@ import roomApi from '@/api/room'
 import rackApi from '@/api/rack'
 import deviceApi from '@/api/device'
 import interfaceApi from '@/api/interface'
-import http from '@/api/http'
 import { createEngine, makeRackLabel, makeBookmarkLabel, makeCanvasTexture } from '@/utils/three-setup'
 import { downloadBlob } from '@/utils/download'
 import { buildRoomDrawioXml } from '@/utils/drawio'
@@ -1289,34 +1288,16 @@ function clearDeviceSelection() {
   clearCables()
 }
 
-// 拉取设备详情：设备本体 + 接口列表 + 单设备拓扑（关联链路）。
+// 拉取设备详情：设备本体 + 接口列表。
+// 注：拓扑功能已移除，不再请求单设备拓扑，3D 线缆（links）置空、不再绘制连接线，
+// 设备详情面板与接口列表展示保持正常。
 async function fetchDeviceDetail(id) {
   try {
-    const [device, interfaces, topo] = await Promise.all([
+    const [device, interfaces] = await Promise.all([
       deviceApi.get(id),
       interfaceApi.list(id),
-      http.get(`/topology/device/${id}`),
     ])
-    const nodeMap = {}
-    ;(topo.nodes || []).forEach((n) => {
-      nodeMap[n.id] = n
-    })
-    const links = (topo.edges || [])
-      // 跳过设备自连（source==target）的冗余自环链路
-      .filter((e) => e.source !== e.target)
-      .map((e) => {
-        const peerId = e.source === id ? e.target : e.source
-        const peer = nodeMap[peerId]
-        return {
-          medium: e.medium,
-          status: e.status,
-          source_interface: e.source_interface,
-          target_interface: e.target_interface,
-          peerId,
-          peerName: peer ? peer.name : null,
-          peerLabel: e.target_interface ? null : '外部',
-        }
-      })
+    const links = []
     selectedDeviceDetail.value = { device, interfaces: interfaces || [], links }
     buildCables()
   } catch (e) {

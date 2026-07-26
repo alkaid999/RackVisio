@@ -326,29 +326,6 @@ async def test_link_port_reuse_409(client):
 
 
 # --------------------------------------------------------------------------- #
-# 拓扑
-# --------------------------------------------------------------------------- #
-async def test_topology(client):
-    room_id = await _room_id(client)
-
-    # 按机房过滤
-    resp = await client.get("/api/v1/topology", params={"room_id": room_id})
-    assert resp.status_code == 200, resp.text
-    data = resp.json()["data"]
-    assert len(data["nodes"]) >= 1
-    assert len(data["edges"]) >= 1
-
-    # 单设备拓扑（test-core-sw 与其邻居）
-    r2 = await _rack_id(client, room_id, "test-rack-02")
-    sw = await _device_id_in_rack(client, r2, "test-core-sw")
-    resp = await client.get(f"/api/v1/topology/device/{sw}")
-    assert resp.status_code == 200
-    data = resp.json()["data"]
-    node_ids = {n["id"] for n in data["nodes"]}
-    assert sw in node_ids
-
-
-# --------------------------------------------------------------------------- #
 # 大屏
 # --------------------------------------------------------------------------- #
 async def test_dashboard(client):
@@ -361,4 +338,3 @@ async def test_dashboard(client):
     assert data["kpi"]["fault_count"] == 1
     assert "rack_status_distribution" in data
     assert "device_status_distribution" in data
-    assert "topology_overview" in data
