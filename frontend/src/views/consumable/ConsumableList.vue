@@ -24,7 +24,6 @@
             <List class="h-4 w-4" />表格
           </button>
         </div>
-        <Button v-if="canEdit" variant="outline" @click="goTypeManager"><Tags class="h-4 w-4" />类型与分类</Button>
         <Button v-if="canEdit" class="ml-auto" @click="openCreate"><Plus class="h-4 w-4" />新建耗材</Button>
       </div>
     </div>
@@ -183,10 +182,9 @@
 
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
 import {
   LayoutGrid, List, Plus, Package, Search, Filter, Undo2, ArrowLeftRight,
-  History, Pencil, Trash2, Tags, Layers,
+  History, Pencil, Trash2, Layers,
 } from 'lucide-vue-next'
 import { useConsumableStore } from '@/stores/consumable'
 import { useAuthStore } from '@/stores/auth'
@@ -219,7 +217,6 @@ import SelectItem from '@/components/ui/select-item.vue'
 
 const store = useConsumableStore()
 const auth = useAuthStore()
-const router = useRouter()
 const { success } = useToast()
 const { confirm } = useConfirm()
 
@@ -315,9 +312,6 @@ function openStock(item) {
 function openHistory(item) {
   historyItem.value = item
   historyVisible.value = true
-}
-function goTypeManager() {
-  router.push('/consumables/types')
 }
 // 表格操作列的扩展动作（历史/变动），复用 EntityActions 紧凑图标按钮样式，与各列表表格一致。
 function rowExtraActions(item) {
