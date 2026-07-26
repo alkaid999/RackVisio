@@ -7,7 +7,6 @@ from typing import Optional, Tuple
 from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.database import utcnow
 from app.core.enums import RoomStatus
 from app.models.room import Room
 from app.schemas.room import RoomCreate, RoomUpdate
@@ -83,8 +82,7 @@ class RoomRepository:
             count_stmt = count_stmt.where(*conditions)
         total = (await self.session.execute(count_stmt)).scalar() or 0
         stmt = (
-            stmt.where(Room.deleted_at.is_(None))
-            .order_by(Room.created_at.desc())
+            stmt.order_by(Room.created_at.desc())
             .offset((page - 1) * size)
             .limit(size)
         )
@@ -99,35 +97,13 @@ class RoomRepository:
         return room
 
     async def list_all(self) -> list[Room]:
-        """获取全部机房（统计概览用，排除回收站内软删除机房）。"""
-        stmt = select(Room).where(Room.deleted_at.is_(None)).order_by(Room.created_at.desc())
+        """获取全部机房（统计概览用）。"""
+        stmt = select(Room).order_by(Room.created_at.desc())
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
-
-    async def list_deleted(self) -> list[Room]:
-        """回收站：返回所有已进入软删除（deleted_at 非空）的机房，按删除时间倒序。"""
-        stmt = (
-            select(Room)
-            .where(Room.deleted_at.isnot(None))
-            .order_by(Room.deleted_at.desc())
-        )
-        result = await self.session.execute(stmt)
-        return list(result.scalars().all())
-
-    async def mark_deleted(self, room: Room) -> Room:
-        """软删除：置 deleted_at 时间戳，保留子表（机柜 / 上架记录）不动。"""
-        room.deleted_at = utcnow()
-        await self.session.flush()
-        return room
-
-    async def restore(self, room: Room) -> Room:
-        """从回收站恢复：清空 deleted_at。"""
-        room.deleted_at = None
-        await self.session.flush()
-        return room
 
     async def soft_delete(self, room: Room) -> Room:
-        """软删除（业务停用态，兼容旧调用）：状态置为 disabled。"""
+        """软删除：状态置为 disabled。"""
         room.status = RoomStatus.DISABLED.value
         await self.session.flush()
         return room

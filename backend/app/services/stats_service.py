@@ -63,7 +63,7 @@ class StatsService:
             (await session.execute(
                 select(func.count())
                 .select_from(Room)
-                .where(Room.status == "active", Room.deleted_at.is_(None))
+                .where(Room.status == "active")
             )).scalar() or 0
         )
         rack_count = int(

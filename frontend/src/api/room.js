@@ -18,21 +18,9 @@ export default {
   update(id, payload) {
     return http.put(`/rooms/${id}`, payload)
   },
-  // 删除（软删除，进入回收站）。
+  // 删除（软删除 status=disabled）。
   remove(id) {
     return http.delete(`/rooms/${id}`)
-  },
-  // 回收站列表（room:edit）。data = [RoomOut]
-  recycleList() {
-    return http.get('/rooms/deleted')
-  },
-  // 从回收站恢复机房。data = RoomOut
-  restore(id) {
-    return http.post(`/rooms/${id}/restore`)
-  },
-  // 彻底删除机房（物理删除，不可逆）。data = null
-  purge(id) {
-    return http.delete(`/rooms/${id}?purge=true`)
   },
   // 容量统计。data = {rack_count, total_u, used_u, utilization}
   stats(id) {
