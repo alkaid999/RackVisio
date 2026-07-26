@@ -155,7 +155,7 @@
                   <div class="h-2.5 flex-1 overflow-hidden rounded-full bg-muted">
                     <div class="h-full rounded-full" :style="{ width: powerPct(row) + '%', backgroundColor: powerColor(row) }" />
                   </div>
-                  <span class="w-9 shrink-0 text-right text-xs text-muted-foreground">{{ row.design_power != null ? powerPct(row) + '%' : '—' }}</span>
+                  <span class="w-9 shrink-0 text-right text-xs text-muted-foreground">{{ powerPct(row) + '%' }}</span>
                 </div>
               </template>
               <template v-else-if="col.key === 'status'"><StatusBadge type="rack" :value="row.status" /></template>

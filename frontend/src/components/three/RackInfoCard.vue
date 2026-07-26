@@ -65,8 +65,10 @@ const capColor = computed(() => meta.usageColor(pct.value / 100))
 
 const powerPct = computed(() => {
   const { used_power, design_power } = props.rack
-  if (!design_power) return 0
-  return Math.min(100, Math.round((used_power / design_power) * 100))
+  if (!design_power || !Number.isFinite(Number(design_power))) return 0
+  const used = Number(used_power)
+  if (!Number.isFinite(used)) return 0
+  return Math.min(100, Math.round((used / Number(design_power)) * 100))
 })
 // 功率使用率配色复用同一使用率阈值（绿/黄/红）。
 const powerColor = computed(() => meta.usageColor(powerPct.value / 100))

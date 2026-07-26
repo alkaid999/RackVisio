@@ -35,12 +35,12 @@
       <div class="h-full rounded-full transition-all" :style="{ width: util + '%', backgroundColor: utilColor }" />
     </div>
 
-    <!-- 功率占用（design_power 已设置时展示进度条，样式与 U 位条保持一致；配色复用 meta.usageColor） -->
+    <!-- 功率占用：始终展示（与机柜列表 / 3D 详情一致；未设额定功率时显示 0%；配色复用 meta.usageColor） -->
     <div class="mt-2 flex items-center justify-between text-xs text-muted-foreground">
-      <span class="flex items-center gap-1"><Zap class="h-3.5 w-3.5" />{{ formatPower(rack.used_power) }} / {{ rack.design_power != null ? formatPower(rack.design_power) : '未设上限' }}</span>
-      <span v-if="rack.design_power != null" class="font-medium text-foreground">{{ powerPct }}%</span>
+      <span class="flex items-center gap-1"><Zap class="h-3.5 w-3.5" />{{ formatPower(rack.used_power) }} / {{ formatPower(rack.design_power) }}</span>
+      <span class="font-medium text-foreground">{{ powerPct }}%</span>
     </div>
-    <div v-if="rack.design_power != null" class="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+    <div class="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-muted">
       <div class="h-full rounded-full transition-all" :style="{ width: powerPct + '%', backgroundColor: powerColor }" />
     </div>
 
