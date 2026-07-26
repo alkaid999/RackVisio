@@ -443,6 +443,12 @@ class RackService:
     ) -> None:
         """将设备挂载到机柜指定 U 位，写入上架记录并同步设备状态为「已上架」。"""
         rack = await self.get_rack(rack_id)
+        # 功能性机柜（制冷机柜 / 配电机柜）仅作基础设施，禁止上架设备。
+        if rack.status in (RackBizStatus.AC.value, RackBizStatus.POWER.value):
+            raise ConflictError(
+                f"机柜「{rack.name}」标记为「{rack.status}」，属于功能性机柜，"
+                f"不可上架设备，请选择普通机柜进行上架"
+            )
         device = await self.device_repo.get(device_id)
         if device is None:
             raise NotFoundError("设备不存在")

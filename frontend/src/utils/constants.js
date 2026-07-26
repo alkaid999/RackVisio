@@ -45,6 +45,19 @@ export const RACK_STATUS_LABELS = reactive({
   配电机柜: '配电机柜',
 })
 
+// ============ 功能性机柜（特殊机柜）：禁止上架 + 视图专属标识 ============
+// 制冷机柜 / 配电机柜仅作基础设施，系统禁止其上架设备，并在 2D/3D 视图
+// 用专属图标区分、导出时给出提示。
+export const SPECIAL_RACK_STATUSES = ['制冷机柜', '配电机柜']
+// 专属图标：制冷机柜 ❄、配电机柜 ⚡
+export const RACK_STATUS_ICONS = {
+  制冷机柜: '❄', // ❄
+  配电机柜: '⚡', // ⚡
+}
+export function isSpecialRack(status) {
+  return SPECIAL_RACK_STATUSES.includes(status)
+}
+
 // ============ 设备类型（与 backend DeviceType 取值严格一致）============
 // 其中 patch / odf / other_facility 为「基础设施（非资产）」，见 FACILITY_TYPES 注释。
 export const DEVICE_TYPE_OPTIONS = [

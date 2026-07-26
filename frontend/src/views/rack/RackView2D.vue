@@ -65,8 +65,15 @@
               <div v-for="(slot, si) in col.slots" :key="si" class="row-slot">
                 <div v-if="slot" class="rack-col">
             <!-- 机柜头 -->
-            <div class="rack-head">
-              <div class="font-medium text-foreground truncate" :title="slot.name">{{ slot.name }}</div>
+            <div
+              class="rack-head"
+              :class="{ 'is-special-rack': isSpecialRack(slot.status) }"
+              :style="isSpecialRack(slot.status) ? { borderColor: RACK_STATUS_COLORS[slot.status], boxShadow: '0 0 0 1px ' + RACK_STATUS_COLORS[slot.status] } : null"
+            >
+              <div class="flex items-center justify-center gap-1 font-medium text-foreground truncate" :title="slot.name">
+                <span v-if="isSpecialRack(slot.status)" class="mr-0.5" :style="{ color: RACK_STATUS_COLORS[slot.status], fontSize: '14px' }">{{ RACK_STATUS_ICONS[slot.status] }}</span>
+                {{ slot.name }}
+              </div>
               <div class="text-xs text-muted-foreground mt-0.5">{{ slot.code }} · {{ slot.used_u }}/{{ slot.total_u }}U</div>
             </div>
             <!-- 机柜图形：左侧 U 数标识 + 右侧 U 位体 -->
@@ -186,6 +193,9 @@ import {
   DEVICE_POWER_COLORS,
   DEVICE_POWER_LABELS,
   isAssetDevice,
+  RACK_STATUS_COLORS,
+  RACK_STATUS_ICONS,
+  isSpecialRack,
 } from '@/utils/constants'
 import Select from '@/components/ui/select.vue'
 import SelectTrigger from '@/components/ui/select-trigger.vue'

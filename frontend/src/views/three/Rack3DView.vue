@@ -72,7 +72,7 @@ import * as THREE from 'three'
 import { useTheme } from '@/composables/useTheme'
 import rackApi from '@/api/rack'
 import roomApi from '@/api/room'
-import { createEngine, makeBookmarkLabel } from '@/utils/three-setup'
+import { createEngine, makeBookmarkLabel, makeRackLabel } from '@/utils/three-setup'
 import {
   buildCabinet,
   buildDevice,
@@ -89,7 +89,7 @@ import {
 } from '@/utils/device-models'
 import RackInfoCard from '@/components/three/RackInfoCard.vue'
 import DeviceInfoCard from '@/components/three/DeviceInfoCard.vue'
-import { DEVICE_TYPE_LABELS, DEVICE_STATUS_LABELS, DEVICE_TYPE_COLORS, RACK_STATUS_COLORS } from '@/utils/constants'
+import { DEVICE_TYPE_LABELS, DEVICE_STATUS_LABELS, DEVICE_TYPE_COLORS, RACK_STATUS_COLORS, RACK_STATUS_ICONS, isSpecialRack } from '@/utils/constants'
 import { escapeHtml } from '@/utils/escape'
 import { useMetaStore } from '@/stores/meta'
 import { formatPower } from '@/utils/format'
@@ -247,6 +247,16 @@ function buildScene() {
     powerColor: pc,
   })
   worldGroup.add(cabinet)
+
+  // 功能性机柜（制冷机柜 / 配电机柜）：机柜顶部悬浮专属标识，与普通机柜区分，并提示禁止上架。
+  if (isSpecialRack(r.status)) {
+    const accent = statusColor(r.status)
+    const badge = makeRackLabel(`${RACK_STATUS_ICONS[r.status]} ${r.status} · 禁止上架`, {
+      accentColor: accent,
+    })
+    badge.position.set(0, rackH + PLINTH_H + 1.0, 0)
+    worldGroup.add(badge)
+  }
 
   // 设备：按类型建模为贴近真实的 3D 形态，并作为独立 Group 挂载到对应 U 位。
   const mdevs = []

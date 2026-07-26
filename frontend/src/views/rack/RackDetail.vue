@@ -15,6 +15,11 @@
             容量：{{ rack.used_u }} / {{ rack.total_u }}U ·
             功率：{{ formatPower(usedPower) }} / {{ designPower != null ? formatPower(designPower) : '—' }} ·
             <StatusBadge type="rack" :value="rack.status" />
+            <span
+              v-if="rackIsSpecial"
+              class="ml-1 inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-xs font-medium"
+              :style="{ color: RACK_STATUS_COLORS[rack.status], backgroundColor: RACK_STATUS_COLORS[rack.status] + '22' }"
+            >{{ RACK_STATUS_ICONS[rack.status] }} 功能性机柜 · 禁止上架</span>
           </p>
         </div>
         <div class="flex gap-2">
@@ -239,7 +244,7 @@ import TableHead from '@/components/ui/table-head.vue'
 import TableCell from '@/components/ui/table-cell.vue'
 import EmptyState from '@/components/ui/empty-state.vue'
 import Spinner from '@/components/ui/spinner.vue'
-import { DEVICE_TYPE_OPTIONS, DEVICE_TYPE_COLORS, DEVICE_TYPE_LABELS } from '@/utils/constants'
+import { DEVICE_TYPE_OPTIONS, DEVICE_TYPE_COLORS, DEVICE_TYPE_LABELS, RACK_STATUS_COLORS, isSpecialRack, RACK_STATUS_ICONS } from '@/utils/constants'
 import { useMetaStore } from '@/stores/meta'
 import { PackagePlus, Pencil, ChevronLeft, Grid3x3, ListOrdered, Eye, Trash2, PackageX, Zap } from 'lucide-vue-next'
 
@@ -254,6 +259,8 @@ const rackId = route.params.id
 const canEdit = computed(() => auth.hasPermission('rack:edit'))
 
 const rack = computed(() => store.currentRack)
+// 功能性机柜（制冷机柜 / 配电机柜）禁止上架设备。
+const rackIsSpecial = computed(() => isSpecialRack(rack.value?.status))
 const devices = computed(() => store.devices)
 const candidates = computed(() => store.candidates)
 const uMap = computed(() => store.uMap)
@@ -318,6 +325,10 @@ function onFilterChange(v) {
 // 点击空闲 U 位或「上架设备」按钮：打开候选设备选择弹窗（预填起始 U 位）。
 function openMount(u) {
   if (!canEdit.value) return
+  if (rackIsSpecial.value) {
+    error(`机柜「${rack.value?.name}」为「${rack.value?.status}」，属功能性机柜，禁止上架设备`)
+    return
+  }
   mountForm.value = { device_id: '', start_u: u ? String(u) : '' }
   mountVisible.value = true
 }
@@ -325,6 +336,10 @@ function onAddAtU(u) {
   openMount(u)
 }
 async function confirmMount() {
+  if (rackIsSpecial.value) {
+    error(`机柜「${rack.value?.name}」为「${rack.value?.status}」，属功能性机柜，禁止上架设备`)
+    return
+  }
   if (!mountForm.value.device_id || !mountForm.value.start_u) {
     error('请选择设备并填写起始 U 位')
     return
@@ -344,6 +359,10 @@ async function confirmMount() {
 // 拖拽上架：拖放体落在某 U 位时触发（start_u 由 USlotMap 按设备高度换算）。
 async function onDropMount({ device_id, start_u }) {
   if (!canEdit.value) return
+  if (rackIsSpecial.value) {
+    error(`机柜「${rack.value?.name}」为「${rack.value?.status}」，属功能性机柜，禁止上架设备`)
+    return
+  }
   const dev = candidates.value.find((d) => d.id === device_id)
   mounting.value = true
   try {
@@ -359,6 +378,10 @@ async function onDropMount({ device_id, start_u }) {
 // 双击架下设备快速上架到首个空闲位（start_u=1，后端校验冲突）。
 async function quickMount(dev) {
   if (!canEdit.value) return
+  if (rackIsSpecial.value) {
+    error(`机柜「${rack.value?.name}」为「${rack.value?.status}」，属功能性机柜，禁止上架设备`)
+    return
+  }
   mounting.value = true
   try {
     await store.mount(rackId, { device_id: dev.id, start_u: 1 })
