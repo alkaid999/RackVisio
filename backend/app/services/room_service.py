@@ -85,28 +85,50 @@ class RoomService:
             raise ConflictError(f"机房编号 {data.code} 已存在")
 
     async def delete_room(self, room_id: str) -> None:
-        """物理删除机房。
+        """软删除机房（进入回收站）。
 
-        删除前校验：若机房内仍有「有效上架设备」（经机柜关联），禁止删除，
-        需先将这些设备下架。空机柜（无上架设备）允许存在、并随机房一并删除。
-        删除顺序：先清上架记录、再清机柜、最后删机房，避免外键孤儿数据
-        （设备位置经 mount_records 关联，无设备表直连字段；SQLite 未启用 FK 级联，
-        PostgreSQL 会强制外键，故必须显式按 room_id 清理子表）。
+        仅置 ``deleted_at`` 时间戳，保留机柜 / 上架记录等子表不动，可在回收站中恢复；
+        与物理删除（``purge_room``）区分：软删除可恢复、不校验上架设备，物理删除不可逆、需先下架。
+        普通列表、统计概览、容量聚合均按 ``deleted_at IS NULL`` 过滤，软删除机房对外不可见。
+        """
+        room = await self.get_room(room_id)
+        await self.room_repo.mark_deleted(room)
+        await self.session.commit()
+        await self.cache.delete_prefix(f"room_stats:{room_id}")
+        await self.cache.delete_prefix(f"dashboard:{room_id}")
+
+    async def restore_room(self, room_id: str) -> Room:
+        """从回收站恢复机房：清空 ``deleted_at``。"""
+        room = await self.get_room(room_id)
+        if room.deleted_at is None:
+            raise ValidationError("该机房未处于回收站中，无需恢复")
+        await self.room_repo.restore(room)
+        await self.session.commit()
+        return room
+
+    async def purge_room(self, room_id: str) -> None:
+        """物理删除机房（不可逆，彻底删除）。
+
+        删除前校验：若机房内仍有「有效上架设备」，禁止删除，需先将这些设备下架。
+        删除顺序：先清上架记录、再清机柜、最后删机房（均按 room_id 显式 bulk 删除，
+        避免触发 Room→Rack ORM 级联而重复删机柜产生告警）。
         """
         room = await self.get_room(room_id)
         device_ids = await self.mount_repo.list_device_ids_by_room(room_id)
         if device_ids:
             raise ConflictError(
-                f"机房内还有 {len(device_ids)} 台已上架设备，无法删除。请先将这些设备下架后再删除机房。"
+                f"机房内还有 {len(device_ids)} 台已上架设备，无法彻底删除。请先将这些设备下架后再删除机房。"
             )
-        # 清理顺序：上架记录 → 机柜 → 机房（均按 room_id 显式 bulk 删除，
-        # 避免 session.delete(room) 触发 Room→Rack 级联而重复删机柜产生告警）。
         await self.mount_repo.delete_by_room(room_id)
         await self.rack_repo.delete_by_room(room_id)
         await self.room_repo.delete_by_id(room_id)
         await self.session.commit()
         await self.cache.delete_prefix(f"room_stats:{room_id}")
         await self.cache.delete_prefix(f"dashboard:{room_id}")
+
+    async def list_deleted_rooms(self) -> list[Room]:
+        """回收站列表：返回已进入软删除的机房。"""
+        return await self.room_repo.list_deleted()
 
     async def get_stats(self, room_id: str) -> RoomStats:
         """机房容量统计（带缓存）。"""

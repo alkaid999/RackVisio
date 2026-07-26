@@ -393,6 +393,18 @@ async def _migrate_status_rename(session: AsyncSession) -> None:
     await session.flush()
 
 
+async def _migrate_room_soft_delete(session: AsyncSession) -> None:
+    """机房回收站软删除迁移：rooms 新增 deleted_at 列（方言无关，可空）。
+
+    与 ``status=disabled`` 业务停用态区分：deleted_at 非空表示机房已进入回收站
+    （隐藏于普通列表，可恢复 / 彻底删除）。列可空，幂等 ALTER，SQLite / PostgreSQL 通吃。
+    """
+    rcols = await _existing_columns(session, "rooms")
+    if "deleted_at" not in rcols:
+        await session.execute(text("ALTER TABLE rooms ADD COLUMN deleted_at TIMESTAMP"))
+    await session.flush()
+
+
 async def seed_data(session: AsyncSession) -> None:
     """初始化种子数据（幂等）。
 
@@ -484,4 +496,5 @@ MIGRATIONS: list = [
     ("0003_power", _migrate_power),
     ("0004_rack_status", _migrate_rack_status),
     ("0005_status_rename", _migrate_status_rename),
+    ("0006_room_soft_delete", _migrate_room_soft_delete),
 ]

@@ -40,6 +40,9 @@
         <Button v-if="canEdit" variant="outline" @click="importVisible = true">
           <Upload class="h-4 w-4" />导入
         </Button>
+        <Button v-if="canEdit" variant="outline" @click="openRecycle">
+          <Trash2 class="h-4 w-4" />回收站
+        </Button>
         <Button v-if="canEdit" class="ml-auto" @click="openCreate"><Plus class="h-4 w-4" />新建机房</Button>
       </div>
     </div>
@@ -179,13 +182,39 @@
       :import-fn="(items) => roomApi.import(items)"
       @imported="load"
     />
+
+    <!-- 回收站 -->
+    <Dialog v-model="recycleVisible" title="机房回收站" description="软删除的机房可恢复或彻底删除">
+      <div v-if="recycleLoading" class="flex justify-center py-10">
+        <Spinner class="h-5 w-5 text-primary" />
+      </div>
+      <div v-else-if="!recycledRooms.length" class="py-10 text-center text-sm text-muted-foreground">
+        回收站为空
+      </div>
+      <div v-else class="space-y-2">
+        <div
+          v-for="r in recycledRooms"
+          :key="r.id"
+          class="flex items-center justify-between rounded-lg border border-border px-3 py-2"
+        >
+          <div class="min-w-0">
+            <div class="truncate font-medium">{{ r.name }}</div>
+            <div class="text-xs text-muted-foreground">编号 {{ r.code }} · 删除于 {{ formatTime(r.deleted_at) }}</div>
+          </div>
+          <div class="flex shrink-0 gap-1">
+            <Button variant="ghost" size="sm" @click="onRestore(r)"><RotateCcw class="h-3.5 w-3.5" />恢复</Button>
+            <Button variant="ghost" size="sm" class="text-destructive" @click="onPurge(r)"><Trash2 class="h-3.5 w-3.5" />彻底删除</Button>
+          </div>
+        </div>
+      </div>
+    </Dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { LayoutGrid, List, Plus, Server, Search, Filter, Undo2, MapPin, Map, Activity, Download, Upload, ChevronDown, FileSpreadsheet, FileText } from 'lucide-vue-next'
+import { LayoutGrid, List, Plus, Server, Search, Filter, Undo2, MapPin, Map, Activity, Download, Upload, ChevronDown, FileSpreadsheet, FileText, Trash2, RotateCcw } from 'lucide-vue-next'
 import { useRoomStore } from '@/stores/room'
 import { useAuthStore } from '@/stores/auth'
 import RoomForm from '@/views/room/RoomForm.vue'
@@ -218,6 +247,8 @@ import DropdownMenu from '@/components/ui/dropdown-menu.vue'
 import DropdownMenuContent from '@/components/ui/dropdown-menu-content.vue'
 import DropdownMenuItem from '@/components/ui/dropdown-menu-item.vue'
 import DataImportDialog from '@/components/common/DataImportDialog.vue'
+import Dialog from '@/components/ui/dialog.vue'
+import { formatDateTime } from '@/utils/datetime'
 
 const router = useRouter()
 const store = useRoomStore()
@@ -353,6 +384,51 @@ async function onDelete(room) {
     await roomApi.remove(room.id)
     success('删除成功')
     load()
+  } catch (e) {
+    // 接口报错已由统一拦截器提示
+  }
+}
+
+// —— 回收站（软删除机房恢复 / 彻底删除）——
+const recycleVisible = ref(false)
+const recycledRooms = ref([])
+const recycleLoading = ref(false)
+const formatTime = formatDateTime
+
+async function openRecycle() {
+  recycleVisible.value = true
+  await loadRecycle()
+}
+async function loadRecycle() {
+  recycleLoading.value = true
+  try {
+    recycledRooms.value = await roomApi.recycleList()
+  } finally {
+    recycleLoading.value = false
+  }
+}
+async function onRestore(r) {
+  try {
+    await roomApi.restore(r.id)
+    success(`已恢复机房「${r.name}」`)
+    await loadRecycle()
+    load()
+  } catch (e) {
+    // 接口报错已由统一拦截器提示
+  }
+}
+async function onPurge(r) {
+  const ok = await confirm({
+    title: '彻底删除机房',
+    description: `确定要彻底删除机房「${r.name}」吗？此操作不可逆，将同时删除其机柜与上架记录。`,
+    variant: 'danger',
+    confirmText: '彻底删除',
+  })
+  if (!ok) return
+  try {
+    await roomApi.purge(r.id)
+    success(`已彻底删除机房「${r.name}」`)
+    await loadRecycle()
   } catch (e) {
     // 接口报错已由统一拦截器提示
   }

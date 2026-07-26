@@ -42,8 +42,11 @@ class Room(Base):
     floor: Mapped[str | None] = mapped_column(String(32), nullable=True)
     # 机房地址：详细街道地址（如某市某区某路某号），选填。
     address: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    # active / disabled（软删除）
+    # active / disabled（业务停用态，独立于回收站软删除）。
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="active")
+    # 回收站软删除时间戳：NULL=正常；非空=已进入回收站（隐藏于普通列表，可恢复）。
+    # 与 status=disabled 区分：disabled 是业务停用，仍可见、可编辑；软删除是彻底隐藏待恢复。
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(
