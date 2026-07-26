@@ -71,7 +71,7 @@
               :style="isSpecialRack(slot.status) ? { borderColor: RACK_STATUS_COLORS[slot.status], boxShadow: '0 0 0 1px ' + RACK_STATUS_COLORS[slot.status] } : null"
             >
               <div class="flex items-center justify-center gap-1 font-medium text-foreground truncate" :title="slot.name">
-                <span v-if="isSpecialRack(slot.status)" class="mr-0.5" :style="{ color: RACK_STATUS_COLORS[slot.status], fontSize: '14px' }">{{ RACK_STATUS_ICONS[slot.status] }}</span>
+                <span v-if="isSpecialRack(slot.status)" class="mr-0.5" :style="{ color: RACK_STATUS_COLORS[slot.status], fontSize: '14px' }">{{ statusIcon(slot.status) }}</span>
                 {{ slot.name }}
               </div>
               <div class="text-xs text-muted-foreground mt-0.5">{{ slot.code }} · {{ slot.used_u }}/{{ slot.total_u }}U</div>
@@ -196,6 +196,7 @@ import {
   RACK_STATUS_COLORS,
   RACK_STATUS_ICONS,
   isSpecialRack,
+  statusIcon,
 } from '@/utils/constants'
 import Select from '@/components/ui/select.vue'
 import SelectTrigger from '@/components/ui/select-trigger.vue'

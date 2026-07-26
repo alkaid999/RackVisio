@@ -89,7 +89,7 @@ import {
 } from '@/utils/device-models'
 import RackInfoCard from '@/components/three/RackInfoCard.vue'
 import DeviceInfoCard from '@/components/three/DeviceInfoCard.vue'
-import { DEVICE_TYPE_LABELS, DEVICE_STATUS_LABELS, DEVICE_TYPE_COLORS, RACK_STATUS_COLORS, RACK_STATUS_ICONS, isSpecialRack } from '@/utils/constants'
+import { DEVICE_TYPE_LABELS, DEVICE_STATUS_LABELS, DEVICE_TYPE_COLORS, RACK_STATUS_COLORS, RACK_STATUS_ICONS, isSpecialRack, statusIcon } from '@/utils/constants'
 import { escapeHtml } from '@/utils/escape'
 import { useMetaStore } from '@/stores/meta'
 import { formatPower } from '@/utils/format'
@@ -97,6 +97,7 @@ import Button from '@/components/ui/button.vue'
 
 const route = useRoute()
 const router = useRouter()
+const meta = useMetaStore()
 
 const rack = ref(null)
 const devices = ref([])
@@ -213,7 +214,6 @@ function buildScene() {
 
   const r = rack.value
   const rackH = (r.total_u || 42) * U_H
-  const meta = useMetaStore()
   const statusColor = (s) => RACK_STATUS_COLORS[s] || '#909399'
   const sc = new THREE.Color(statusColor(r.status)).getHex()
   const powerRatio = r.design_power ? r.used_power / r.design_power : 0
@@ -251,7 +251,7 @@ function buildScene() {
   // 功能性机柜（制冷机柜 / 配电机柜）：机柜顶部悬浮专属标识，与普通机柜区分，并提示禁止上架。
   if (isSpecialRack(r.status)) {
     const accent = statusColor(r.status)
-    const badge = makeRackLabel(`${RACK_STATUS_ICONS[r.status]} ${r.status} · 禁止上架`, {
+    const badge = makeRackLabel(`${statusIcon(r.status)} ${r.status} · 禁止上架`, {
       accentColor: accent,
     })
     badge.position.set(0, rackH + PLINTH_H + 1.0, 0)
@@ -527,6 +527,15 @@ onMounted(async () => {
 
 // 主题切换时实时刷新 3D 场景环境（与机房总览一致）
 watch(isDark, (dark) => apply3DTheme(dark))
+
+// 同一 3D 详情路由下切换机柜（如 URL 直接改 rackSlug）时组件实例复用，onMounted 不会重跑；
+// 监听 rackSlug 变化重建场景，避免画面停留在上一台机柜（M2）。
+watch(
+  () => route.params.rackSlug,
+  async () => {
+    if (engine && !error.value) await load()
+  }
+)
 
 onBeforeUnmount(() => {
   if (engine) {

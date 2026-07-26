@@ -39,8 +39,9 @@ export const useMetaStore = defineStore('meta', {
     usageWarn: (s) => s.usageThresholds.warn,
     // 使用率 crit 阈值（%）。
     usageCrit: (s) => s.usageThresholds.crit,
-    // 机柜使用率 → 三档配色（审查报告#352）。兼容两种传参：ratio ∈ [0,1] 或百分比 [0,100]，
-    // 按 warn/crit 阈值取 ok/warn/crit。移除各视图内联的 `>0.8?'#F56C6C':...` 魔法色。
+    // 机柜使用率 → 三档配色。兼容两种传参：ratio ∈ [0,1] 或百分比 [0,100]，按 warn/crit 阈值取色。
+    // ⚠ 调用约定（L2）：形如 `meta.usageColor(ratio)`，state `s` 由 Pinia 自动注入，
+    //    切勿写成 `usageColor(state)(ratio)`。移除各视图内联的 `>0.8?'#F56C6C':...` 魔法色。
     usageColor: (s) => (ratio) => {
       const r = Number(ratio)
       if (!isFinite(r)) return s.usageColors.ok

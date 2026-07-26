@@ -46,8 +46,11 @@ export const RACK_STATUS_LABELS = reactive({
 })
 
 // ============ 功能性机柜（特殊机柜）：禁止上架 + 视图专属标识 ============
-// 制冷机柜 / 配电机柜仅作基础设施，系统禁止其上架设备，并在 2D/3D 视图
-// 用专属图标区分、导出时给出提示。
+// ⚠ 单一真相源同步约束（M3）：本数组取值必须与后端 app/core/enums.py 的
+//    RackBizStatus.AC(制冷机柜) / RackBizStatus.POWER(配电机柜) 严格一致。
+//    后端 rack_service.mount_device 用 RackBizStatus.AC.value / RackBizStatus.POWER.value 拦截，
+//    前端用本数组判定。新增第三种功能性机柜时务必前后端同步修改，否则上下架逻辑会分裂。
+// 制冷机柜 / 配电机柜仅作基础设施，系统禁止其上架设备，并在 2D/3D 视图用专属图标区分。
 export const SPECIAL_RACK_STATUSES = ['制冷机柜', '配电机柜']
 // 专属图标：制冷机柜 ❄、配电机柜 ⚡
 export const RACK_STATUS_ICONS = {
@@ -56,6 +59,10 @@ export const RACK_STATUS_ICONS = {
 }
 export function isSpecialRack(status) {
   return SPECIAL_RACK_STATUSES.includes(status)
+}
+// 安全取图标（L3）：非功能性状态返回空串，避免直接 RACK_STATUS_ICONS[status] 得 undefined。
+export function statusIcon(status) {
+  return RACK_STATUS_ICONS[status] || ''
 }
 
 // ============ 设备类型（与 backend DeviceType 取值严格一致）============
