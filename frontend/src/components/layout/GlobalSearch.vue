@@ -1,10 +1,11 @@
 <script setup>
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { Search, Server, Network, Cable, CornerDownLeft, ArrowUp, ArrowDown, Loader2 } from 'lucide-vue-next'
+import { Search, Server, Network, Cable, Boxes, CornerDownLeft, ArrowUp, ArrowDown, Loader2 } from 'lucide-vue-next'
 import deviceApi from '@/api/device'
 import interfaceApi from '@/api/interface'
 import linkApi from '@/api/link'
+import rackApi from '@/api/rack'
 import { useMetaStore } from '@/stores/meta'
 import { LINK_MEDIUM_LABELS, INTERFACE_TYPE_LABELS } from '@/utils/constants'
 import { cn } from '@/lib/utils'
@@ -23,6 +24,7 @@ const loading = ref(false)
 const devices = ref([])
 const interfaces = ref([])
 const links = ref([])
+const racks = ref([])
 const activeIndex = ref(0)
 const inputEl = ref(null)
 
@@ -93,6 +95,20 @@ const groups = computed(() => {
       }
     })
   )
+  push(
+    'rack',
+    '机柜',
+    Boxes,
+    racks.value.map((r) => ({
+      kind: 'rack',
+      id: r.id,
+      to: `/racks/${r.id}`,
+      title: r.name || r.code,
+      subtitle: [r.code, r.room_name].filter(Boolean).join('  ·  '),
+      badge: '机柜',
+      badgeVariant: 'outline',
+    }))
+  )
   return g
 })
 
@@ -112,20 +128,23 @@ async function runSearch() {
     devices.value = []
     interfaces.value = []
     links.value = []
+    racks.value = []
     loading.value = false
     return
   }
   loading.value = true
   try {
-    // 三类端点并行查询；单类无权限（403）不阻断其它类结果。
-    const [dRes, iRes, lRes] = await Promise.allSettled([
+    // 四类端点并行查询；单类无权限（403）不阻断其它类结果。
+    const [dRes, iRes, lRes, rRes] = await Promise.allSettled([
       deviceApi.list({ keyword: q, size: 8, page: 1 }),
       interfaceApi.listAll({ keyword: q, size: 8, page: 1 }),
       linkApi.list({ keyword: q, size: 8, page: 1 }),
+      rackApi.list({ keyword: q, size: 8, page: 1 }),
     ])
     devices.value = dRes.status === 'fulfilled' ? dRes.value.items || [] : []
     interfaces.value = iRes.status === 'fulfilled' ? iRes.value.items || [] : []
     links.value = lRes.status === 'fulfilled' ? lRes.value.items || [] : []
+    racks.value = rRes.status === 'fulfilled' ? rRes.value.items || [] : []
     activeIndex.value = 0
   } finally {
     loading.value = false
@@ -177,6 +196,7 @@ watch(
       devices.value = []
       interfaces.value = []
       links.value = []
+      racks.value = []
       activeIndex.value = 0
       if (typeof document !== 'undefined') document.body.style.overflow = ''
     }
@@ -210,7 +230,7 @@ onUnmounted(() => {
             ref="inputEl"
             v-model="query"
             type="text"
-            placeholder="搜索设备、接口、IP 或链路…"
+            placeholder="搜索设备、接口、IP、机柜或链路…"
             class="h-12 w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
             @input="onInput"
           />
@@ -257,7 +277,7 @@ onUnmounted(() => {
           </template>
 
           <div v-else class="px-4 py-10 text-center text-sm text-muted-foreground">
-            输入关键字以检索全站资产（设备 / 接口 / IP / 链路）
+            输入关键字以检索全站资产（设备 / 接口 / IP / 机柜 / 链路）
           </div>
         </div>
 
