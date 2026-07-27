@@ -139,6 +139,7 @@
               </div>
             </div>
                 </div>
+                <div v-else class="rack-empty-slot" :title="'空位（平面图第 ' + (si + 1) + ' 行）'"></div>
               </div>
             </div>
           </section>
@@ -395,8 +396,10 @@ const floorColumns = computed(() => {
     const rowMap = {}
     for (const r of racksInCol) rowMap[r.grid_row ?? 0] = r
     const slots = []
-    // 2D 视图只渲染实际存在的机柜，不留平面图空槽位（避免出现多余灰色方块）
-    for (let i = 0; i < rowCount; i++) { const r = rowMap[i]; if (r) slots.push(r) }
+    // 保留平面图空槽位：每个 grid_row 对应一个槽位（无机柜则为 null），使 2D 视图的行位置
+    // 与平面图、3D 总览完全一致。例：某列机柜被拖到 grid_row=4（该列 row0~3 无柜），
+    // 2D 视图该列同样在第 5 个槽位出现机柜，而非被上提到顶部——修复“顺序与平面图不一致”。
+    for (let i = 0; i < rowCount; i++) slots.push(rowMap[i] || null)
     return { grid_col: gc, racks: racksInCol, slots }
   })
 })
@@ -706,6 +709,16 @@ onMounted(loadRooms)
   border-radius: 14px;
   padding: 12px 12px 14px;
   box-shadow: 0 1px 3px hsl(var(--foreground) / 0.06);
+}
+/* 平面图空槽位占位：透明保留纵向空间，使下方机柜落在正确的 grid_row 行位置（与平面图一致）；
+   仅以极淡虚线边框提示“此处为预留空位”，非填充灰块。 */
+.rack-empty-slot {
+  width: 170px;
+  flex-shrink: 0;
+  min-height: 200px;
+  border-radius: 14px;
+  border: 1px dashed hsl(var(--border) / 0.3);
+  box-sizing: border-box;
 }
 .rack-head {
   height: 64px;
