@@ -117,7 +117,6 @@
               <div class="flex justify-between"><span>地址</span><span class="text-foreground truncate max-w-[12rem]">{{ room.address || '—' }}</span></div>
             </div>
             <div class="mt-2.5 flex flex-wrap justify-end gap-1 border-t border-border pt-2.5">
-              <Button variant="ghost" size="sm" @click.stop="goPlan(room.id)"><Map class="h-3.5 w-3.5" />平面图</Button>
               <EntityActions v-if="canEdit" variant="full" :show-view="false" @view="() => goDetail(room.id)" @edit="() => openEdit(room.id)" @delete="() => onDelete(room)" />
             </div>
           </Card>
@@ -156,7 +155,6 @@
               </TableCell>
               <TableCell class="text-right">
                 <div class="flex justify-end gap-1">
-                  <Button variant="ghost" size="sm" @click.stop="goPlan(room.id)">平面图</Button>
                   <EntityActions v-if="canEdit" @view="() => goDetail(room.id)" @edit="() => openEdit(room.id)" @delete="() => onDelete(room)" />
                 </div>
               </TableCell>
@@ -185,7 +183,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { LayoutGrid, List, Plus, Server, Search, Filter, Undo2, MapPin, Map, Activity, Download, Upload, ChevronDown, FileSpreadsheet, FileText } from 'lucide-vue-next'
+import { LayoutGrid, List, Plus, Server, Search, Filter, Undo2, MapPin, Activity, Download, Upload, ChevronDown, FileSpreadsheet, FileText } from 'lucide-vue-next'
 import { useRoomStore } from '@/stores/room'
 import { useAuthStore } from '@/stores/auth'
 import RoomForm from '@/views/room/RoomForm.vue'
@@ -337,9 +335,6 @@ function openEdit(id) {
 }
 function goDetail(id) {
   router.push(`/rooms/${id}`)
-}
-function goPlan(id) {
-  router.push(`/rooms/${id}/plan`)
 }
 async function onDelete(room) {
   const ok = await confirm({

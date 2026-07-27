@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import roomApi from '@/api/room'
 
-// 机房状态：列表 / 详情 / 平面图 / 容量统计。
+// 机房状态：列表 / 详情 / 容量统计。
 export const useRoomStore = defineStore('room', {
   state: () => ({
     rooms: [],

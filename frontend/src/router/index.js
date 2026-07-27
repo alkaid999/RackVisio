@@ -31,12 +31,6 @@ const routes = [
     meta: { title: '机房详情', requiresAuth: true, permission: 'room:view' },
   },
   {
-    path: '/rooms/:id/plan',
-    name: 'RoomFloorPlan',
-    component: () => import('@/views/room/RoomFloorPlan.vue'),
-    meta: { title: '机房平面图', requiresAuth: true, permission: 'room:view' },
-  },
-  {
     path: '/racks',
     name: 'RackList',
     component: () => import('@/views/rack/RackList.vue'),

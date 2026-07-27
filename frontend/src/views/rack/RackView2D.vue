@@ -7,7 +7,7 @@
         <p class="page-sub">选择机房查看机柜平面排布，悬停设备查看详细信息</p>
       </div>
       <div class="flex items-center gap-3">
-        <Select v-model="selectedRoom" class="w-56" @update:model-value="loadRacks">
+        <Select v-model="selectedRoom" class="w-56" @update:model-value="onRoomChange">
           <SelectTrigger placeholder="选择机房" />
           <SelectContent>
             <SelectItem v-for="r in rooms" :key="r.id" :value="r.id">{{ r.name }}</SelectItem>
@@ -59,11 +59,16 @@
       </div>
       <template v-else>
         <div v-if="racks.length" class="floor-canvas" @wheel="onFloorWheel">
-          <section v-for="col in floorColumns" :key="col.grid_col" class="floor-col">
-            <!-- 该平面列按 grid_row 逐行排布，与平面图行一一对应；无设备的行显示空位(row-empty) -->
-            <div class="col-inner rows">
-              <div v-for="(slot, si) in col.slots" :key="si" class="row-slot">
+          <!-- 网格区域：行主序，与 FloorPlanBoard 绝对定位网格一一对应。
+               每行首格嵌入行标签（column_code），行高随该行最高机柜自适应，标签天然对齐。
+               机柜卡片高度按真实 U 数（rackPixelHeight）渲染，矮机柜顶部对齐、下方留白保留。 -->
+          <div class="grid-main">
+            <div v-for="(row, ri) in floorGrid" :key="'row-' + ri" class="grid-row">
+              <div class="row-label-cell">{{ rowLabels[ri] }}</div>
+              <div v-for="(slot, ci) in row" :key="'cell-' + ri + '-' + ci" class="grid-cell">
                 <div v-if="slot" class="rack-col">
+                  <!-- 机柜卡片：高度严格按真实 U 数（rackPixelHeight，统一 px/U 比例），
+                       从底部（地板线）对齐，矮机柜落在高机柜对应 U 位置下方，U1 共用同一地板线。 -->
             <!-- 机柜头 -->
             <div
               class="rack-head"
@@ -139,10 +144,10 @@
               </div>
             </div>
                 </div>
-                <div v-else class="rack-empty-slot" :title="'空位（平面图第 ' + (si + 1) + ' 行）'"></div>
+                <div v-else class="rack-empty-slot" :title="'空位（行' + (ri + 1) + ' 列' + (ci + 1) + '）'"></div>
               </div>
             </div>
-          </section>
+          </div>
         </div>
         <EmptyState v-else title="该机房暂无机柜" />
       </template>
@@ -186,6 +191,7 @@ import { downloadBlob } from '@/utils/download'
 import { useToast } from '@/composables/useToast'
 import roomApi from '@/api/room'
 import deviceApi from '@/api/device'
+import { useRoomStore } from '@/stores/room'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import {
   DEVICE_TYPE_OPTIONS,
@@ -212,6 +218,7 @@ import Dialog from '@/components/ui/dialog.vue'
 
 const route = useRoute()
 const router = useRouter()
+const roomStore = useRoomStore()
 const { warning } = useToast()
 
 // 悬停设备块：受控打开 Popover 显示详情（悬停而非点击，避免与跳转冲突）。
@@ -350,11 +357,12 @@ function uTicks(total) {
   for (let u = 1; u <= (total || 0); u++) ticks.push(u)
   return ticks
 }
-// 机柜图形高度随 U 数自适应：U 越多越高，保证逐 U 编号不重叠（每 U 至少约 14px）。
+// 机柜图形高度 = 真实 U 数 × 统一比例尺（15px/U），所有机柜共用同一比例，
+// 因此 10U 机柜严格落在 24U/42U 机柜的「10U 位置」下方，绝不拉伸到统一高度。
+// 配合 .rack-col 的 align-self:flex-end（底部/地板对齐），U1 全部对齐同一地板线。
 function rackPixelHeight(total) {
   const t = total || 42
-  const perU = t > 30 ? 15 : t > 18 ? 16 : 18
-  return Math.min(1040, Math.max(520, Math.round(t * perU))) + 'px'
+  return Math.round(t * 15) + 'px'
 }
 // 刻度竖向位置：以 U 槽中心对齐（u=total 靠近顶部，u=1 靠近底部）。
 function tickStyle(total, u) {
@@ -371,48 +379,77 @@ const avgUtilization = computed(() => {
   return Math.round(sum / racks.value.length)
 })
 
-// 2D 视图布局镜像机房平面图（RoomFloorPlan）：以「平面图列坐标 grid_col」分列、
-// 以「行坐标 grid_row」逐行排布，使 2D 视图的行列与平面图一一对应（列头已取消，仅保留网格与平面图一致）。
-// - 列：按 grid_col 升序（左→右与平面图一致），对应现场运维所称的「A列/B列」机柜成排布局。
-// - 行：每列按全局最大 grid_row + 1 预留「行槽(slots)」，设备落到其 grid_row 对应的槽位，
-//   无设备的行显示空位（row-empty）——因此平面图中某列从 2 行拖成 4 行，2D 视图该列即出现 4 个行槽。
-const planRowCount = computed(() => {
-  let max = 0
-  for (const r of racks.value) max = Math.max(max, r.grid_row ?? 0)
-  return max + 1
-})
-const floorColumns = computed(() => {
-  const list = racks.value || []
-  if (!list.length) return []
-  const byCol = {}
-  for (const r of list) {
-    const gc = r.grid_col ?? 0
-    ;(byCol[gc] ||= []).push(r)
+// 2D 视图布局：行主序二维网格，与 FloorPlanBoard（机房平面图）绝对定位网格完全一致。
+// - 外层 = 行（grid_row 0→bounds.rows-1），内层 = 列（grid_col 0→bounds.cols-1）
+// - 每个单元格 (row, col) 最多容纳一台机柜，无则为空槽位
+// - 渲染时先行后列（左到右），与平面图从上到下、从左到右的阅读顺序一一对应
+// - bounds 与 FloorPlanBoard.bounds 完全一致：rows=Math.max(3,maxR+2), cols=Math.max(4,maxC+2)
+const bounds = computed(() => {
+  let maxR = 0, maxC = 0
+  for (const r of racks.value) {
+    if (r.grid_row != null) maxR = Math.max(maxR, r.grid_row)
+    if (r.grid_col != null) maxC = Math.max(maxC, r.grid_col)
   }
-  const cols = Object.keys(byCol).map(Number).sort((a, b) => a - b)
-  const rowCount = planRowCount.value
-  return cols.map((gc) => {
-    const racksInCol = byCol[gc].slice().sort((x, y) => (x.grid_row ?? 0) - (y.grid_row ?? 0))
-    const rowMap = {}
-    for (const r of racksInCol) rowMap[r.grid_row ?? 0] = r
-    const slots = []
-    // 保留平面图空槽位：每个 grid_row 对应一个槽位（无机柜则为 null），使 2D 视图的行位置
-    // 与平面图、3D 总览完全一致。例：某列机柜被拖到 grid_row=4（该列 row0~3 无柜），
-    // 2D 视图该列同样在第 5 个槽位出现机柜，而非被上提到顶部——修复“顺序与平面图不一致”。
-    for (let i = 0; i < rowCount; i++) slots.push(rowMap[i] || null)
-    return { grid_col: gc, racks: racksInCol, slots }
-  })
+  return { rows: Math.max(3, maxR + 2), cols: Math.max(4, maxC + 2) }
+})
+
+// 行主序二维网格：grid[row][col] = rack | null
+// 与 FloorPlanBoard.cellBox(grid_row, grid_col) 使用相同的 (row, col) 坐标系
+const floorGrid = computed(() => {
+  const b = bounds.value
+  const grid = Array.from({ length: b.rows }, () => Array(b.cols).fill(null))
+  for (const rack of racks.value) {
+    const r = rack.grid_row ?? 0
+    const c = rack.grid_col ?? 0
+    if (r >= 0 && r < b.rows && c >= 0 && c < b.cols) {
+      grid[r][c] = rack
+    }
+  }
+  return grid
+})
+
+// 行标签：取该行所有机柜的 column_code 去重拼接（与 FloorPlanBoard.rowLabels 一致）
+const rowLabels = computed(() => {
+  const labels = []
+  for (let r = 0; r < bounds.value.rows; r++) {
+    const codes = [...new Set(racks.value.filter((x) => x.grid_row === r).map((x) => x.column_code))]
+    labels.push(codes.length ? codes.join(' · ') : '')
+  }
+  return labels
 })
 
 // U 位明细功能已移除（该信息可由设备详情弹窗 / 设备列表覆盖），此处仅保留机柜图形与重叠告警。
 
+// 选中机房后：同步到 room store（保持平面图 / 详情上下文一致），并写回 URL ?room=
+// 以便刷新或直链仍能回到同一个机房（避免 2D 视图与平面图因默认机房不同而「看起来对不上」）。
+function syncRoomQuery(id) {
+  if (id && id !== route.query.room) {
+    router.replace({ query: { ...route.query, room: id } })
+  }
+}
+async function onRoomChange(val) {
+  selectedRoom.value = val
+  await loadRacks()
+  const r = rooms.value.find((x) => x.id === val)
+  if (r) roomStore.currentRoom = r
+  syncRoomQuery(val)
+}
+
 async function loadRooms() {
   const data = await roomApi.list({ size: 200 })
   rooms.value = data.items || []
-  const preselect = route.query.room || (rooms.value.length ? rooms.value[0].id : '')
+  // 预选优先级：URL ?room= > 当前正在查看的机房（平面图/详情已设置 roomStore.currentRoom）> 列表首个。
+  // 这样从机房详情（含平面图）点进「机柜 2D 视图」时，默认就是同一个机房，与平面图完全一致。
+  const inList = (id) => rooms.value.some((x) => x.id === id)
+  const currentRoomId = roomStore.currentRoom?.id
+  const preselect =
+    route.query.room ||
+    (currentRoomId && inList(currentRoomId) ? currentRoomId : '') ||
+    (rooms.value.length ? rooms.value[0].id : '')
   if (preselect) {
     selectedRoom.value = preselect
     await loadRacks()
+    syncRoomQuery(preselect)
   }
 }
 
@@ -481,7 +518,7 @@ function toArgb(hex) {
 // 浏览器下载逻辑已抽取到 src/utils/download.js（downloadBlob），本页直接复用，避免重复实现。
 
 // 导出机柜 U 位明细为 Excel（ExcelJS，支持单元格着色 + 合并 + 悬停批注）：
-// 布局 1:1 镜像「机柜 2D 视图」的渲染结构（floorColumns），不做任何按机柜名的排序 / 分组 / 重组：
+// 布局镜像「机柜 2D 视图」的行主序网格（floorGrid），不做任何按机柜名的排序 / 分组 / 重组：
 //   · 按 grid_col 分「竖向 section」（界面里的机柜列），section 间留间隔列；
 //   · 每个 section 内按 grid_row 逐行堆叠机柜（界面里同一机的上下排列），每台机柜占 [U 编号列(宽4) | 设备列(宽20)]；
 //   · 每个机柜竖向展开：表头行(机柜名/编号/已用U，30 磅高、深色底) + 自上而下 本机柜 total_u→1U。
@@ -523,14 +560,15 @@ async function exportExcel() {
     devInfo[rack.id] = { devByU, overlaps }
   }
 
-  // 1:1 镜像「机柜 2D 视图」渲染结构（floorColumns），不按机柜名排序 / 分组 / 重组：
-  //   · 按 grid_col 分「竖向 section」，每个 section 内按 grid_row 逐行堆叠机柜
-  //   · 每个 section 占 2 列（U 编号列 + 设备列），section 之间留 1 间隔列
-  //   · 每个机柜在自己的 2 列内竖向展开：表头行（机柜名/编号/已用U，30 磅高、深色底）
-  //     + 自上而下 本机柜 total_u → 1U；同 grid_col 的多台机柜直接上下堆叠（B2-01 自然落在 A-01 下方）。
-  const sections = floorColumns.value
-  const sectionCols = sections.map((sec, ci) => ({
-    sec,
+  // Excel 导出按 grid_col 分组为竖向 section（紧凑布局，与 2D 视图网格逻辑解耦）：
+  const byCol = {}
+  for (const r of racks.value) { ;(byCol[r.grid_col ?? 0] ||= []).push(r) }
+  const colKeys = Object.keys(byCol).map(Number).sort((a, b) => a - b)
+  const sections = colKeys.map((gc) => ({
+    grid_col: gc,
+    racks: byCol[gc].slice().sort((a, b) => (a.grid_row ?? 0) - (b.grid_row ?? 0)),
+  }))
+  const sectionCols = sections.map((_, ci) => ({
     uCol: 1 + ci * 3,
     devCol: 2 + ci * 3,
     gapCol: 3 + ci * 3,
@@ -701,21 +739,22 @@ onMounted(loadRooms)
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  /* 机柜外框：清晰边界，使其与背景区分。用前景色低透明描边——
-     --foreground 浅色近黑 / 深色近白，同一 α 在两主题下自动呈对称的中等对比灰，
-     保证浅色与深色模式均一眼可辨机柜区域范围，无需写死两套颜色。 */
+  /* 高度由内容自然撑开（头部 64px + rack-graphic 按真实 U 数动态高度），
+     严格正比于 U 数——10U 矮、42U 高。
+     关键：align-self: flex-end 使其在更高的行里【底部（地板）对齐】，
+     矮机柜悬于高机柜下方，U1 共用同一地板线，而不是被拉伸填满或顶部对齐。 */
+  align-self: flex-end;
   background: hsl(var(--card));
   border: 2px solid hsl(var(--foreground) / 0.28);
   border-radius: 14px;
   padding: 12px 12px 14px;
   box-shadow: 0 1px 3px hsl(var(--foreground) / 0.06);
 }
-/* 平面图空槽位占位：透明保留纵向空间，使下方机柜落在正确的 grid_row 行位置（与平面图一致）；
-   仅以极淡虚线边框提示“此处为预留空位”，非填充灰块。 */
+/* 平面图空槽位占位：不强制高度，随所在行（由该行最高机柜决定）自然撑开，
+   仅以极淡虚线边框提示"此处为预留空位"，保留平面图的空白网格空间。 */
 .rack-empty-slot {
   width: 170px;
   flex-shrink: 0;
-  min-height: 200px;
   border-radius: 14px;
   border: 1px dashed hsl(var(--border) / 0.3);
   box-sizing: border-box;
@@ -882,12 +921,13 @@ onMounted(loadRooms)
   color: oklch(var(--muted-foreground) / 0.7);
   text-align: center;
 }
-/* 镜像机房平面图：各平面列并排（左→右=grid_col），整体可横向滚动（列过多时不拆断） */
+/* 镜像机房平面图：行主序二维网格（与 FloorPlanBoard 绝对定位网格一一对应），
+   整体可横向滚动（列过多时不拆行） */
 .floor-canvas {
   display: flex;
   flex-direction: row;
   align-items: flex-start;
-  gap: 24px;
+  gap: 0;
   overflow-x: auto;
   padding-bottom: 8px;
   scrollbar-width: thin;
@@ -900,16 +940,33 @@ onMounted(loadRooms)
   background: oklch(var(--muted-foreground) / 0.3);
   border-radius: 9999px;
 }
-.floor-col {
+/* 行标签：嵌入每个 grid-row 首格（动态行高下，独立列无法逐行对齐）。
+   stretch 使其随行高撑开，内部文字垂直居中、右对齐贴近网格。 */
+.row-label-cell {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  width: 36px;
+  flex-shrink: 0;
+  padding-right: 6px;
+  font-size: 10px;
+  font-weight: 500;
+  color: oklch(var(--muted-foreground));
+}
+/* 网格主区域：所有行列 */
+.grid-main {
   display: flex;
   flex-direction: column;
+  gap: 14px; /* 行间距，对应平面图的 GAP */
 }
-.col-inner {
+.grid-row {
   display: flex;
-  flex-direction: column;
-  gap: 14px;
+  flex-direction: row;
+  gap: 24px; /* 列间距，对应平面图的 GAP */
 }
-.row-slot {
+.grid-cell {
   display: flex;
+  width: 170px;
+  shrink: 0;
 }
 </style>

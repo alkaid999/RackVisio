@@ -290,7 +290,7 @@ const powerColor = computed(() => meta.usageColor(powerPct.value))
 // 原因：RackForm 预填时会调 store.fetchOne（内部会翻转 store.loading），若本页 loading 依赖
 // store.loading，点击编辑会触发「store.loading=true→本页 v-if=loading 命中→含 RackForm 的内容区
 // 被卸载→fetchOne 完 store.loading=false→又重挂 RackForm」的无限循环，导致表单永远停在空默认态、预填失效。
-// 平面图（RoomFloorPlan）用本地 loading 所以正常；本页须与之一致。
+// 平面图（FloorPlanBoard）用本地 loading 所以正常；本页须与之一致。
 const loading = ref(true)
 
 const rackFormVisible = ref(false)

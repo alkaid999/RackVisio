@@ -23,13 +23,13 @@
       该机房暂无机柜，请先在机房详情中添加机柜。
     </div>
 
-    <div v-else class="flex gap-3 overflow-x-auto pb-4">
+    <div v-else ref="scrollRef" class="flex gap-2 overflow-x-auto p-2 sm:p-3">
       <!-- 左侧行标签（列编号） -->
-      <div class="shrink-0 w-16 pt-2" :style="{ height: boardH + 'px' }">
+      <div class="shrink-0 w-10 pt-[14px]" :style="{ height: boardH + 'px' }">
         <div
           v-for="(label, r) in rowLabels"
           :key="'rl-' + r"
-          class="flex items-center justify-end pr-2 text-[11px] font-medium text-muted-foreground"
+          class="flex items-center justify-end pr-1 text-[10px] font-medium text-muted-foreground"
           :style="{ height: CELL_H + 'px', marginBottom: GAP + 'px' }"
         >
           {{ label }}
@@ -41,6 +41,8 @@
         ref="boardRef"
         class="relative shrink-0 rounded-2xl border border-dashed border-border/60 bg-muted/30"
         :style="{ width: boardW + 'px', height: boardH + 'px' }"
+        @mouseenter="onEnter"
+        @mouseleave="onLeave"
       >
         <!-- 网格底纹 -->
         <div class="pointer-events-none absolute inset-0 opacity-[0.5]">
@@ -48,13 +50,13 @@
             v-for="r in bounds.rows"
             :key="'gr-' + r"
             class="absolute left-0 right-0 border-t border-border/40"
-            :style="{ top: r * (CELL_H + GAP) - GAP / 2 + 'px' }"
+            :style="{ top: PAD + r * (CELL_H + GAP) - GAP / 2 + 'px' }"
           />
           <div
             v-for="c in bounds.cols"
             :key="'gc-' + c"
             class="absolute top-0 bottom-0 border-l border-border/40"
-            :style="{ left: c * (CELL_W + GAP) - GAP / 2 + 'px' }"
+            :style="{ left: PAD + c * (CELL_W + GAP) - GAP / 2 + 'px' }"
           />
         </div>
 
@@ -69,7 +71,7 @@
         <div
           v-for="rack in racks"
           :key="rack.id"
-          class="rack-tile group absolute flex select-none flex-col rounded-xl border bg-card p-2.5 shadow-sm transition-shadow"
+          class="rack-tile group absolute flex select-none flex-col rounded-xl border bg-card p-2.5 shadow-sm transition-shadow overflow-hidden"
           :class="[
             drag.id === rack.id ? 'z-50 shadow-xl ring-2 ring-brand-400' : 'hover:shadow-md',
             tileBorder(rack),
@@ -77,66 +79,31 @@
           :style="tileStyle(rack)"
           @pointerdown="onPointerDown($event, rack)"
         >
-          <!-- 悬浮操作 -->
-          <div class="absolute right-1.5 top-1.5 z-10 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100" data-action>
-            <button
-              class="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
-              title="查看"
-              data-action
-              @click.stop="goRack(rack)"
-            ><Eye class="h-3.5 w-3.5" /></button>
-            <button
-              v-if="canEditRack"
-              class="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
-              title="编辑"
-              data-action
-              @click.stop="openRackForm(rack)"
-            ><Pencil class="h-3.5 w-3.5" /></button>
-            <button
-              v-if="canEditRack"
-              class="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-red-50 hover:text-red-500"
-              title="删除"
-              data-action
-              @click.stop="removeRack(rack)"
-            ><Trash2 class="h-3.5 w-3.5" /></button>
-          </div>
-
-          <!-- 机柜外观：竖向 U 位条纹 -->
-          <div class="rack-vis mb-2 mt-1 flex-1 rounded-md border border-border/60 bg-gradient-to-b from-muted/40 to-muted/10"
-               :style="{ backgroundImage: 'repeating-linear-gradient(to bottom, rgba(100,116,139,.18) 0 1px, transparent 1px ' + (CELL_H * 0.42) + 'px)' }" />
-
-          <div class="truncate text-sm font-semibold text-foreground">{{ rack.name }}</div>
-          <div class="mt-0.5 flex items-center justify-between gap-1">
-            <span class="truncate text-[11px] text-muted-foreground">{{ rack.column_code }} / {{ rack.code }}</span>
-            <StatusBadge type="rack" :value="rack.status" />
-          </div>
-          <div class="mt-1.5 flex items-center gap-1 text-[11px] text-muted-foreground">
-            <Ruler class="h-3 w-3" />{{ rack.used_u }}/{{ rack.total_u }}U
-          </div>
-          <div class="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-muted">
-            <div class="h-full rounded-full" :style="{ width: util(rack) + '%', backgroundColor: utilColor(rack) }" />
+          <!-- 机柜信息（去掉无意义的装饰框，仅保留关键字段；无悬浮操作图标） -->
+          <div class="flex min-w-0 flex-1 flex-col">
+            <div class="truncate text-sm font-semibold leading-tight text-foreground">{{ rack.name }}</div>
+            <div class="mt-0.5 truncate text-[11px] text-muted-foreground">{{ rack.column_code }} / {{ rack.code }}</div>
+            <div class="mt-auto flex flex-col items-start gap-1.5 pt-2">
+              <StatusBadge type="rack" :value="rack.status" />
+              <span class="inline-flex items-center gap-1 text-[11px] tabular-nums text-muted-foreground">
+                <Ruler class="h-3 w-3" />{{ rack.used_u }}/{{ rack.total_u }}U
+              </span>
+            </div>
+            <div class="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+              <div class="h-full rounded-full" :style="{ width: util(rack) + '%', backgroundColor: utilColor(rack) }" />
+            </div>
           </div>
         </div>
       </div>
     </div>
-
-    <!-- 编辑机柜：复用统一 RackForm 组件（与列表 / 详情页完全一致，消除重复内联表单） -->
-    <RackForm
-      v-model:visible="rackFormVisible"
-      mode="edit"
-      :rack-id="editRackId"
-      :locked-room-id="roomId"
-      @saved="onRackSaved"
-    />
   </div>
 </template>
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Boxes, Eye, Pencil, RotateCcw, Ruler, Trash2 } from 'lucide-vue-next'
+import { Boxes, RotateCcw, Ruler } from 'lucide-vue-next'
 import StatusBadge from '@/components/common/StatusBadge.vue'
-import RackForm from '@/views/rack/RackForm.vue'
 import rackApi from '@/api/rack'
 import { useAuthStore } from '@/stores/auth'
 import { useMetaStore } from '@/stores/meta'
@@ -153,14 +120,16 @@ const meta = useMetaStore()
 // 机柜相关写操作（编辑 / 删除 / 拖拽改坐标 / 重置排列）均需 rack:edit；只读用户隐藏写按钮并禁止拖拽。
 const canEditRack = computed(() => auth.hasPermission('rack:edit'))
 
-const CELL_W = 128
-const CELL_H = 156
+const CELL_W = 132
+const CELL_H = 140
 const GAP = 16
+const PAD = 14 // 画板内边距：瓦片与顶部/左侧留白，不贴虚线框
 
 const loading = ref(true)
 const saving = ref(false)
 const racks = ref([])
 const boardRef = ref(null)
+const scrollRef = ref(null)
 
 const bounds = computed(() => {
   let maxR = 0
@@ -171,8 +140,8 @@ const bounds = computed(() => {
   }
   return { rows: Math.max(3, maxR + 2), cols: Math.max(4, maxC + 2) }
 })
-const boardW = computed(() => bounds.value.cols * (CELL_W + GAP))
-const boardH = computed(() => bounds.value.rows * (CELL_H + GAP))
+const boardW = computed(() => PAD * 2 + bounds.value.cols * (CELL_W + GAP) - GAP)
+const boardH = computed(() => PAD * 2 + bounds.value.rows * (CELL_H + GAP) - GAP)
 
 const rowLabels = computed(() => {
   const labels = []
@@ -184,10 +153,12 @@ const rowLabels = computed(() => {
 })
 function cellBox(r, c) {
   return {
-    left: c * (CELL_W + GAP) + 'px',
-    top: r * (CELL_H + GAP) + 'px',
+    left: PAD + c * (CELL_W + GAP) + 'px',
+    top: PAD + r * (CELL_H + GAP) + 'px',
     width: CELL_W + 'px',
     height: CELL_H + 'px',
+    minHeight: CELL_H + 'px',
+    maxHeight: CELL_H + 'px',
   }
 }
 function tileStyle(rack) {
@@ -224,7 +195,6 @@ function occupantAt(r, c, excludeId) {
 }
 function onPointerDown(e, rack) {
   if (!canEditRack.value) return
-  if (e.target.closest('[data-action]')) return
   drag.value = { id: rack.id, dx: 0, dy: 0, over: null, startX: e.clientX, startY: e.clientY, moved: false }
   window.addEventListener('pointermove', onPointerMove)
   window.addEventListener('pointerup', onPointerUp)
@@ -238,8 +208,8 @@ function onPointerMove(e) {
   d.dx = dx
   d.dy = dy
   const rect = boardRef.value.getBoundingClientRect()
-  let c = Math.floor((e.clientX - rect.left) / (CELL_W + GAP))
-  let r = Math.floor((e.clientY - rect.top) / (CELL_H + GAP))
+  let c = Math.floor((e.clientX - rect.left - PAD) / (CELL_W + GAP))
+  let r = Math.floor((e.clientY - rect.top - PAD) / (CELL_H + GAP))
   r = Math.max(0, Math.min(bounds.value.rows - 1, r))
   c = Math.max(0, Math.min(bounds.value.cols - 1, c))
   d.over = { r, c }
@@ -307,29 +277,6 @@ function goRack(rack) {
 function go3D() {
   router.push('/3d?room=' + props.roomId)
 }
-function openRackForm(rack) {
-  editRackId.value = rack.id
-  rackFormVisible.value = true
-}
-async function onRackSaved() {
-  // 编辑保存后刷新平面图机柜列表，使名称 / 状态等即时更新
-  await loadRacks()
-  emit('updated')
-}
-async function removeRack(rack) {
-  if (!confirm(`确认删除机柜「${rack.name}」？`)) return
-  saving.value = true
-  try {
-    await rackApi.remove(rack.id)
-    racks.value = racks.value.filter((x) => x.id !== rack.id)
-    emit('updated')
-  } finally {
-    saving.value = false
-  }
-}
-
-const rackFormVisible = ref(false)
-const editRackId = ref('')
 
 async function loadRacks() {
   const data = await rackApi.list({ room_id: props.roomId, size: 500 })
@@ -339,6 +286,31 @@ async function loadRacks() {
     grid_col: r.grid_col ?? 0,
   }))
 }
+// ---------------------------------------------------------------- 滚动：悬停平面图时滚轮转横向
+// 机柜多时平面图横向溢出，默认滚轮为纵向滚动无法浏览。悬停背景区时将纵向 deltaY
+// 转为横向 scrollLeft，移出后恢复浏览器默认纵向滚动（仅在确有横向溢出时拦截）。
+function onWheel(e) {
+  const el = scrollRef.value
+  if (!el) return
+  if (el.scrollWidth > el.clientWidth + 1) {
+    const delta = Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX
+    el.scrollLeft += delta
+    e.preventDefault()
+  }
+}
+function onEnter() {
+  const el = scrollRef.value
+  if (!el || el._wheelBound) return
+  el.addEventListener('wheel', onWheel, { passive: false })
+  el._wheelBound = true
+}
+function onLeave() {
+  const el = scrollRef.value
+  if (!el || !el._wheelBound) return
+  el.removeEventListener('wheel', onWheel)
+  el._wheelBound = false
+}
+
 onMounted(async () => {
   loading.value = true
   try {
@@ -350,5 +322,10 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   window.removeEventListener('pointermove', onPointerMove)
   window.removeEventListener('pointerup', onPointerUp)
+  const el = scrollRef.value
+  if (el && el._wheelBound) {
+    el.removeEventListener('wheel', onWheel)
+    el._wheelBound = false
+  }
 })
 </script>
