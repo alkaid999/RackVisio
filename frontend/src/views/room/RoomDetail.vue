@@ -19,7 +19,6 @@
           </p>
         </div>
         <div class="flex gap-2">
-          <Button variant="outline" @click="goPlan">平面图</Button>
           <Button v-if="canEditRoom" variant="ghost" size="icon" aria-label="编辑" title="编辑" @click="roomFormVisible = true"><Pencil class="h-4 w-4" /></Button>
           <Button v-if="canEditRoom" variant="ghost" size="icon" class="text-destructive hover:text-destructive" aria-label="删除" title="删除" @click="onDeleteRoom"><Trash2 class="h-4 w-4" /></Button>
           <Button variant="outline" @click="goBack"><ChevronLeft class="h-4 w-4" />返回</Button>
@@ -53,6 +52,12 @@
         </template>
         <StatsPanel v-if="stats" :stats="stats" />
       </Card>
+
+      <!-- 机房平面图：直接内嵌卡片，支持拖拽调整机柜位置（松手自动保存），无需跳转 -->
+      <Card class="mb-5">
+        <template #header><span class="section-title flex items-center gap-1.5"><LayoutGrid class="h-4 w-4" />机房平面图</span></template>
+        <FloorPlanBoard :room-id="roomId" @updated="onPlanUpdated" />
+      </Card>
     </template>
 
     <!-- 编辑机房弹窗 -->
@@ -63,12 +68,13 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Map, MapPin, ArrowRight, Pencil, Trash2, ChevronLeft, Heading, Hash, Tag, Building2, Layers, Signal, ClipboardList, BarChart3 } from 'lucide-vue-next'
+import { Map, MapPin, ArrowRight, Pencil, Trash2, ChevronLeft, Heading, Hash, Tag, Building2, Layers, Signal, ClipboardList, BarChart3, LayoutGrid } from 'lucide-vue-next'
 import { useRoomStore } from '@/stores/room'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
 import StatsPanel from '@/components/room/StatsPanel.vue'
+import FloorPlanBoard from '@/components/room/FloorPlanBoard.vue'
 import RoomForm from '@/views/room/RoomForm.vue'
 import Button from '@/components/ui/button.vue'
 import Card from '@/components/ui/card.vue'
@@ -99,8 +105,9 @@ function goAllRacks() {
 function goBack() {
   router.back()
 }
-function goPlan() {
-  router.push(`/rooms/${roomId}/plan`)
+// 平面图内机柜位置 / 状态变更后，刷新本页容量统计，保持数据一致
+function onPlanUpdated() {
+  store.fetchStats(roomId)
 }
 // 机房信息变更后刷新详情与统计
 async function onRoomSaved() {
