@@ -52,11 +52,12 @@ async def list_racks(
 
 @router.post("/positions", dependencies=[Depends(require_permission("rack:edit"))])
 async def update_positions(
-    payload: RackPositionsUpdate, db: AsyncSession = Depends(get_db)
+    payload: RackPositionsUpdate, request: Request, db: AsyncSession = Depends(get_db)
 ):
     """批量更新机柜网格坐标（2D 平面图拖拽持久化）。"""
     svc = RackService(db)
     await svc.update_positions([p.model_dump() for p in payload.positions])
+    await log_audit(request=request, module="rack", action="update", object_type="机柜", detail=f"调整 {len(payload.positions)} 个机柜的平面图坐标")
     return ok()
 
 

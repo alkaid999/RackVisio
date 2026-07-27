@@ -558,12 +558,12 @@ class DeviceService:
         await self.session.commit()
         return record.id
 
-    async def delete_mount_record(self, record_id: int) -> None:
+    async def delete_mount_record(self, record_id: int) -> str:
         """删除一条上架记录（含历史追溯）。
 
         若该记录为当前有效上架记录，删除后设备失去位置 → 退回「在库」并重算机柜
         used_u，避免设备状态与位置派生不一致的脏数据。删除非有效（已下架）记录为
-        纯历史清理。
+        纯历史清理。返回关联设备名（供审计展示）。
         """
         record = await self.mount_repo.get_by_id(record_id)
         if record is None:
@@ -576,3 +576,4 @@ class DeviceService:
             await self.session.flush()
             await self.recalculate_rack_usage(record.rack_id)
         await self.session.commit()
+        return device.name or device.code if device is not None else f"记录 {record_id}"

@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
 
+from app.core.audit import log_audit
 from app.core.deps import get_db
 from app.core.rbac import require_permission
 from app.schemas.common import ok, paginated
@@ -56,10 +57,11 @@ async def list_unlinked_interfaces(db: AsyncSession = Depends(get_db)):
     dependencies=[Depends(require_permission("device:edit"))],
 )
 async def create_interface(
-    device_id: str, payload: InterfaceCreate, db: AsyncSession = Depends(get_db)
+    device_id: str, payload: InterfaceCreate, request: Request, db: AsyncSession = Depends(get_db)
 ):
     svc = InterfaceService(db)
     iface = await svc.create_interface(device_id, payload)
+    await log_audit(request=request, module="interface", action="create", object_type="接口", object_id=iface.id, object_name=iface.name)
     return ok(InterfaceOut.model_validate(iface))
 
 
@@ -69,10 +71,11 @@ async def create_interface(
     dependencies=[Depends(require_permission("device:edit"))],
 )
 async def batch_create_interfaces(
-    device_id: str, payload: InterfaceMultiBatchCreate, db: AsyncSession = Depends(get_db)
+    device_id: str, payload: InterfaceMultiBatchCreate, request: Request, db: AsyncSession = Depends(get_db)
 ):
     svc = InterfaceService(db)
     interfaces = await svc.batch_create_interfaces(device_id, payload.groups)
+    await log_audit(request=request, module="interface", action="create", object_type="接口", detail=f"批量新增接口 {len(interfaces)} 个（设备 {device_id}）")
     return ok([InterfaceOut.model_validate(p) for p in interfaces])
 
 
@@ -81,10 +84,11 @@ async def batch_create_interfaces(
     dependencies=[Depends(require_permission("device:edit"))],
 )
 async def update_interface(
-    interface_id: str, payload: InterfaceUpdate, db: AsyncSession = Depends(get_db)
+    interface_id: str, payload: InterfaceUpdate, request: Request, db: AsyncSession = Depends(get_db)
 ):
     svc = InterfaceService(db)
     iface = await svc.update_interface(interface_id, payload)
+    await log_audit(request=request, module="interface", action="update", object_type="接口", object_id=iface.id, object_name=iface.name)
     return ok(InterfaceOut.model_validate(iface))
 
 
@@ -92,7 +96,10 @@ async def update_interface(
     "/interfaces/{interface_id}",
     dependencies=[Depends(require_permission("device:edit"))],
 )
-async def delete_interface(interface_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_interface(interface_id: str, request: Request, db: AsyncSession = Depends(get_db)):
     svc = InterfaceService(db)
+    iface = await svc.get_interface(interface_id)
+    name = iface.name
     await svc.delete_interface(interface_id)
+    await log_audit(request=request, module="interface", action="delete", object_type="接口", object_id=interface_id, object_name=name, detail=f"删除接口「{name}」")
     return ok()

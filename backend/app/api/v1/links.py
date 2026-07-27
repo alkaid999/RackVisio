@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.audit import log_audit
 from app.core.deps import get_db
 from app.core.rbac import require_permission
 from app.schemas.common import ok, paginated
@@ -52,9 +53,18 @@ async def list_links(
     status_code=status.HTTP_201_CREATED,
     dependencies=[Depends(require_permission("link:edit"))],
 )
-async def create_link(payload: LinkCreate, db: AsyncSession = Depends(get_db)):
+async def create_link(payload: LinkCreate, request: Request, db: AsyncSession = Depends(get_db)):
     svc = LinkService(db)
     link = await svc.create_link(payload)
+    await log_audit(
+        request=request,
+        module="link",
+        action="create",
+        object_type="链路",
+        object_id=link.id,
+        object_name=link.remark or f"链路 {link.id[:8]}",
+        detail=f"介质 {link.medium}",
+    )
     return ok(LinkOut.model_validate(link))
 
 
@@ -70,10 +80,19 @@ async def link_by_interface(
 
 @router.put("/{link_id}", dependencies=[Depends(require_permission("link:edit"))])
 async def update_link(
-    link_id: str, payload: LinkUpdate, db: AsyncSession = Depends(get_db)
+    link_id: str, payload: LinkUpdate, request: Request, db: AsyncSession = Depends(get_db)
 ):
     svc = LinkService(db)
     link = await svc.update_link(link_id, payload)
+    await log_audit(
+        request=request,
+        module="link",
+        action="update",
+        object_type="链路",
+        object_id=link.id,
+        object_name=link.remark or f"链路 {link.id[:8]}",
+        detail=f"介质 {link.medium}",
+    )
     return ok(LinkOut.model_validate(link))
 
 
@@ -88,7 +107,10 @@ async def links_by_device(
 
 
 @router.delete("/{link_id}", dependencies=[Depends(require_permission("link:edit"))])
-async def delete_link(link_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_link(link_id: str, request: Request, db: AsyncSession = Depends(get_db)):
     svc = LinkService(db)
+    link = await svc.get_link(link_id)
+    name = link.remark or f"链路 {link.id[:8]}"
     await svc.delete_link(link_id)
+    await log_audit(request=request, module="link", action="delete", object_type="链路", object_id=link_id, object_name=name, detail=f"删除链路「{name}」（介质 {link.medium}）")
     return ok()

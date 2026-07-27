@@ -149,6 +149,12 @@ class InterfaceService:
             raise ConflictError("IP 地址冲突：该地址已被占用（可能由并发写入导致）")
         return iface
 
+    async def get_interface(self, interface_id: str) -> DeviceInterface:
+        iface = await self.interface_repo.get(interface_id)
+        if iface is None:
+            raise NotFoundError("接口不存在")
+        return iface
+
     async def delete_interface(self, interface_id: str) -> None:
         iface = await self.interface_repo.get(interface_id)
         if iface is None:

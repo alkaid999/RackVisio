@@ -141,6 +141,7 @@ const MODULE_LABELS = {
   rack: '机柜',
   device: '设备',
   account: '账号',
+  interface: '接口',
   link: '连接',
   consumable: '耗材',
   import: '导入',
