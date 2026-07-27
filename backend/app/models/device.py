@@ -16,7 +16,7 @@ import uuid
 from datetime import date, datetime
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, String
+from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, String, true
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base, utcnow
@@ -68,7 +68,7 @@ class Device(Base):
     # 设施（配线架/ODF配线架/其他设施 等）占 U 位但不进资产统计、不建接口、不显设备编码；
     # 由服务层在创建时按 device_type 强制判定，前端经 /meta 的 facility_types 识别。
     is_asset: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=True, server_default="1"
+        Boolean, nullable=False, default=True, server_default=true()
     )
     # 额定功率：设备厂家铭牌标注的满载工况下最大耗电功率（W），选填。
     rated_power: Mapped[float | None] = mapped_column(Float, nullable=True)

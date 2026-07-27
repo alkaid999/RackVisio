@@ -323,15 +323,19 @@ async def _migrate_facility(session: AsyncSession) -> None:
     """设施支持迁移：devices 新增 is_asset 列并回填（方言无关）。
 
     旧库无此列时 ALTER 追加 BOOLEAN；存量设备（均为资产）统一回填为 True。
-    SQLite 以 INTEGER(0/1) 存储、PostgreSQL 以 BOOLEAN 存储，统一用 1/0 字面量写入，
-    两种方言通吃（与 _migrate_base 的方言无关原则一致）。
+    SQLite 以 INTEGER(0/1) 存储、PostgreSQL 以 BOOLEAN 存储；回填用绑定参数传 Python
+    bool（SQLAlchemy 据值推断为 Boolean 类型，PG 编译为 true、SQLite 编译为 1），避免硬编码
+    整数 1 在 PostgreSQL 上触发 DatatypeMismatchError（与 _migrate_base 的方言无关原则一致）。
     """
     dcols = await _existing_columns(session, "devices")
     if "is_asset" not in dcols:
         await session.execute(text("ALTER TABLE devices ADD COLUMN is_asset BOOLEAN"))
     # 存量设备默认资产(True)；设施类型(patch/odf/other_facility)为新增枚举值，旧库无此类数据，无需改判。
+    # 用绑定参数传 Python bool：SQLAlchemy 据值推断 Boolean 类型，PG 编译为 true / SQLite 编译为 1，
+    # 避免硬编码整数 1 在 PostgreSQL 上触发 DatatypeMismatchError。
     await session.execute(
-        text("UPDATE devices SET is_asset=1 WHERE is_asset IS NULL")
+        text("UPDATE devices SET is_asset=:val WHERE is_asset IS NULL"),
+        {"val": True},
     )
     await session.flush()
 
