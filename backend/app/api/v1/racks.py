@@ -208,6 +208,7 @@ async def check_u(
 async def mount_device(
     rack_id: str,
     payload: RackMountRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):

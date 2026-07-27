@@ -65,6 +65,7 @@ node_modules/
 .turbo/
 .cache/
 dist/
+dist_bak*/
 dist_bak/
 dist_old_*/
 dist-verify/

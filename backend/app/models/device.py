@@ -65,7 +65,8 @@ class Device(Base):
         String(8), nullable=False, default=DevicePowerStatus.ON.value
     )
     # 是否计入资产（True=资产，False=基础设施）。
-    # 设施（配线架/ODF配线架/其他设施 等）占 U 位但不进资产统计、不建接口、不显设备编码；
+    # 设施（配线架/ODF配线架/其他设施 等）占 U 位但不进资产统计、不显设备编码；
+    # 仍支持建接口与链路（端口型设施如配线架/ODF 需管理端口）。is_asset 仅影响资产统计口径，
     # 由服务层在创建时按 device_type 强制判定，前端经 /meta 的 facility_types 识别。
     is_asset: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default=true()

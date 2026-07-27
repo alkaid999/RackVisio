@@ -85,8 +85,8 @@
         </div>
       </Card>
 
-      <!-- 接口面板（自由排布 + 列表 双视图；设施不建接口，隐藏） -->
-      <Card v-if="!isFacility" class="mb-5">
+      <!-- 接口面板（自由排布 + 列表 双视图；设施也支持建接口/链路，仅资产专属字段隐藏） -->
+      <Card class="mb-5">
         <template #header>
           <div class="flex flex-wrap items-center justify-between gap-3">
             <span class="section-title flex items-center gap-1.5">
@@ -142,10 +142,6 @@
           </div>
         </template>
       </Card>
-      <Card v-else class="mb-5">
-        <template #header><span class="section-title flex items-center gap-1.5"><ServerCog class="h-4 w-4" />接口面板</span></template>
-        <p class="text-sm text-muted-foreground py-2">基础设施（非资产）不建物理接口，故不提供接口面板。</p>
-      </Card>
 
       <!-- 添加 / 编辑接口弹窗 -->
       <InterfaceFormModal
@@ -167,8 +163,8 @@
         @mutated="onInterfacesMutated"
       />
 
-      <!-- 链路（设备视角：本设备接口 → 对端设备/接口；设施不建链路，隐藏） -->
-      <Card v-if="!isFacility" class="mb-5">
+      <!-- 链路（设备视角：本设备接口 → 对端设备/接口；设施同样支持建链） -->
+      <Card class="mb-5">
         <template #header>
           <div class="flex flex-wrap items-center justify-between gap-3">
             <span class="section-title flex items-center gap-1.5">
@@ -404,7 +400,7 @@ const powerStatus = computed(() => {
   if (isInStock.value) return '关机'
   return device.value?.power_status || '开机'
 })
-// 设施（非资产）：占 U 位但不进资产统计 / 不建接口 / 不显设备编码。
+// 设施（非资产）：占 U 位但不进资产统计 / 不显设备编码；仍支持建接口与链路（端口型设施如配线架/ODF）。
 const isFacility = computed(() => !isAssetDevice(device.value))
 
 // 接口数据（自由排布前面板 + 列表均读取此数据）。
