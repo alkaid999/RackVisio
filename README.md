@@ -75,6 +75,17 @@ RackVisio 是一个轻量级的机房机柜三维可视化工具。它把机房�
 
 ### 方式一：本地运行（开发 / 体验）
 
+**0. 获取源码**（GitHub 或国内 Gitee 二选一）
+
+```bash
+# GitHub
+git clone https://github.com/alkaid999/RackVisio.git
+# 国内加速（Gitee 镜像）
+git clone https://gitee.com/alkaid_yang/RackVisio.git
+
+cd RackVisio
+```
+
 **1. 启动后端**
 
 ```bash
@@ -103,9 +114,27 @@ npm run build && npm run preview   # 默认 http://localhost:4173
 
 ### 方式二：Docker 一键部署
 
+**0. 获取源码**（GitHub 或国内 Gitee 二选一）
+
+```bash
+# GitHub
+git clone https://github.com/alkaid999/RackVisio.git
+# 国内加速（Gitee 镜像）
+git clone https://gitee.com/alkaid_yang/RackVisio.git
+
+cd RackVisio
+```
+
+**1. 准备环境变量**
+
 ```bash
 cp .env.example .env      # 按需修改数据库密码、JWT 密钥、管理员密码
-docker compose up -d      # 首次自动构建镜像
+```
+
+**2. 构建并启动**
+
+```bash
+docker compose up -d --build      # 首次自动构建镜像
 ```
 
 部署完成后访问 `http://<宿主机>:8080`（端口由 `.env` 的 `HTTP_PORT` 控制）。详细架构与调优见 `docs/DEPLOY.md`。

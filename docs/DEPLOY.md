@@ -34,7 +34,7 @@
 
 ---
 
-## 二、文件清单
+## 二、文件清单与镜像构建详解
 
 | 文件                       | 说明                                              |
 | -------------------------- | ------------------------------------------------- |
@@ -46,9 +46,117 @@
 | `frontend/.dockerignore`   | 排除 `node_modules` / `dist` 等                   |
 | `.env.example`             | 环境变量模板（复制为 `.env` 后修改）              |
 
+### 后端镜像（backend/Dockerfile）
+
+```dockerfile
+FROM python:3.12-slim
+WORKDIR /app
+# 关闭字节码写入与输出缓冲；指定清华 PyPI 镜像（国内加速，可换官方源）
+ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 PIP_NO_CACHE_DIR=1 \
+    PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
+# 先拷依赖清单，利用层缓存（仅 requirements.txt 变更才重装）
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+# 复制源码（node_modules/.venv/*.db 已被 .dockerignore 排除）
+COPY . .
+# 降权：用非 root 的 appuser 运行
+RUN useradd -m -s /usr/sbin/nologin appuser && chown -R appuser:appuser /app
+USER appuser
+EXPOSE 8000
+# 单 worker：当前缓存为进程内字典，多 worker 会不一致
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+```
+
+要点：
+- **层缓存**：依赖安装单独成层，改代码不改 `requirements.txt` 时秒过；
+- **国内加速**：默认走清华 PyPI 源，海外服务器可把 `PIP_INDEX_URL` 改回 `https://pypi.org/simple`；
+- **非 root**：以 `appuser` 运行，缩小容器被攻破时的权限面；
+- **单 worker**：因缓存为进程内字典（见第八节），多 worker 需先启用 Redis。
+
+### 前端镜像（frontend/Dockerfile，多阶段）
+
+```dockerfile
+# 阶段 1：用 Node 构建 Vite 静态产物
+FROM node:20-alpine AS build
+WORKDIR /app
+# 国内加速：阿里 npmmirror（可用 --build-arg NPM_REGISTRY=官方源 切回）
+ARG NPM_REGISTRY=https://registry.npmmirror.com
+ENV npm_config_registry=$NPM_REGISTRY
+COPY package*.json ./
+# npm ci 严格按锁文件 resolved URL 拉包，环境变量盖不住 → 需 sed 替换锁文件里的源
+RUN sed -i "s#https://registry.npmjs.org#${NPM_REGISTRY}#g" package-lock.json \
+    && npm ci
+COPY . .
+RUN npm run build
+# 阶段 2：Nginx 托管 dist 并反代 API
+FROM nginx:1.27-alpine
+COPY --from=build /app/dist /usr/share/nginx/html
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+EXPOSE 80
+```
+
+要点：
+- **多阶段构建**：最终镜像只含 Nginx + `dist`，不含 Node/构建工具，体积更小、攻击面更小；
+- **锁文件坑**：`npm ci` 会按 `package-lock.json` 里写死的源拉包，光设 `npm_config_registry` 不够，所以先 `sed` 把锁文件里的 `registry.npmjs.org` 替换成镜像源；
+- **可切官方源**：`docker compose build --build-arg NPM_REGISTRY=https://registry.npmjs.org frontend`；
+- 构建基础镜像固定为 `node:20-alpine`（与 README「Node ≥ 18，推荐 22」兼容，锁定 20 仅为保证可复现）。
+
+### 前端反代（frontend/nginx.conf）
+
+```nginx
+server {
+    listen 80;
+    root /usr/share/nginx/html;
+    index index.html;
+    # SPA 历史路由：刷新子路由（如 /devices）不 404
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+    # 反代 /api/* 到 compose 内网服务名 backend:8000
+    location /api/ {
+        proxy_pass http://backend:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 60s;
+    }
+}
+```
+
+要点：
+- **SPA 回退**：`try_files ... /index.html` 让 Vue Router（history 模式）刷新子路由不 404；
+- **相对路径反代**：前端请求用相对路径 `/api/v1/*`，由 Nginx 转发到 `backend:8000`（compose 内网服务名，无需暴露后端端口）；
+- 外层如需 HTTPS，在更外层 Nginx / Traefik 终止 TLS 即可，本配置已透传 `X-Forwarded-Proto`。
+
+### 编排（docker-compose.yml）
+
+三容器通过自定义桥接网络 `appnet` 互通，`db` / `backend` 不暴露宿主机端口，仅 `frontend` 映射 `HTTP_PORT:80`：
+
+| 服务 | 镜像 | 关键点 |
+| --- | --- | --- |
+| `db` | postgres:16-alpine | 数据卷 `pgdata` 持久化；`healthcheck` 用 `pg_isready` 探活，供 `backend` 的 `depends_on: condition: service_healthy` 等待就绪 |
+| `backend` | 本地构建 | `DATABASE_URL` 由 `.env` 的 `POSTGRES_*` 自动拼为 `postgres://db:5432/...`；`depends_on: db.service_healthy`；`expose 8000`（仅内网） |
+| `frontend` | 本地构建 | `depends_on: backend.service_healthy`；`ports: HTTP_PORT:80` |
+
+> 📌 **代码是打进镜像的**：改了后端 / 前端源码后，必须 `docker compose up -d --build`（或单独 `build backend` / `build frontend`）重新构建镜像，光 `restart` 不会生效。
+
 ---
 
 ## 三、快速开始
+
+### 0. 获取源码（GitHub 或国内 Gitee 二选一）
+
+```bash
+# GitHub
+git clone https://github.com/alkaid999/RackVisio.git
+# 国内加速（Gitee 镜像）
+git clone https://gitee.com/alkaid_yang/RackVisio.git
+
+cd RackVisio
+```
+
+> 进入项目根目录（含 `docker-compose.yml`）后再继续后续步骤。
 
 ### 1. 前置条件
 - 服务器已安装 **Docker Engine** 与 **Docker Compose v2**（`docker compose` 子命令）。
@@ -141,15 +249,59 @@ docker compose up -d --build
 
 ## 六、数据持久化与备份
 
-- 数据库数据保存在命名卷 `pgdata` 中（`docker compose down` 不带 `-v` 不会删除）。
-- **备份：**
+### 需要备份什么？
+
+RackVisio 的**全部业务数据都落在数据库里**，前端与后端本身不存储任何用户数据：
+
+- ✅ **数据库（唯一必须备份）**：机房、机柜、设备、账号、审计等所有数据。
+- ✅ **`.env` 文件（建议一并备份）**：内含数据库密码、`SECRET_KEY`（JWT 签名密钥）、
+  `INITIAL_ADMIN_PASSWORD`（管理员初始密码）。它是配置而非业务数据，可凭 `.env.example`
+  重建，但保留原文件可避免恢复后管理员密码 / 旧令牌失效。`.env` 已被 gitignore，不会随
+  代码入库，需单独留存。
+- ❌ **前端（构建产物 / 静态资源）**：每次 `docker compose build` 由源码重新生成，无需备份。
+- ❌ **后端（代码）**：无状态，数据全在数据库；源码由 Git 管理，无需单独备份。
+- ❌ **上传文件**：当前版本无文件上传功能，磁盘上不存在需要持久化的用户文件。
+
+### Docker（PostgreSQL）备份与恢复
+
+数据库数据保存在命名卷 `pgdata` 中（`docker compose down` 不带 `-v` 不会删除）。
+
+**方式 A：逻辑备份（推荐，跨版本可恢复）**
+
+- 备份：
   ```bash
   docker compose exec db pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB" > rackvisio_$(date +%F).sql
   ```
-- **恢复：**
+- 恢复：
   ```bash
   docker compose exec -T db psql -U "$POSTGRES_USER" "$POSTGRES_DB" < rackvisio_2026-01-01.sql
   ```
+
+**方式 B：直接备份数据卷（物理备份，需停服且同版本 PG）**
+
+```bash
+docker compose stop db
+docker run --rm -v rackvisio_pgdata:/var/lib/postgresql/data -v "$PWD":/backup alpine \
+  tar czf /backup/pgdata_$(date +%F).tar.gz -C /var/lib/postgresql/data .
+docker compose start db
+```
+
+> 卷名 `rackvisio_pgdata` 由 compose 项目名（默认目录名 `rackvisio`）+ 卷名 `pgdata` 组合而成，
+> 若改过项目名请用 `docker volume ls` 确认实际卷名。
+
+### 本地开发（SQLite）备份
+
+本地开发默认使用 `backend/idc.db`（SQLite 文件），直接复制该文件即可：
+
+```bash
+cp backend/idc.db backend/idc.db.bak_$(date +%F)
+```
+
+### `.env` 备份建议
+
+```bash
+cp .env .env.bak_$(date +%F)   # 与数据库备份放在同一处妥善保管
+```
 
 ---
 
@@ -168,6 +320,20 @@ docker compose up -d --build
 其余连接层（`app/core/database.py` 的 `_create_engine`）、建表层（`Base.metadata.create_all`）、
 启动 seed（`lifespan` 中的 `init_models` → `migrate` → `seed_data`）均已方言无关，
 无需额外修改即可在 PostgreSQL 上运行。
+
+### 后续补充的 PostgreSQL 方言坑（提交 331c4dc）
+
+除 `CHAR` 外，迁移中还出现过**布尔列使用整数字面量**导致 PostgreSQL 启动崩溃的问题：
+
+- `init_db.py` 的设施迁移原写 `UPDATE devices SET is_asset=1 ...`，PostgreSQL 的 `BOOLEAN`
+  是独立类型，`1` 被当作整数 → `DatatypeMismatchError: column "is_asset" is of type boolean
+  but expression is of type integer`。已改为绑定参数 `{val: True}`（SQLAlchemy 按值的类型
+  推断为 Boolean，PG 收到 `true` / SQLite 收到 `1`）。
+- `models/device.py` 的 `is_asset` 列 `server_default="1"` 在全新 PG 库 `create_all` 时同样会
+  因 `DEFAULT 1` 崩溃，已改为 `server_default=true()`（方言感知：PG→`true` / SQLite→`1`）。
+
+📌 经验：**任何布尔列都不要用 `0/1` 整数字面量**，统一走 ORM / 绑定参数 / `true()`，
+  这样 SQLite 与 PostgreSQL 才能通吃。
 
 ---
 
@@ -205,6 +371,7 @@ docker compose up -d --build
 | --------------------------------- | ------------------------------------------------- |
 | 后端一直重启 / 日志报连不上 db    | 等待 `db` 健康检查通过；确认 `POSTGRES_*` 与 `DATABASE_URL` 一致 |
 | 启动报 `CHAR` / dialect 相关错误  | 确认已应用 `user.py` 的 `sqlalchemy.CHAR` 改动    |
+| 启动报 `DatatypeMismatchError: column "is_asset" is of type boolean but expression is of type integer` | 布尔列被赋了整数；确认已应用提交 `331c4dc`（`is_asset` 改用布尔绑定参数 / `true()`），并重新 `docker compose build backend` |
 | 前端页面白屏 / 刷新子路由 404     | 确认 `frontend/nginx.conf` 已正确 COPY 且含 SPA 回退 `try_files` |
 | 接口 401 / 登录失败               | 检查 `SECRET_KEY` 是否变更（变更后旧令牌失效，重新登录）；`INITIAL_ADMIN_PASSWORD` 仅首次 seed 生效 |
 | 修改 `.env` 不生效                | `docker compose down` 后 `up -d --build` 重新加载 |
@@ -212,4 +379,4 @@ docker compose up -d --build
 
 ---
 
-> 文档版本：2026-07-24 ｜ 适用架构：PostgreSQL + FastAPI + Nginx（Docker Compose）
+> 文档版本：2026-07-27 ｜ 适用架构：PostgreSQL + FastAPI + Nginx（Docker Compose）
