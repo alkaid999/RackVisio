@@ -549,31 +549,38 @@ class DeviceService:
         return events
 
     # --------------------------------------------------- 上架记录编辑 / 删除
-    async def update_mount_record(self, record_id: int, data: MountRecordUpdate) -> int:
-        """编辑上架记录（仅操作人等追溯字段）。返回记录 id。"""
+    async def update_mount_record(self, record_id: int, data: MountRecordUpdate) -> dict:
+        """编辑上架记录（仅操作人等追溯字段）。返回含设备名 / 机柜名（供审计展示）。"""
         record = await self.mount_repo.get_by_id(record_id)
         if record is None:
             raise NotFoundError("上架记录不存在")
         await self.mount_repo.update(record, data)
         await self.session.commit()
-        return record.id
+        device = await self.device_repo.get(record.device_id)
+        rack = await self.rack_repo.get(record.rack_id)
+        device_name = device.name or device.code if device is not None else f"设备 {record.device_id}"
+        rack_name = rack.name or rack.code if rack is not None else f"机柜 {record.rack_id}"
+        return {"id": record.id, "device_name": device_name, "rack_name": rack_name}
 
-    async def delete_mount_record(self, record_id: int) -> str:
+    async def delete_mount_record(self, record_id: int) -> dict:
         """删除一条上架记录（含历史追溯）。
 
         若该记录为当前有效上架记录，删除后设备失去位置 → 退回「在库」并重算机柜
         used_u，避免设备状态与位置派生不一致的脏数据。删除非有效（已下架）记录为
-        纯历史清理。返回关联设备名（供审计展示）。
+        纯历史清理。返回含设备名 / 机柜名（供审计展示）。
         """
         record = await self.mount_repo.get_by_id(record_id)
         if record is None:
             raise NotFoundError("上架记录不存在")
         was_active = record.record_status == MountRecordStatus.ACTIVE.value
         device = await self.device_repo.get(record.device_id)
+        rack = await self.rack_repo.get(record.rack_id)
         await self.mount_repo.delete(record)
         if was_active and device is not None:
             device.status = DeviceStatus.IN_STOCK.value
             await self.session.flush()
             await self.recalculate_rack_usage(record.rack_id)
         await self.session.commit()
-        return device.name or device.code if device is not None else f"记录 {record_id}"
+        device_name = device.name or device.code if device is not None else f"设备 {record.device_id}"
+        rack_name = rack.name or rack.code if rack is not None else f"机柜 {record.rack_id}"
+        return {"device_name": device_name, "rack_name": rack_name, "rack_id": record.rack_id}

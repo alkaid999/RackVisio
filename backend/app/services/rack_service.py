@@ -440,8 +440,11 @@ class RackService:
         device_id: str,
         start_u: int,
         mounted_by: Optional[str] = None,
-    ) -> None:
-        """将设备挂载到机柜指定 U 位，写入上架记录并同步设备状态为「已上架」。"""
+    ) -> dict:
+        """将设备挂载到机柜指定 U 位，写入上架记录并同步设备状态为「已上架」。
+
+        返回含机柜/设备可读名称的字典，供调用方（审计）使用，避免审计只记录 UUID。
+        """
         rack = await self.get_rack(rack_id)
         # 功能性机柜（制冷机柜 / 配电机柜）仅作基础设施，禁止上架设备。
         if rack.status in (RackBizStatus.AC.value, RackBizStatus.POWER.value):
@@ -478,17 +481,28 @@ class RackService:
         device.status = DeviceStatus.MOUNTED.value  # 上架 → 已上架
         await self.session.flush()
         await self.recalculate_rack_usage(rack.id)
+        return {
+            "rack_id": rack.id,
+            "rack_name": rack.name or rack.code,
+            "rack_code": rack.code,
+            "device_id": device.id,
+            "device_name": device.name,
+            "device_code": device.device_code,
+            "start_u": start_u,
+        }
 
     async def unmount_device(
         self,
         rack_id: str,
         device_id: str,
         unmounted_by: Optional[str] = None,
-    ) -> None:
+    ) -> dict:
         """将设备从机柜下架：有效记录置「已下架」并填下架信息，设备状态退回「在库」。
 
         下架即把设备放回资产池（在库），不再保留独立的「已下架」生命周期终态；
         本次下架操作本身由 ``mount_records`` 中记录状态=「已下架」保留以作追溯。
+
+        返回含机柜/设备可读名称的字典，供调用方（审计）使用，避免审计只记录 UUID。
         """
         rack = await self.get_rack(rack_id)
         device = await self.device_repo.get(device_id)
@@ -503,6 +517,14 @@ class RackService:
         device.status = DeviceStatus.IN_STOCK.value  # 下架 → 退回在库（资产池）
         await self.session.flush()
         await self.recalculate_rack_usage(rack.id)
+        return {
+            "rack_id": rack.id,
+            "rack_name": rack.name or rack.code,
+            "rack_code": rack.code,
+            "device_id": device.id,
+            "device_name": device.name,
+            "device_code": device.device_code,
+        }
 
     async def list_candidate_devices(self) -> list:
         """候选上架设备：无有效上架记录的设备（仓库 / 已下架 / 待报废候选池）。"""

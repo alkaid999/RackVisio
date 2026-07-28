@@ -60,21 +60,26 @@ async def update_mount_record(
 ):
     """编辑上架记录（上架人 / 下架人）。"""
     svc = DeviceService(db)
-    rid = await svc.update_mount_record(record_id, payload)
+    info = await svc.update_mount_record(record_id, payload)
     fields = []
     if payload.mounted_by is not None:
         fields.append("上架人")
     if payload.unmounted_by is not None:
         fields.append("下架人")
-    detail = f"编辑上架记录 {record_id} 的" + "、".join(fields) if fields else f"编辑上架记录 {record_id}"
-    await log_audit(request=request, module="device", action="update", object_type="上架记录", object_id=str(record_id), detail=detail)
-    return ok({"id": rid})
+    detail = (
+        f"编辑上架记录（设备「{info['device_name']}」、机柜「{info['rack_name']}」）的"
+        + "、".join(fields)
+        if fields
+        else f"编辑上架记录（设备「{info['device_name']}」、机柜「{info['rack_name']}」）"
+    )
+    await log_audit(request=request, module="device", action="update", object_type="上架记录", object_id=str(record_id), object_name=info["device_name"], detail=detail)
+    return ok({"id": info["id"]})
 
 
 @router.delete("/{record_id}", dependencies=[Depends(require_permission("device:edit"))])
 async def delete_mount_record(record_id: int, request: Request, db: AsyncSession = Depends(get_db)):
     """删除一条上架记录（二次确认由前端完成）。"""
     svc = DeviceService(db)
-    device_name = await svc.delete_mount_record(record_id)
-    await log_audit(request=request, module="device", action="delete", object_type="上架记录", object_id=str(record_id), object_name=device_name, detail=f"删除上架记录（设备 {device_name}）")
+    info = await svc.delete_mount_record(record_id)
+    await log_audit(request=request, module="device", action="delete", object_type="上架记录", object_id=str(record_id), object_name=info["device_name"], detail=f"删除上架记录（设备「{info['device_name']}」、机柜「{info['rack_name']}」）")
     return ok()

@@ -219,10 +219,18 @@ async def mount_device(
     """
     svc = RackService(db)
     operator = current_user.get("user_name") or current_user.get("sub")
-    await svc.mount_device(
+    info = await svc.mount_device(
         rack_id, payload.device_id, payload.start_u, mounted_by=operator
     )
-    await log_audit(request=request, module="rack", action="update", object_type="机柜", object_id=rack_id, object_name=rack_id, detail=f"上架设备 {payload.device_id} 到机柜（操作人：{operator}）")
+    await log_audit(
+        request=request,
+        module="rack",
+        action="update",
+        object_type="机柜",
+        object_id=info["rack_id"],
+        object_name=info["rack_name"],
+        detail=f"上架设备「{info['device_name']}({info['device_code']})」到机柜「{info['rack_name']}({info['rack_code']})」U{info['start_u']}（操作人：{operator}）",
+    )
     return ok()
 
 
@@ -240,8 +248,16 @@ async def unmount_device(
     """
     svc = RackService(db)
     operator = current_user.get("user_name") or current_user.get("sub")
-    await svc.unmount_device(rack_id, payload.device_id, unmounted_by=operator)
-    await log_audit(request=request, module="rack", action="update", object_type="机柜", object_id=rack_id, object_name=rack_id, detail=f"下架设备 {payload.device_id}（操作人：{operator}）")
+    info = await svc.unmount_device(rack_id, payload.device_id, unmounted_by=operator)
+    await log_audit(
+        request=request,
+        module="rack",
+        action="update",
+        object_type="机柜",
+        object_id=info["rack_id"],
+        object_name=info["rack_name"],
+        detail=f"下架设备「{info['device_name']}({info['device_code']})」自机柜「{info['rack_name']}({info['rack_code']})」（操作人：{operator}）",
+    )
     return ok()
 
 
