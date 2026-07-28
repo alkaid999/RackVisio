@@ -8,7 +8,10 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -431,7 +434,12 @@ class RackService:
         rack.used_u = total_used
         await self.session.flush()
         await self.session.commit()
-        await self._invalidate_room_cache(rack.room_id)
+        # 缓存失效为非关键操作：Redis 临时不可用时静默忽略，
+        # 避免「事务已提交 + 缓存失效抛异常」导致接口 500 且审计漏记。
+        try:
+            await self._invalidate_room_cache(rack.room_id)
+        except Exception:
+            logger.warning("机柜缓存失效失败（已忽略）", exc_info=True)
 
     # ------------------------------------------------------------ 设备上架 / 下架
     async def mount_device(

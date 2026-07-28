@@ -52,7 +52,7 @@ async def list_devices(
 async def create_device(payload: DeviceCreate, request: Request, db: AsyncSession = Depends(get_db)):
     svc = DeviceService(db)
     device = await svc.create_device(payload)
-    await log_audit(request=request, module="device", action="create", object_type="设备", object_id=device.id, object_name=device.name or device.code)
+    await log_audit(request=request, module="device", action="create", object_type="设备", object_id=device.id, object_name=device.name or device.device_code)
     return ok(device)
 
 
@@ -110,7 +110,7 @@ async def update_device(
 ):
     svc = DeviceService(db)
     device = await svc.update_device(device_id, payload)
-    await log_audit(request=request, module="device", action="update", object_type="设备", object_id=device.id, object_name=device.name or device.code, detail=f"更新设备（编号 {device.code}）")
+    await log_audit(request=request, module="device", action="update", object_type="设备", object_id=device.id, object_name=device.name or device.device_code, detail=f"更新设备（编号 {device.device_code}）")
     return ok(device)
 
 
@@ -118,7 +118,7 @@ async def update_device(
 async def delete_device(device_id: str, request: Request, db: AsyncSession = Depends(get_db)):
     svc = DeviceService(db)
     device = await svc.get_device(device_id)
-    name = device.name or device.code
+    name = device.name or device.device_code
     await svc.delete_device(device_id)
     await log_audit(request=request, module="device", action="delete", object_type="设备", object_id=device_id, object_name=name, detail=f"删除设备「{name}」")
     return ok()

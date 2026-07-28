@@ -11,10 +11,13 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from typing import Any, Optional
 
 from app.core.config import settings
+
+logger = logging.getLogger("cache")
 
 
 class InMemoryCache:
@@ -58,20 +61,39 @@ class RedisCache:
         self._client = aioredis.from_url(url, decode_responses=False)
 
     async def get(self, key: str) -> Optional[Any]:
-        return await self._client.get(key)
+        # 缓存读取失败降级为「未命中」（回源 DB），绝不冒泡影响业务。
+        try:
+            return await self._client.get(key)
+        except Exception:
+            logger.warning("Redis get 失败（已降级回源）", exc_info=True)
+            return None
 
     async def set(self, key: str, value: Any, ttl: int) -> None:
-        await self._client.set(key, value, ex=ttl)
+        try:
+            await self._client.set(key, value, ex=ttl)
+        except Exception:
+            logger.warning("Redis set 失败（已忽略）", exc_info=True)
 
     async def delete(self, key: str) -> None:
-        await self._client.delete(key)
+        try:
+            await self._client.delete(key)
+        except Exception:
+            logger.warning("Redis delete 失败（已忽略）", exc_info=True)
 
     async def delete_prefix(self, prefix: str) -> None:
-        async for key in self._client.scan_iter(match=f"{prefix}*"):
-            await self._client.delete(key)
+        # 缓存失效为非关键操作：Redis 临时不可用时静默忽略，
+        # 避免「事务已提交 + 缓存失效抛异常」导致接口 500 且审计漏记。
+        try:
+            async for key in self._client.scan_iter(match=f"{prefix}*"):
+                await self._client.delete(key)
+        except Exception:
+            logger.warning("Redis delete_prefix 失败（已忽略）", exc_info=True)
 
     async def clear(self) -> None:
-        await self._client.flushdb()
+        try:
+            await self._client.flushdb()
+        except Exception:
+            logger.warning("Redis clear 失败（已忽略）", exc_info=True)
 
 
 # 模块级单例后端，全应用共享同一份缓存。
@@ -105,20 +127,38 @@ class Cache:
     """
 
     async def get(self, key: str) -> Optional[Any]:
-        return await _get_backend().get(key)
+        # 缓存读取失败降级为「未命中」（回源 DB），绝不冒泡影响业务。
+        try:
+            return await _get_backend().get(key)
+        except Exception:
+            logger.warning("cache get 失败（已降级回源）", exc_info=True)
+            return None
 
     async def set(self, key: str, value: Any, ttl: Optional[int] = None) -> None:
         ttl = ttl if ttl is not None else settings.CACHE_TTL
-        await _get_backend().set(key, value, ttl)
+        try:
+            await _get_backend().set(key, value, ttl)
+        except Exception:
+            logger.warning("cache set 失败（已忽略）", exc_info=True)
 
     async def delete(self, key: str) -> None:
-        await _get_backend().delete(key)
+        try:
+            await _get_backend().delete(key)
+        except Exception:
+            logger.warning("cache delete 失败（已忽略）", exc_info=True)
 
     async def delete_prefix(self, prefix: str) -> None:
-        await _get_backend().delete_prefix(prefix)
+        # 缓存失效为非关键操作，失败静默（见 RedisCache.delete_prefix 说明）。
+        try:
+            await _get_backend().delete_prefix(prefix)
+        except Exception:
+            logger.warning("cache delete_prefix 失败（已忽略）", exc_info=True)
 
     async def clear(self) -> None:
-        await _get_backend().clear()
+        try:
+            await _get_backend().clear()
+        except Exception:
+            logger.warning("cache clear 失败（已忽略）", exc_info=True)
 
 
 # 全局缓存单例，供服务层直接引用。
