@@ -16,20 +16,19 @@ ENV PYTHONUNBUFFERED=1 \
     UV_DEFAULT_INDEX=https://pypi.tuna.tsinghua.edu.cn/simple \
     UV_NO_CACHE=1
 
-# uv 官方 Docker 范式：建独立 venv 并把依赖按锁版本装进去。
-# 设置 VIRTUAL_ENV + PATH 后，后续 uv / uvicorn 都走该 venv，运行行为与原来（系统 Python）一致，
-# 仅多了一层隔离，镜像更干净、可被 uv 精确管理。
+# 使用 uv 按 uv.lock 锁版本管理依赖：显式在 /opt/venv 创建虚拟环境并安装运行依赖。
+# 说明：uv sync 默认会把环境建到 /app/.venv，因此这里用 --python /opt/venv 指定目标，
+# 与下方 PATH（指向 /opt/venv/bin）保持一致，确保 uvicorn 等可执行文件可被正确找到。
 ENV VIRTUAL_ENV=/opt/venv
-RUN python -m venv $VIRTUAL_ENV
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
-# 基于 uv.lock 精确锁版本安装运行依赖（--frozen 禁止浮动，与本地 uv sync 完全一致、可复现）。
-# --no-install-project：只装第三方依赖、不装项目自身（镜像从 /app 直接跑 uvicorn，无需 editable 安装）。
-# --no-dev：不装 test 等开发依赖，保持镜像精简（与原 requirements.txt 行为一致）。
-# 仅当 uv.lock 或 pyproject.toml 变更时才重装，充分利用层缓存。
+# --frozen：严格按 uv.lock 安装、禁止浮动，构建可复现
+# --no-install-project：只装第三方依赖、不装项目自身（镜像从 /app 直接跑 uvicorn）
+# --no-dev：不装测试等开发依赖，保持镜像精简
 COPY pyproject.toml uv.lock ./
 RUN pip install --no-cache-dir uv \
-    && uv sync --frozen --no-dev --no-install-project \
+    && uv venv "$VIRTUAL_ENV" \
+    && uv sync --frozen --no-dev --no-install-project --python "$VIRTUAL_ENV" \
     && uv cache clean
 
 # 复制应用源码（node_modules / .venv / *.db 已被 .dockerignore 排除）
