@@ -62,13 +62,13 @@
         </Button>
       </form>
 
-      <p class="login-hint">默认管理员账号：<code>admin</code> / <code>admin123</code>（首次登录后请尽快修改）</p>
+      <p v-if="defaultCredsActive" class="login-hint">默认管理员账号：<code>admin</code> / <code>admin123</code>（首次登录后请尽快修改）</p>
     </div>
   </div>
 </template>
 
 <script setup>
-import { reactive, ref, computed } from 'vue'
+import { reactive, ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
@@ -78,6 +78,7 @@ import Input from '@/components/ui/input.vue'
 import Label from '@/components/ui/label.vue'
 import Spinner from '@/components/ui/spinner.vue'
 import RackLogo from '@/components/RackLogo.vue'
+import authApi from '@/api/auth'
 
 const route = useRoute()
 const router = useRouter()
@@ -87,8 +88,21 @@ const { success } = useToast()
 const form = reactive({ username: '', password: '' })
 const loading = ref(false)
 const errorMsg = ref('')
+// 默认凭证提示开关：默认 true（新装/未改密码时显示）；探测到密码已修改则置 false 隐藏。
+const defaultCredsActive = ref(true)
 
 const redirect = computed(() => route.query.redirect || '/')
+
+// 登录页挂载即探测默认管理员密码是否仍未被修改，仅在仍为默认值时展示提示。
+onMounted(async () => {
+  try {
+    const res = await authApi.defaultCredentialsActive()
+    defaultCredsActive.value = !!(res && res.active)
+  } catch {
+    // 探测失败（如服务未起）时保守保留提示，避免掩盖默认凭证。
+    defaultCredsActive.value = true
+  }
+})
 
 async function onSubmit() {
   if (loading.value) return

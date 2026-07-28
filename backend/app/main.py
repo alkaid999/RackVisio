@@ -78,17 +78,21 @@ class AuthMiddleware(BaseHTTPMiddleware):
     - ``OPTIONS`` 预检（CORS）
     - ``/health``、``/docs``、``/redoc``、``/openapi.json``
     - ``/api/v1/auth/login``（登录签发令牌本身）
+    - ``/api/v1/auth/default-credentials-active``（登录页公开探针：默认管理员是否仍用初始密码）
     其余 ``/api/v1`` 请求必须携带有效令牌，否则返回 401 信封。
     """
 
     _PUBLIC_PREFIXES = ("/health", "/docs", "/redoc", "/openapi.json")
-    _LOGIN_PATH = f"{settings.API_PREFIX}/auth/login"
+    _PUBLIC_AUTH_PATHS = (
+        f"{settings.API_PREFIX}/auth/login",
+        f"{settings.API_PREFIX}/auth/default-credentials-active",
+    )
 
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
         if request.method == "OPTIONS":
             return await call_next(request)
-        if path in self._PUBLIC_PREFIXES or path == self._LOGIN_PATH:
+        if path in self._PUBLIC_PREFIXES or path in self._PUBLIC_AUTH_PATHS:
             return await call_next(request)
 
         if path.startswith(settings.API_PREFIX):

@@ -10,4 +10,8 @@ export default {
   me() {
     return http.get('/auth/me')
   },
+  // 公开探针：默认管理员(admin)是否仍使用初始密码（登录页智能隐藏默认凭证提示）
+  defaultCredentialsActive() {
+    return http.get('/auth/default-credentials-active')
+  },
 }

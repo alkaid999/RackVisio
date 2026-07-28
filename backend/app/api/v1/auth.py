@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from app.core.audit import log_audit
+from app.core.config import settings
 from app.core.exceptions import AppError
 from app.core.rbac import ROLE_LABELS, user_permission_map
 from app.core.security import TokenError, create_token, verify_password
@@ -113,3 +114,18 @@ async def me(request: Request, session: AsyncSession = Depends(get_db)):
     if not db_user or db_user.disabled:
         raise HTTPException(status_code=401, detail="账号不存在或已禁用")
     return ok(_user_info(db_user))
+
+
+@router.get("/default-credentials-active")
+async def default_credentials_active(session: AsyncSession = Depends(get_db)):
+    """公开探针：默认管理员(admin)是否仍使用初始密码。
+
+    供登录页智能隐藏「默认账号 admin / admin123」提示——一旦修改密码即不再展示。
+    仅返回一个布尔，不泄露任何账号明细。
+    """
+    repo = UserRepository(session)
+    admin = await repo.get_by_username("admin")
+    active = bool(admin) and verify_password(
+        settings.INITIAL_ADMIN_PASSWORD, admin.password_hash, admin.salt
+    )
+    return ok({"active": active})
