@@ -148,6 +148,7 @@ async def create_rack_in_room(
     room_id: str, payload: RackCreate, request: Request, db: AsyncSession = Depends(get_db)
 ):
     svc = RackService(db)
+    room = await RoomService(db).get_room(room_id)  # 校验存在并取机房可读名称
     payload.room_id = room_id  # 路径优先
     rack = await svc.create_rack(payload)
     await log_audit(
@@ -157,7 +158,7 @@ async def create_rack_in_room(
         object_type="机柜",
         object_id=rack.id,
         object_name=rack.name or rack.code,
-        detail=f"在机房 {room_id} 下新增机柜",
+        detail=f"在机房「{room.name}」下新增机柜",
     )
     return ok(RackOut.model_validate(rack))
 

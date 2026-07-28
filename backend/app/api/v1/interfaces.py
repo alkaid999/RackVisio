@@ -18,6 +18,7 @@ from app.schemas.interface import (
     InterfaceUpdate,
     UnlinkedInterfaceOut,
 )
+from app.services.device_service import DeviceService
 from app.services.interface_service import InterfaceService
 
 router = APIRouter(tags=["interfaces"])
@@ -74,8 +75,9 @@ async def batch_create_interfaces(
     device_id: str, payload: InterfaceMultiBatchCreate, request: Request, db: AsyncSession = Depends(get_db)
 ):
     svc = InterfaceService(db)
+    device = await DeviceService(db).get_device(device_id)  # 取设备可读名称
     interfaces = await svc.batch_create_interfaces(device_id, payload.groups)
-    await log_audit(request=request, module="interface", action="create", object_type="接口", detail=f"批量新增接口 {len(interfaces)} 个（设备 {device_id}）")
+    await log_audit(request=request, module="interface", action="create", object_type="接口", detail=f"批量新增接口 {len(interfaces)} 个（设备「{device.name}」）")
     return ok([InterfaceOut.model_validate(p) for p in interfaces])
 
 
