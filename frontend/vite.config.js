@@ -1,6 +1,7 @@
 import { fileURLToPath, URL } from 'node:url'
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
+import tailwindcss from '@tailwindcss/vite'
 
 // Vite 配置：Vue 插件 + `@` 别名指向 src + 开发期 /api 代理到后端（:8000）。
 const apiProxy = {
@@ -14,7 +15,9 @@ const apiProxy = {
 }
 
 export default defineConfig({
-  plugins: [vue()],
+  // Tailwind CSS v4：使用官方 @tailwindcss/vite 插件（CSS-first 配置，
+  // 不再需要 postcss.config.js / tailwind.config.js）。
+  plugins: [vue(), tailwindcss()],
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),

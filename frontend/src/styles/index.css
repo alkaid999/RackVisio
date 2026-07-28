@@ -1,11 +1,18 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+/* tw-animate-css：Tailwind v4 下 tailwindcss-animate 的官方替代物（class 名完全兼容
+   animate-in / fade-in-0 / zoom-in-95 / slide-in-from-* / animate-accordion-* 等）。 */
+@import "tw-animate-css";
+
+/* 自定义 dark 变体：同时支持 .dark class 与 [data-theme="dark"] 属性，
+   与原 v3 tailwind.config 的 darkMode: ['class', '[data-theme="dark"]'] 行为一致。
+   配合 useTheme 同步切换 <html class="dark"> 与 data-theme 属性（首屏由 index.html 内联脚本先置）。 */
+@custom-variant dark (&:where(.dark, [data-theme="dark"], .dark *, [data-theme="dark"] *));
 
 /* ============================================================
    设计令牌（HSL 通道值）：明暗双主题整站换肤。
-   暗黑模式为「柔和、环境感知型」：低饱和、略带蓝调的深色，
-   护眼节能，而非纯黑/纯白的硬切换。
+   暗黑模式为「柔和、环境感知型」：低饱和、略带蓝调的深色，护眼节能，
+   而非纯黑/纯白的硬切换。
+   这些 --xxx 是「原值」，被下方 @theme inline 的 --color-xxx 通过 hsl(var(--xxx)) 引用。
    ============================================================ */
 :root {
   --background: 210 40% 98%;
@@ -70,6 +77,110 @@
   --ring: 213 94% 68%;
 }
 
+/* ============================================================
+   Tailwind v4 主题层（CSS-first）：以 @theme inline 定义所有设计令牌。
+   inline 关键字让颜色工具类直接输出 hsl(var(--xxx)) 引用，而非把 var 解析成静态值
+   （因为 --color-* 的值本身就是 CSS 变量引用，必须保持引用以便运行时随主题切换）。
+   ============================================================ */
+@theme inline {
+  /* 颜色令牌 */
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-primary-muted: hsl(var(--primary-muted));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-success: hsl(var(--success));
+  --color-success-foreground: hsl(var(--success-foreground));
+  --color-warning: hsl(var(--warning));
+  --color-warning-foreground: hsl(var(--warning-foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+
+  /* brand 调色板（静态 hex，迁移期与强调色兼容使用） */
+  --color-brand-50: #eff6ff;
+  --color-brand-100: #dbeafe;
+  --color-brand-200: #bfdbfe;
+  --color-brand-300: #93c5fd;
+  --color-brand-400: #60a5fa;
+  --color-brand-500: #3b82f6;
+  --color-brand-600: #2563eb;
+  --color-brand-700: #1d4ed8;
+  --color-brand-800: #1e40af;
+  --color-brand-900: #1e3a8a;
+
+  /* 圆角（依赖 --radius 变量） */
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+
+  /* 字体 */
+  --font-sans: 'Inter', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+
+  /* 阴影 */
+  --shadow-soft: 0 1px 3px 0 rgb(15 23 42 / 0.06), 0 1px 2px -1px rgb(15 23 42 / 0.08);
+  --shadow-card: 0 8px 30px -12px rgb(15 23 42 / 0.12);
+  --shadow-card-hover: 0 18px 40px -18px rgb(15 23 42 / 0.22);
+  --shadow-glow: 0 0 0 1px hsl(var(--primary) / 0.4), 0 8px 30px -8px hsl(var(--primary) / 0.45);
+
+  /* 自定义动画：keyframes 必须定义在 @theme 内，与 --animate-* 配对生成 animate-* 工具类 */
+  --animate-fade-in: fade-in 0.3s ease-out both;
+  --animate-fade-out: fade-out 0.2s ease-in both;
+  --animate-slide-in-right: slide-in-right 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-slide-in-up: slide-in-up 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-scale-in: scale-in 0.25s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-pop: pop 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-shimmer: shimmer 1.6s infinite;
+  --animate-pulse-ring: pulse-ring 1.8s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes fade-out {
+    from { opacity: 1; }
+    to { opacity: 0; }
+  }
+  @keyframes slide-in-right {
+    from { opacity: 0; transform: translateX(16px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+  @keyframes slide-in-up {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes scale-in {
+    from { opacity: 0; transform: scale(0.96); }
+    to { opacity: 1; transform: scale(1); }
+  }
+  @keyframes pop {
+    0% { transform: scale(0.9); opacity: 0; }
+    60% { transform: scale(1.03); }
+    100% { transform: scale(1); opacity: 1; }
+  }
+  @keyframes shimmer {
+    100% { transform: translateX(100%); }
+  }
+  @keyframes pulse-ring {
+    0% { box-shadow: 0 0 0 0 hsl(var(--primary) / 0.5); }
+    70% { box-shadow: 0 0 0 8px hsl(var(--primary) / 0); }
+    100% { box-shadow: 0 0 0 0 hsl(var(--primary) / 0); }
+  }
+}
+
 @layer base {
   * {
     @apply border-border;
@@ -94,80 +205,81 @@
   }
 }
 
-@layer components {
-  /* ---------- 页面级布局（无边框 / 留白 / 分层） ---------- */
-  .page-wrap {
-    @apply min-h-screen bg-background;
-  }
-  .page-pad {
-    @apply p-4 sm:p-6 lg:p-8;
-  }
-  .page-head {
-    @apply flex flex-wrap items-start justify-between gap-3 mb-5;
-  }
-  .page-title {
-    @apply text-xl sm:text-2xl font-semibold tracking-tight text-foreground;
-  }
-  .page-sub {
-    @apply mt-1 text-sm text-muted-foreground;
-  }
-  /* 卡片：极轻边框 + 柔和阴影，去硬框感；hover 微抬升 */
-  .card-soft {
-    @apply bg-card text-card-foreground rounded-xl border border-border/70 shadow-soft
-           transition-all duration-300 ease-out;
-  }
-  .section-title {
-    @apply text-base font-semibold text-foreground flex items-center gap-2;
-  }
-  .toolbar {
-    @apply bg-card/80 backdrop-blur rounded-xl border border-border/60 shadow-soft p-4 mb-5;
-  }
-  /* 链路门控告警提示框：图标 + 加粗标题 + 醒目琥珀边框（深浅双态）。
-     直接用 CSS 变量写死背景/文字/边框，避免依赖 tailwind 对自定义 warnbox 色生成工具类
-     （长驻 dev server 的 JIT 可能未重新生成导致边框退化成默认灰边）。 */
-  .alert-hint {
-    background-color: hsl(var(--warning-box-bg));
-    color: hsl(var(--warning-box-fg));
-    border: 1px solid hsl(var(--warning-box-border));
-  }
-  /* KPI 指标卡 */
-  .kpi-grid {
-    @apply grid grid-cols-2 md:grid-cols-4 gap-4;
-  }
-  .kpi-card {
-    @apply card-soft p-5 flex flex-col gap-1 relative overflow-hidden;
-  }
-  .kpi-value {
-    @apply text-3xl font-bold text-foreground tabular-nums tracking-tight;
-  }
-  .kpi-label {
-    @apply text-sm text-muted-foreground;
-  }
-  .grid-cards {
-    display: grid;
-    gap: 1rem;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  }
-  .link-quiet {
-    @apply text-primary hover:opacity-80 font-medium transition-opacity;
-    text-decoration: none;
-  }
-  /* 滚动条（贴合主题） */
-  .scroll-thin {
-    scrollbar-width: thin;
-    scrollbar-color: hsl(var(--muted-foreground) / 0.35) transparent;
-  }
-  .scroll-thin::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
-  }
-  .scroll-thin::-webkit-scrollbar-thumb {
-    background: hsl(var(--muted-foreground) / 0.3);
-    border-radius: 9999px;
-  }
-  .scroll-thin::-webkit-scrollbar-thumb:hover {
-    background: hsl(var(--muted-foreground) / 0.5);
-  }
+/* ============================================================
+   组件类：Tailwind v4 用 @utility 定义（可被其他 @utility 通过 @apply 引用）。
+   v3 的 @layer components 内互相 @apply 会有解析顺序问题，故改用 @utility。
+   ============================================================ */
+@utility page-wrap {
+  @apply min-h-screen bg-background;
+}
+@utility page-pad {
+  @apply p-4 sm:p-6 lg:p-8;
+}
+@utility page-head {
+  @apply flex flex-wrap items-start justify-between gap-3 mb-5;
+}
+@utility page-title {
+  @apply text-xl sm:text-2xl font-semibold tracking-tight text-foreground;
+}
+@utility page-sub {
+  @apply mt-1 text-sm text-muted-foreground;
+}
+/* 卡片：极轻边框 + 柔和阴影，去硬框感；hover 微抬升 */
+@utility card-soft {
+  @apply bg-card text-card-foreground rounded-xl border border-border/70 shadow-soft
+         transition-all duration-300 ease-out;
+}
+@utility section-title {
+  @apply text-base font-semibold text-foreground flex items-center gap-2;
+}
+@utility toolbar {
+  @apply bg-card/80 backdrop-blur rounded-xl border border-border/60 shadow-soft p-4 mb-5;
+}
+/* 链路门控告警提示框：图标 + 加粗标题 + 醒目琥珀边框（深浅双态）。
+   直接用 CSS 变量写死背景/文字/边框，避免依赖 tailwind 对自定义 warnbox 色生成工具类
+   （长驻 dev server 的 JIT 可能未重新生成导致边框退化成默认灰边）。 */
+@utility alert-hint {
+  background-color: hsl(var(--warning-box-bg));
+  color: hsl(var(--warning-box-fg));
+  border: 1px solid hsl(var(--warning-box-border));
+}
+/* KPI 指标卡 */
+@utility kpi-grid {
+  @apply grid grid-cols-2 md:grid-cols-4 gap-4;
+}
+@utility kpi-card {
+  @apply card-soft p-5 flex flex-col gap-1 relative overflow-hidden;
+}
+@utility kpi-value {
+  @apply text-3xl font-bold text-foreground tabular-nums tracking-tight;
+}
+@utility kpi-label {
+  @apply text-sm text-muted-foreground;
+}
+@utility grid-cards {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+}
+@utility link-quiet {
+  @apply text-primary hover:opacity-80 font-medium transition-opacity;
+  text-decoration: none;
+}
+/* 滚动条（贴合主题） */
+@utility scroll-thin {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--muted-foreground) / 0.35) transparent;
+}
+.scroll-thin::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.scroll-thin::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.3);
+  border-radius: 9999px;
+}
+.scroll-thin::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.5);
 }
 
 /* ============================================================

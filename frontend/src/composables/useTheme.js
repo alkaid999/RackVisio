@@ -2,6 +2,7 @@ import { ref, computed, watch } from 'vue'
 
 // 全局单例主题状态：light / dark / system（跟随系统）。
 // 柔和暗黑模式通过切换 <html class="dark"> 实现整站换肤，令牌在 index.css 中定义。
+// 同时同步 data-theme 属性，激活 Tailwind v4 自定义 dark 变体声明的 [data-theme="dark"] 触发路径。
 const THEME_KEY = 'theme'
 const theme = ref(localStorage.getItem(THEME_KEY) || 'system')
 const mql = window.matchMedia('(prefers-color-scheme: dark)')
@@ -18,13 +19,17 @@ function applyTheme() {
   if (first) {
     // 首帧不播过渡，避免加载闪烁（index.html 内联脚本已先置好 class）
     html.classList.toggle('dark', isDark.value)
+    html.setAttribute('data-theme', isDark.value ? 'dark' : 'light')
     first = false
     return
   }
   // 用 View Transitions API 做整页交叉淡入：仅一次合成层变换（GPU 合成），
   // 不再给全页每个元素挂 0.4s 过渡，彻底消除逐节点重绘掉帧的卡顿。
   // 不支持的浏览器直接切换 class：瞬时完成、零延迟、无掉帧。
-  const swap = () => html.classList.toggle('dark', isDark.value)
+  const swap = () => {
+    html.classList.toggle('dark', isDark.value)
+    html.setAttribute('data-theme', isDark.value ? 'dark' : 'light')
+  }
   if (typeof document.startViewTransition === 'function') {
     document.startViewTransition(swap)
   } else {

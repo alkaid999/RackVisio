@@ -2,7 +2,7 @@
 
 # RackVisio 前端镜像（多阶段构建）
 # 阶段 1：用 Node 构建 Vite 静态产物
-FROM node:20-alpine AS build
+FROM node:24-alpine AS build
 WORKDIR /app
 
 # 国内服务器构建加速：使用阿里 npmmirror 镜像源安装依赖。
