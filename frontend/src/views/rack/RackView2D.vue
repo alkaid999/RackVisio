@@ -13,7 +13,7 @@
             <SelectItem v-for="r in rooms" :key="r.id" :value="r.id">{{ r.name }}</SelectItem>
           </SelectContent>
         </Select>
-        <Button variant="outline" :disabled="loading" title="导出机柜 U 位明细（1:1 镜像 2D 视图：按 grid_col 分列、grid_row 堆叠，每台机柜=U编号列+设备列）" @click="exportExcel">
+        <Button variant="outline" :disabled="loading" title="导出机柜 U 位明细（按机柜行分组：每行以最高机柜为基准、整行向下对齐，矮机柜上方留「为空」占位，行间插间隔带）" @click="exportExcel">
           <Download class="h-4 w-4 mr-1.5" />导出 Excel
         </Button>
       </div>
@@ -518,19 +518,16 @@ function toArgb(hex) {
 // 浏览器下载逻辑已抽取到 src/utils/download.js（downloadBlob），本页直接复用，避免重复实现。
 
 // 导出机柜 U 位明细为 Excel（ExcelJS，支持单元格着色 + 合并 + 悬停批注）：
-// 布局镜像「机柜 2D 视图」的行主序网格（floorGrid），不做任何按机柜名的排序 / 分组 / 重组：
-//   · 按 grid_col 分「竖向 section」（界面里的机柜列），section 间留间隔列；
-//   · 每个 section 内按 grid_row 逐行堆叠机柜（界面里同一机的上下排列），每台机柜占 [U 编号列(宽4) | 设备列(宽20)]；
-//   · 每个机柜竖向展开：表头行(机柜名/编号/已用U，30 磅高、深色底) + 自上而下 本机柜 total_u→1U。
-// 设备占多 U 时竖向合并设备列、粗框线框住、按类型/重叠着色；悬停批注含完整信息。
+// 按「机柜行」(grid_row) 分组，镜像机房平面图：
+//   · 每行取该行最高机柜 total_u 作为基准行高（一行中最高机柜为准）；
+//   · 行内所有机柜 U 位从 maxU → 1U 自上而下展开，矮机柜上方（u > 自身 total_u）渲染极淡
+//     「为空」占位格，从而整行【向下对齐】（U1 共用底部基准线），与平面图底对齐一致；
+//   · 每台机柜占 [U 编号列(宽4) | 设备列(宽20)]，机柜列之间留间隔列；
+//   · 行与行之间插一条间隔带（间隔间隔）做视觉分隔；
+//   · 设备占多 U 时竖向合并设备列、粗框线框住、按类型/重叠着色；悬停批注含完整信息。
 async function exportExcel() {
   if (!racks.value.length) {
     warning('当前机房暂无机柜，无法导出 Excel')
-    return
-  }
-  const maxU = Math.max(0, ...racks.value.map((r) => r.total_u || 0))
-  if (!maxU) {
-    warning('当前机房的机柜缺少 U 位信息，无法导出')
     return
   }
   const wb = new ExcelJS.Workbook()
@@ -544,7 +541,8 @@ async function exportExcel() {
   const U_FILL = 'FFF1F5F9'    // slate-100 浅灰 U 位底
   const U_FONT = 'FF334155'    // slate-700 U 位字
   const FREE_FILL = 'FFFFFFFF' // 白底空闲
-  const GAP_FILL = 'FFF8FAFC'  // 间隔列
+  const EMPTY_FILL = 'FFF8FAFC' // 矮机柜上方「为空」占位（极淡）
+  const GAP_FILL = 'FFF1F5F9'  // 间隔列 / 间隔带
   const GRID = 'FFE2E8F0'      // slate-200 细边框
 
   // 预计算每个机柜的 U → 设备映射与重叠集合
@@ -560,22 +558,13 @@ async function exportExcel() {
     devInfo[rack.id] = { devByU, overlaps }
   }
 
-  // Excel 导出按 grid_col 分组为竖向 section（紧凑布局，与 2D 视图网格逻辑解耦）：
-  const byCol = {}
-  for (const r of racks.value) { ;(byCol[r.grid_col ?? 0] ||= []).push(r) }
-  const colKeys = Object.keys(byCol).map(Number).sort((a, b) => a - b)
-  const sections = colKeys.map((gc) => ({
-    grid_col: gc,
-    racks: byCol[gc].slice().sort((a, b) => (a.grid_row ?? 0) - (b.grid_row ?? 0)),
-  }))
-  const sectionCols = sections.map((_, ci) => ({
-    uCol: 1 + ci * 3,
-    devCol: 2 + ci * 3,
-    gapCol: 3 + ci * 3,
-  }))
-  const gapCols = new Set(sectionCols.map((s) => s.gapCol))
-  // 记录已合并的矩形区域，避免任意合并区间相互重叠导致 ExcelJS 抛 "Cannot merge already merged cells"
-  // （同一 section 内多机柜纵向共享同一组 Excel 列，设备 U 位重叠时尤其容易发生）
+  // 列布局：基于 floorGrid 的 grid_col 全局列（与平面图列位置一一对应），
+  // 每个 grid_col 占 3 列 [U编号 | 设备 | 间隔]
+  const fg = floorGrid.value
+  const cols = fg[0].length
+  const colOf = (gc) => ({ uCol: 1 + gc * 3, devCol: 2 + gc * 3, gapCol: 3 + gc * 3 })
+
+  // 合并区保护（本布局理论上不会重叠，保留以防边界情况）
   const mergedRects = []
   const canRectMerge = (top, left, bottom, right) => {
     for (const r of mergedRects) {
@@ -585,17 +574,24 @@ async function exportExcel() {
     return true
   }
 
-  // 逐 section 渲染：每个 section 在各自 2 列内，机柜从上到下堆叠（与 2D 视图行槽直接堆叠一致）
-  // 按索引并行遍历 sections 与 sectionCols：sectionCols 仅含列号（uCol/devCol/gapCol），
-  // 机柜列表来自 sections，故从 sections 取下标、sectionCols 取列号，避免解构出 undefined 的 sec 导致崩溃。
-  sections.forEach((sec, si) => {
-    const { uCol, devCol } = sectionCols[si]
-    let row = 1 // 每个 section 从首行起（与 2D 视图各 floor-col 顶部对齐一致）
-    for (const rack of sec.racks) {
-      // —— 机柜表头行（合并 U 列与设备列，深色底白字，30 磅高） ——
-      const hRow = ws.getRow(row)
-      hRow.height = 30
-      if (canRectMerge(row, uCol, row, devCol)) ws.mergeCells({ top: row, left: uCol, bottom: row, right: devCol })
+  const thin = { style: 'thin', color: { argb: GRID } }
+  let excelRow = 1
+
+  for (let ri = 0; ri < fg.length; ri++) {
+    // 该行机柜（按 grid_col 从左到右），跳过空行
+    const rowRacks = fg[ri].filter((x) => x)
+    if (!rowRacks.length) continue
+    const maxU = Math.max(0, ...rowRacks.map((r) => r.total_u || 0))
+    if (!maxU) continue
+
+    // —— 表头行：每台机柜合并 [U编号|设备] 列，深色底白字 ——
+    const hRow = ws.getRow(excelRow)
+    hRow.height = 30
+    for (const rack of rowRacks) {
+      const { uCol, devCol } = colOf(rack.grid_col ?? 0)
+      if (canRectMerge(excelRow, uCol, excelRow, devCol)) {
+        ws.mergeCells({ top: excelRow, left: uCol, bottom: excelRow, right: devCol })
+      }
       const hCell = hRow.getCell(uCol)
       hCell.value = rack.code ? `${rack.name}\n${rack.code} · ${rack.used_u}/${rack.total_u}U` : `${rack.name}\n${rack.used_u}/${rack.total_u}U`
       hCell.font = { bold: true, color: { argb: HEAD_FONT }, size: 11 }
@@ -603,55 +599,57 @@ async function exportExcel() {
       hCell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true }
       const hd = { style: 'medium', color: { argb: HEAD_FILL } }
       hCell.border = { top: hd, left: hd, bottom: hd, right: hd }
-      row++
+    }
+    excelRow++
 
-      // —— U 位行：自上而下 本机柜 total_u → 1U（与机柜图形方向一致） ——
-      const info = devInfo[rack.id] || { devByU: {}, overlaps: new Set() }
-      for (let u = rack.total_u; u >= 1; u--) {
-        const r = ws.getRow(row)
-        r.height = 16
-        const thin = { style: 'thin', color: { argb: GRID } }
-        // 左：U 编号
+    // —— U 位行：maxU → 1U 自上而下（整行向下对齐，U1 在底部） ——
+    for (let u = maxU; u >= 1; u--) {
+      const r = ws.getRow(excelRow)
+      r.height = 16
+      for (const rack of rowRacks) {
+        const { uCol, devCol } = colOf(rack.grid_col ?? 0)
+        if (u > rack.total_u) {
+          // 矮机柜上方「为空」占位：极淡填充 + 细边框，占住该列位置（与平面图矮机柜悬空一致）
+          const uCell = r.getCell(uCol)
+          uCell.value = ''
+          uCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: EMPTY_FILL } }
+          uCell.border = { top: thin, left: thin, bottom: thin, right: thin }
+          const dCell = r.getCell(devCol)
+          dCell.value = ''
+          dCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: EMPTY_FILL } }
+          dCell.border = { top: thin, left: thin, bottom: thin, right: thin }
+          continue
+        }
+        // 左：U 编号（仅机柜自身 U 范围内显示）
         const uCell = r.getCell(uCol)
         uCell.value = u + 'U'
         uCell.font = { bold: true, color: { argb: U_FONT }, size: 9 }
         uCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: U_FILL } }
         uCell.alignment = { horizontal: 'center', vertical: 'middle' }
         uCell.border = { top: thin, left: thin, bottom: thin, right: thin }
-        // 右：设备
+        // 右：设备 / 空闲
         const mCell = r.getCell(devCol)
+        const info = devInfo[rack.id] || { devByU: {}, overlaps: new Set() }
         const d = info.devByU[u]
         if (!d) {
-          // 空闲 U：白底 + 细网格边框（与左侧 U 编号列网格一致）
           mCell.value = ''
           mCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: FREE_FILL } }
           mCell.alignment = { horizontal: 'center', vertical: 'middle' }
           mCell.border = { top: thin, left: thin, bottom: thin, right: thin }
-          row++
           continue
         }
         const uTop = d.current_start_u + d.u_height - 1
         const uBottom = d.current_start_u
-        if (u !== uTop) {
-          // 非顶部 U 行：仅占位，外框与同色填充由顶部 U 行统一绘制，
-          // 避免「仅顶部 U 行有粗框、其余细框被合并隐藏」导致多 U 设备下部看似无边框。
-          row++
-          continue
-        }
-        // —— 设备顶部 U 行：统一绘制整段占用 U 行（uTop→uBottom）的外框 + 同色填充，再合并 ——
+        if (u !== uTop) continue // 非顶部 U 行仅占位，由顶部 U 行统一绘制
+        // —— 设备顶部 U 行：绘制整段占用区间 ——
         const isOverlap = info.overlaps.has(d.id)
         const typeBase = isOverlap ? '#ef4444' : DEVICE_TYPE_COLORS[d.device_type] || '#909399'
         const dark = toArgb(mixHex(typeBase, '000000', 0.22))
         const lightFill = toArgb(mixHex(typeBase, 'ffffff', 0.82))
         const typeLabel = DEVICE_TYPE_LABELS[d.device_type] || d.device_type
         const frame = { style: 'medium', color: { argb: 'FF1E293B' } }
-        const topRow = row
-        const botRow = row + (uTop - uBottom)
-        // 整段外框：
-        //  · 左上角单元格（uTop 行）四边全部用粗框 —— 合并后整段区块的边框由左上角单元格决定，
-        //    必须四边皆粗，否则合并后底边/侧边会退化成细线（这正是此前多 U 设备“下半部分无边框”的根因）。
-        //  · 其余行左右用粗框、上下用细线；底行再单独补一条粗底边，作为「合并因 U 位重叠未执行」时的兜底，
-        //    确保任何情况下每个设备单元格都保留完整可见边框，杜绝“部分设备无边框”。
+        const topRow = excelRow
+        const botRow = excelRow + (uTop - uBottom)
         for (let rr = topRow; rr <= botRow; rr++) {
           const c = ws.getRow(rr).getCell(devCol)
           const isTop = rr === topRow
@@ -664,7 +662,6 @@ async function exportExcel() {
           }
           c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: lightFill } }
         }
-        // 顶部单元格写内容 + 悬停批注（合并后仅显示顶部单元格内容）
         mCell.value = (isOverlap ? '⚠ ' : '') + d.name
         mCell.font = { bold: true, size: 9, color: { argb: dark } }
         mCell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true }
@@ -688,35 +685,33 @@ async function exportExcel() {
         noteLines.push(`占用：${uBottom}U–${uTop}U（${d.u_height}U）`)
         mCell.note = noteLines.join('\n')
         if (uBottom !== uTop && canRectMerge(topRow, devCol, botRow, devCol)) {
-          // 合并区间须向下覆盖设备自身占用的全部 U 行（uTop 写于当前行 row，uBottom 写于 row + (uTop - uBottom)）。
           ws.mergeCells({ top: topRow, left: devCol, bottom: botRow, right: devCol })
         }
-        row++
       }
-      // 机柜之间插入间隔行（视觉分隔同一 section 内纵向堆叠的机柜，B2-01 仍在 A-01 下方仅多一行空白）
-      if (rack !== sec.racks[sec.racks.length - 1]) {
-        const spacer = ws.getRow(row)
-        spacer.height = 8
-        const sU = spacer.getCell(uCol)
-        const sD = spacer.getCell(devCol)
-        sU.value = ''
-        sD.value = ''
-        sU.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: GAP_FILL } }
-        sD.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: GAP_FILL } }
-        const sep = { style: 'thin', color: { argb: GRID } }
-        sU.border = { top: sep, bottom: sep, left: sep, right: sep }
-        sD.border = { top: sep, bottom: sep, left: sep, right: sep }
-        row++
+      excelRow++
+    }
+
+    // —— 行间隔带（间隔间隔）：整行 GAP_FILL 做视觉分隔 ——
+    const sp = ws.getRow(excelRow)
+    sp.height = 8
+    for (let gc = 0; gc < cols; gc++) {
+      const { uCol, devCol, gapCol } = colOf(gc)
+      for (const c of [uCol, devCol, gapCol]) {
+        const cell = sp.getCell(c)
+        cell.value = ''
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: GAP_FILL } }
       }
     }
-  })
+    excelRow++
+  }
 
   // ════════════ 列宽 + 间隔列填充 ════════════
-  for (const { uCol, devCol, gapCol } of sectionCols) {
-    ws.getColumn(uCol).width = 4  // U 编号列
-    ws.getColumn(devCol).width = 20 // 设备内容列
+  for (let gc = 0; gc < cols; gc++) {
+    const { uCol, devCol, gapCol } = colOf(gc)
+    ws.getColumn(uCol).width = 4
+    ws.getColumn(devCol).width = 20
     ws.getColumn(gapCol).width = 2
-    for (let rr = 1; rr <= ws.rowCount; rr++) {
+    for (let rr = 1; rr < excelRow; rr++) {
       const gap = ws.getRow(rr).getCell(gapCol)
       gap.value = ''
       gap.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: GAP_FILL } }
