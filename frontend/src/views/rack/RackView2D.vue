@@ -586,7 +586,10 @@ async function exportExcel() {
   }
 
   // 逐 section 渲染：每个 section 在各自 2 列内，机柜从上到下堆叠（与 2D 视图行槽直接堆叠一致）
-  for (const { sec, uCol, devCol } of sectionCols) {
+  // 按索引并行遍历 sections 与 sectionCols：sectionCols 仅含列号（uCol/devCol/gapCol），
+  // 机柜列表来自 sections，故从 sections 取下标、sectionCols 取列号，避免解构出 undefined 的 sec 导致崩溃。
+  sections.forEach((sec, si) => {
+    const { uCol, devCol } = sectionCols[si]
     let row = 1 // 每个 section 从首行起（与 2D 视图各 floor-col 顶部对齐一致）
     for (const rack of sec.racks) {
       // —— 机柜表头行（合并 U 列与设备列，深色底白字，30 磅高） ——
@@ -706,7 +709,7 @@ async function exportExcel() {
         row++
       }
     }
-  }
+  })
 
   // ════════════ 列宽 + 间隔列填充 ════════════
   for (const { uCol, devCol, gapCol } of sectionCols) {
