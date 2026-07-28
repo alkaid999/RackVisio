@@ -186,6 +186,20 @@ docker compose up -d --build
 - 登录账号：`admin` / 你在 `.env` 中设置的 `INITIAL_ADMIN_PASSWORD`（默认 `admin123`）。
 - **首次登录后请立即修改管理员密码**（系统设置 → 账号）。
 
+### 5. 更新已部署的项目（重新拉取并重启）
+
+代码在构建时打进镜像，因此更新部署 = **拉取最新源码 → 重新构建并启动**，整个过程**无需删除数据库卷、也无需从备份恢复**：
+
+```bash
+git pull                             # 拉取最新代码（Gitee 镜像同理）
+docker compose up -d --build         # 重新构建 backend / frontend 镜像并启动
+```
+
+- `up -d --build` 会复用已有的 `pgdata` 卷，机房 / 机柜 / 设备 / 审计等全部数据原样保留。
+- 仅拉取镜像仓库新镜像时用 `docker compose pull && docker compose up -d`；本项目镜像由源码本地构建，通常走 `git pull` + `--build`。
+- ⚠️ 不要用 `docker compose down -v` 来「更新」——`-v` 会删除数据卷，所有数据将被清空（那属于「重置整个系统」，见下方第四节）。
+- 修改 `.env` 后必须 `docker compose down && docker compose up -d --build` 才能重新加载。
+
 ---
 
 ## 四、常用命令
