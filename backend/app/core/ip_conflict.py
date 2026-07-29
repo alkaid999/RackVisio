@@ -27,13 +27,17 @@ async def assert_ip_unique(
     *,
     exclude_device_id: str | None = None,
     exclude_interface_id: str | None = None,
+    owner_device_id: str | None = None,
 ) -> None:
     """校验 IP 在全局（设备 + 接口）范围内字面量唯一。
 
     Args:
         ip: 待校验的 IP（可能带 CIDR，如 ``10.0.0.1/24``）。空值直接放行。
-        exclude_device_id: 更新设备时排除自身。
+        exclude_device_id: 更新设备时排除自身（业务IP 列内唯一自比跳过）。
         exclude_interface_id: 更新接口时排除自身。
+        owner_device_id: 待校验 IP 所属设备。该设备自身的「带外管理IP」视为同体，
+            允许与接口IP 相同（带外管理IP 即配置在该设备的某接口上）；
+            其余设备的带外管理IP 仍按全局冲突处理。
 
     Raises:
         ConflictError: 命中重复，HTTP 409。
@@ -49,6 +53,16 @@ async def assert_ip_unique(
         raise ConflictError(
             f"IP 地址「{ip}」已被设备「{dev.name}」"
             f"(编号 {dev.device_code or '—'}) 占用，请勿重复"
+        )
+
+    # 设备 带外管理IP 列：接口IP 不得与其他设备的带外管理IP 相同；允许与本设备自身
+    # 带外管理IP 相同（带外管理IP 即配置在该设备的某接口上）。
+    # 排除 owner_device_id 后查得结果，即代表「其他设备」占用该 IP。
+    dev_oob = await device_repo.get_by_oob_ip_excluding(ip, owner_device_id)
+    if dev_oob is not None:
+        raise ConflictError(
+            f"IP 地址「{ip}」已被设备「{dev_oob.name}」"
+            f"(编号 {dev_oob.device_code or '—'}) 的「带外管理IP」占用，请勿重复"
         )
 
     ifc = await interface_repo.get_by_ip_excluding(ip, exclude_interface_id)

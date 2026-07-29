@@ -47,6 +47,21 @@ class InterfaceRepository:
         # scalar_one_or_none() 会抛 MultipleResultsFound -> 500；first() 取首行即可。
         return result.scalars().first()
 
+    async def get_by_ip_other_device(
+        self, ip: str, owner_device_id: Optional[str] = None
+    ) -> Optional[DeviceInterface]:
+        """按 IP 查「其他设备」的接口，用于带外管理IP 校验。
+
+        带外管理IP 允许与本设备自身接口IP 相同（OOB IP 即配置在该设备某接口上），
+        因此排除 ``owner_device_id`` 所属设备的接口；仅当其他设备的接口占用该 IP 时才返回。
+        ``owner_device_id`` 为空（设备尚未创建）时不排除任何设备，即任意接口命中即视为冲突。
+        """
+        stmt = select(DeviceInterface).where(DeviceInterface.ip_address == ip)
+        if owner_device_id:
+            stmt = stmt.where(DeviceInterface.device_id != owner_device_id)
+        result = await self.session.execute(stmt)
+        return result.scalars().first()
+
     async def list_by_device(self, device_id: str) -> list[DeviceInterface]:
         # 按 interface_no 升序（0 排末尾），再按名称，便于前面板与列表对齐。
         stmt = (

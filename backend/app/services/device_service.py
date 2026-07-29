@@ -182,9 +182,11 @@ class DeviceService:
         # 三字段唯一性（SN / 业务IP / 带外管理IP）+ 跨字段放行规则统一校验。
         await assert_device_fields_unique(
             self.device_repo,
+            self.interface_repo,
             sn=raw_sn or None,
             ip_address=raw_ip or None,
             oob_ip=raw_oob or None,
+            device_id=None,
         )
         try:
             device = await self.device_repo.create(data)
@@ -230,9 +232,11 @@ class DeviceService:
         # 三字段唯一性（SN / 业务IP / 带外管理IP）+ 跨字段放行规则统一校验。
         await assert_device_fields_unique(
             self.device_repo,
+            self.interface_repo,
             sn=raw_sn or None,
             ip_address=raw_ip or None,
             oob_ip=raw_oob or None,
+            device_id=None,
         )
         return data
 
@@ -415,8 +419,9 @@ class DeviceService:
         active = None
         if data.u_height is not None and data.u_height != (device.u_height or 1):
             active = await self.mount_repo.get_active_by_device(device_id)
-        # 全局 IP / 字段唯一校验（业务IP、带外管理IP、SN 之间不重复；同一设备允许 oob_ip==业务IP）。
-        # 清空（空串）跳过对应字段；仅当值发生变化时才校验 CIDR，避免历史无前缀数据无法编辑。
+        # 全局 IP / 字段唯一校验（业务IP、带外管理IP、SN 之间不重复；同一设备内 业务IP≠带外管理IP，
+        # 但带外管理IP 允许等于本设备自身接口IP）。清空（空串）跳过对应字段；仅当值发生变化时才
+        # 校验 CIDR，避免历史无前缀数据无法编辑。
         norm_ip = None
         norm_oob = None
         norm_sn = None
@@ -430,6 +435,7 @@ class DeviceService:
                     self.interface_repo,
                     new_ip,
                     exclude_device_id=device_id,
+                    owner_device_id=device_id,
                 )
             norm_ip = new_ip or None
         if data.oob_ip is not None:
@@ -449,13 +455,15 @@ class DeviceService:
             updates["sn"] = norm_sn
         if updates:
             data = data.model_copy(update=updates)
-        # 统一唯一性校验（含跨字段放行；exclude 自身避免同一设备 oob_ip==业务IP 误报）。
+        # 统一唯一性校验（含跨字段放行；exclude 自身 + device_id 用于 R1 与接口IP 放行判断）。
         await assert_device_fields_unique(
             self.device_repo,
+            self.interface_repo,
             sn=norm_sn,
             ip_address=norm_ip,
             oob_ip=norm_oob,
             exclude_device_id=device_id,
+            device_id=device_id,
         )
         # 把 repo 写操作与同步 flush 纳入 try：否则 update 内部 flush 抛出的 IntegrityError
         # 会在 try 块之外冒泡，被 FastAPI 当作 500 而非转成 409 冲突提示。

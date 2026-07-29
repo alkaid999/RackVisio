@@ -72,7 +72,12 @@ class InterfaceService:
         if data.ip_address:
             data = data.model_copy(update={"ip_address": data.ip_address.strip()})
             assert_ip_cidr(data.ip_address)
-            await assert_ip_unique(self.device_repo, self.interface_repo, data.ip_address)
+            await assert_ip_unique(
+                self.device_repo,
+                self.interface_repo,
+                data.ip_address,
+                owner_device_id=device_id,
+            )
         iface = await self.interface_repo.create(device_id, data)
         try:
             await self.session.commit()
@@ -138,6 +143,7 @@ class InterfaceService:
                     self.interface_repo,
                     new_ip,
                     exclude_interface_id=interface_id,
+                    owner_device_id=iface.device_id,
                 )
             data = data.model_copy(update={"ip_address": new_ip or None})
         iface = await self.interface_repo.update(iface, data)

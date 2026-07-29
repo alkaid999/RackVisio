@@ -400,8 +400,10 @@ async def _migrate_status_rename(session: AsyncSession) -> None:
 async def _migrate_device_oob_ip(session: AsyncSession) -> None:
     """设备新增带外管理IP(oob_ip)列，并为 SN / 带外管理IP 建立部分唯一索引。
 
-    - ``oob_ip``：设备级带外管理IP，可空，与业务IP(ip_address)区分；同一设备允许两者
-      相同，不同设备间不可相同（跨字段规则由应用层 ``assert_device_fields_unique`` 保证）。
+    - ``oob_ip``：设备级带外管理IP，可空，与业务IP(ip_address)区分。业务IP 与 带外管理IP
+      是不同字段，同一设备内二者必须不同（R1）；跨设备间二者值空间也分离。带外管理IP 允许
+      与本设备自身接口IP 相同（OOB IP 即配置在该设备某接口上），但不得与其他设备的接口IP
+      重复；上述跨字段规则由应用层 ``assert_device_fields_unique`` / ``assert_ip_unique`` 保证。
     - ``sn``：需求要求全系统唯一；建唯一索引前先清理同表内重复 SN（保留一条，其余置 NULL）。
     - ``oob_ip``：同理清理重复后建部分唯一索引（仅非空生效）。
     列均允许 NULL，幂等 ALTER，SQLite / PostgreSQL 通吃。

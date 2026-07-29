@@ -62,7 +62,7 @@
                 <Input v-model="form.ip_address" placeholder="如：10.0.0.1/24（需带掩码）" />
               </FormItem>
               <FormItem label="带外管理IP" name="oob_ip" :icon="Network">
-                <Input v-model="form.oob_ip" placeholder="如：192.168.100.1/24（可与业务IP相同）" />
+                <Input v-model="form.oob_ip" placeholder="如：192.168.100.1/24（须与业务IP不同；可等于本设备接口IP）" />
               </FormItem>
               <FormItem label="序列号(SN)" name="sn" :icon="Barcode">
                 <Input v-model="form.sn" placeholder="如：SN-2024-0001" />
