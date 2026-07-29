@@ -665,7 +665,7 @@ function drawPatchFace(ctx, W, H, ac) {
   ctx.fillRect(padX, H / 2 - 3, areaW, 6)
 }
 
-// ODF配线架（非资产）：多排光纤适配器（圆耦合器，蓝/绿/琥珀区分单多模），区别于铜缆配线架。
+// ODF配线架（非资产）：绿色面板 + 统一蓝色光纤耦合器（小圆圈），区别于铜缆配线架。
 function drawOdfFace(ctx, W, H, ac) {
   const padX = W * 0.06
   const padY = H * 0.12
@@ -674,28 +674,32 @@ function drawOdfFace(ctx, W, H, ac) {
   const areaW = W - 2 * padX
   const cw = areaW / cols
   const chh = (H - 2 * padY) / rows
-  const couplers = ['#3b82f6', '#22c55e', '#f59e0b'] // 蓝=单模 / 绿=OS2 / 琥珀=多模
+  // 面板背景（绿色）
+  ctx.fillStyle = '#15803d'
+  roundRect(ctx, 6, 14, W - 12, H - 20, 8)
+  ctx.fill()
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
       const cx = padX + c * cw + cw * 0.5
       const cy = padY + r * chh + chh * 0.5
-      const rad = Math.min(cw, chh) * 0.3
-      // 适配器面板底座
-      ctx.fillStyle = '#0a0f17'
-      roundRect(ctx, cx - rad * 1.4, cy - rad * 1.4, rad * 2.8, rad * 2.8, 3)
+      const rad = Math.min(cw, chh) * 0.32
+      // 耦合器底板（深绿，与绿面板协调、增强圆形轮廓对比）
+      ctx.fillStyle = '#0f3d23'
+      roundRect(ctx, cx - rad * 1.35, cy - rad * 1.35, rad * 2.7, rad * 2.7, 3)
       ctx.fill()
-      // 耦合器（圆，中心暗孔）
-      ctx.fillStyle = couplers[(r + c) % couplers.length]
+      // 耦合器（统一蓝色圆圈）
+      ctx.fillStyle = '#3b82f6'
       ctx.beginPath()
       ctx.arc(cx, cy, rad, 0, Math.PI * 2)
       ctx.fill()
-      ctx.fillStyle = '#0b0f17'
+      // 中心暗孔（深蓝，强化光纤适配器观感）
+      ctx.fillStyle = '#0b2545'
       ctx.beginPath()
       ctx.arc(cx, cy, rad * 0.45, 0, Math.PI * 2)
       ctx.fill()
     }
   }
-  // 顶部类型标记条
+  // 顶部类型标记条（保持类型色，绿色面板已强标识 ODF）
   ctx.fillStyle = ac
   ctx.fillRect(0, H * 0.04, W, 6)
   drawLED(ctx, padX + 16, H * 0.1, '#22c55e')
