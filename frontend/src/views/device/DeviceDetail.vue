@@ -20,7 +20,7 @@
             </template>
             <template v-else>
               {{ device.current_rack_id ? `位置：${device.current_start_u}U ~ ${device.current_start_u + (device.u_height || 0) - 1}U` : '位置：未上架（仅资产登记）' }} ·
-              型号：{{ device.model || '—' }} · IP：{{ device.ip_address || '—' }}
+              型号：{{ device.model || '—' }} · 业务IP：{{ device.ip_address || '—' }}
             </template>
           </p>
         </div>
@@ -45,7 +45,8 @@
           <div class="flex gap-2"><span class="shrink-0 text-muted-foreground flex items-center gap-1"><Ruler class="h-3.5 w-3.5" />设备 U 数</span><span>{{ device.u_height }}U</span></div>
           <div v-if="!isFacility" class="flex gap-2"><span class="shrink-0 text-muted-foreground flex items-center gap-1"><Zap class="h-3.5 w-3.5" />额定功率</span><span>{{ formatPower(device.rated_power) }}</span></div>
           <!-- 网络与资产 -->
-          <div v-if="!isFacility" class="flex gap-2"><span class="shrink-0 text-muted-foreground flex items-center gap-1"><Globe class="h-3.5 w-3.5" />IP 地址</span><span>{{ device.ip_address || '—' }}</span></div>
+          <div v-if="!isFacility" class="flex gap-2"><span class="shrink-0 text-muted-foreground flex items-center gap-1"><Globe class="h-3.5 w-3.5" />业务IP地址</span><span>{{ device.ip_address || '—' }}</span></div>
+          <div v-if="!isFacility" class="flex gap-2"><span class="shrink-0 text-muted-foreground flex items-center gap-1"><Network class="h-3.5 w-3.5" />带外管理IP</span><span>{{ device.oob_ip || '—' }}</span></div>
           <div v-if="!isFacility" class="flex gap-2"><span class="shrink-0 text-muted-foreground flex items-center gap-1"><Barcode class="h-3.5 w-3.5" />序列号(SN)</span><span>{{ device.sn || '—' }}</span></div>
           <div v-if="!isFacility" class="flex gap-2"><span class="shrink-0 text-muted-foreground flex items-center gap-1"><CalendarClock class="h-3.5 w-3.5" />维保到期日</span><span>{{ device.warranty_expire || '—' }}</span></div>
           <div v-if="!isFacility" class="flex gap-2"><span class="shrink-0 text-muted-foreground flex items-center gap-1"><Signal class="h-3.5 w-3.5" />设备状态</span><StatusBadge type="device" :value="device.status" /></div>

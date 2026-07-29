@@ -181,6 +181,7 @@
               <template v-else-if="col.key === 'device_code'">{{ d.device_code || '—' }}</template>
               <template v-else-if="col.key === 'model'">{{ d.model || '—' }}</template>
               <template v-else-if="col.key === 'ip_address'">{{ d.ip_address || '—' }}</template>
+              <template v-else-if="col.key === 'oob_ip'">{{ d.oob_ip || '—' }}</template>
               <template v-else-if="col.key === 'u_height'">{{ d.u_height ? d.u_height + 'U' : '—' }}</template>
             </TableCell>
             <TableCell class="text-right">
@@ -323,7 +324,8 @@ const deviceColumns = [
   { key: 'model', label: '设备型号' },
   { key: 'status', label: '设备状态' },
   { key: 'device_code', label: '设备编号' },
-  { key: 'ip_address', label: 'IP地址' },
+  { key: 'ip_address', label: '业务IP地址' },
+  { key: 'oob_ip', label: '带外管理IP' },
   { key: 'u_height', label: '设备U数' },
 ]
 // 名称 / 类型 / 状态 以强调样式呈现，其余文本列用 muted。
@@ -335,6 +337,7 @@ function isMutedCol(key) {
 const COL_WIDTH = {
   device_code: 'min-w-[11rem]',
   ip_address: 'min-w-[9rem]',
+  oob_ip: 'min-w-[9rem]',
   u_height: 'min-w-[6rem]',
 }
 function colWidthClass(key) {

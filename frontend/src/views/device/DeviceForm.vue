@@ -58,8 +58,11 @@
           <div class="form-group__title">网络与资产</div>
           <template v-if="!isFacility">
             <div class="form-grid">
-              <FormItem label="IP 地址" name="ip_address" :icon="Globe">
-                <Input v-model="form.ip_address" placeholder="如：10.0.0.1" />
+              <FormItem label="业务IP地址" name="ip_address" :icon="Globe">
+                <Input v-model="form.ip_address" placeholder="如：10.0.0.1/24（需带掩码）" />
+              </FormItem>
+              <FormItem label="带外管理IP" name="oob_ip" :icon="Network">
+                <Input v-model="form.oob_ip" placeholder="如：192.168.100.1/24（可与业务IP相同）" />
               </FormItem>
               <FormItem label="序列号(SN)" name="sn" :icon="Barcode">
                 <Input v-model="form.sn" placeholder="如：SN-2024-0001" />
@@ -147,6 +150,7 @@ import {
   MapPin,
   ServerCog,
   Zap,
+  Network,
 } from 'lucide-vue-next'
 import Dialog from '@/components/ui/dialog.vue'
 import Form from '@/components/ui/form.vue'
@@ -182,6 +186,7 @@ const emptyForm = () => ({
   model: '',
   sn: '',
   ip_address: '',
+  oob_ip: '',
   warranty_expire: '',
   rated_power: '',
   remark: '',
@@ -243,6 +248,7 @@ async function loadForm() {
     form.model = d.model || ''
     form.sn = d.sn || ''
     form.ip_address = d.ip_address || ''
+    form.oob_ip = d.oob_ip || ''
     form.warranty_expire = d.warranty_expire || ''
     form.rated_power = d.rated_power ?? ''
     form.remark = d.remark || ''
@@ -290,6 +296,7 @@ async function onSubmit() {
       payload.model = form.model
       payload.sn = form.sn
       payload.ip_address = form.ip_address
+      payload.oob_ip = form.oob_ip
       payload.rated_power = form.rated_power ? Number(form.rated_power) : undefined
       // 日期字段清空时传 null（空串 '' 不是合法日期，会被校验拒绝）。
       payload.warranty_expire = form.warranty_expire ? form.warranty_expire : null

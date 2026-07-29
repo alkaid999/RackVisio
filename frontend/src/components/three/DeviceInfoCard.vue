@@ -13,8 +13,10 @@
       <span><DeviceTypeTag :type="device.device_type" /></span>
       <span class="text-muted-foreground">型号</span>
       <span class="truncate">{{ device.model || '—' }}</span>
-      <span class="text-muted-foreground">IP 地址</span>
+      <span class="text-muted-foreground">业务IP地址</span>
       <span>{{ device.ip_address || '—' }}</span>
+      <span class="text-muted-foreground">带外管理IP</span>
+      <span>{{ device.oob_ip || '—' }}</span>
       <span class="text-muted-foreground">序列号(SN)</span>
       <span>{{ device.sn || '—' }}</span>
       <template v-if="rack">
