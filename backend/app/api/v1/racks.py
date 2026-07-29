@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit import log_audit
+from app.core.audit_diff import build_create_detail, build_update_detail
 from app.core.deps import get_db
 from app.core.rbac import get_current_user, require_permission
 from app.repositories.mount_record_repo import MountRecordRepository
@@ -31,6 +32,28 @@ from app.services.device_service import DeviceService
 from app.services.rack_service import RackService
 
 router = APIRouter(prefix="/racks", tags=["racks"])
+
+# 更新审计要记录的字段（中文标签）。used_u 由后端重算，不计用户编辑。
+RACK_FIELD_LABELS = {
+    "name": "名称",
+    "code": "机柜编号",
+    "column_code": "列编号",
+    "total_u": "U数",
+    "design_power": "设计功率",
+    "rack_group": "分组",
+    "status": "状态",
+    "grid_row": "平面图行",
+    "grid_col": "平面图列",
+}
+
+# 创建审计要罗列的初始关键属性（名称已作为对象名展示，不再重复）。
+RACK_CREATE_LABELS = {
+    "code": "机柜编号",
+    "column_code": "列编号",
+    "total_u": "U数",
+    "design_power": "设计功率",
+    "status": "状态",
+}
 
 
 @router.get("", dependencies=[Depends(require_permission("rack:view"))])
@@ -66,7 +89,8 @@ async def create_rack(payload: RackCreate, request: Request, db: AsyncSession = 
     """创建机柜（room_id 置于请求体）。"""
     svc = RackService(db)
     rack = await svc.create_rack(payload)
-    await log_audit(request=request, module="rack", action="create", object_type="机柜", object_id=rack.id, object_name=rack.name or rack.code)
+    detail = build_create_detail(rack, RACK_CREATE_LABELS)
+    await log_audit(request=request, module="rack", action="create", object_type="机柜", object_id=rack.id, object_name=rack.name or rack.code, detail=detail)
     return ok(RackOut.model_validate(rack))
 
 
@@ -95,7 +119,7 @@ async def export_racks(
     items, _ = await svc.list_filtered(
         page=1, size=100000, room_id=room_id, keyword=keyword, status=status
     )
-    await log_audit(request=request, module="export", action="export", object_type="机柜", detail=f"导出机柜 {len(items)} 条")
+    await log_audit(request=request, module="rack", action="export", object_type="机柜", detail=f"导出机柜 {len(items)} 条")
     return ok([r.model_dump() for r in items])
 
 
@@ -109,7 +133,7 @@ async def import_racks(
     """
     svc = RackService(db)
     result = await svc.import_racks(payload.items)
-    await log_audit(request=request, module="import", action="import", object_type="机柜", detail=f"导入机柜：成功 {result.created} 台，失败 {result.failed} 台")
+    await log_audit(request=request, module="rack", action="import", object_type="机柜", detail=f"导入机柜：成功 {result.created} 台，失败 {result.failed} 台")
     return ok(ImportResult.model_validate(result))
 
 
@@ -125,8 +149,10 @@ async def update_rack(
     rack_id: str, payload: RackUpdate, request: Request, db: AsyncSession = Depends(get_db)
 ):
     svc = RackService(db)
+    before = RackOut.model_validate(await svc.get_rack(rack_id))
     rack = await svc.update_rack(rack_id, payload)
-    await log_audit(request=request, module="rack", action="update", object_type="机柜", object_id=rack.id, object_name=rack.name or rack.code, detail=f"更新机柜（编号 {rack.code}）")
+    detail = build_update_detail(before, RackOut.model_validate(rack), RACK_FIELD_LABELS)
+    await log_audit(request=request, module="rack", action="update", object_type="机柜", object_id=rack.id, object_name=rack.name or rack.code, detail=detail)
     return ok(RackOut.model_validate(rack))
 
 

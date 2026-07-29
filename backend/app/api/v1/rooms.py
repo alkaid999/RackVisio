@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit import log_audit
+from app.core.audit_diff import build_create_detail, build_update_detail
 from app.core.deps import get_db
 from app.core.rbac import require_permission
 from app.schemas.common import ImportResult, ok, paginated
@@ -19,6 +20,28 @@ from app.services.rack_service import RackService
 from app.services.room_service import RoomService
 
 router = APIRouter(prefix="/rooms", tags=["rooms"])
+
+# 更新审计要记录的字段（中文标签）
+ROOM_FIELD_LABELS = {
+    "name": "名称",
+    "code": "编号",
+    "alias": "别名",
+    "area": "区域",
+    "building": "楼宇",
+    "floor": "楼层",
+    "address": "地址",
+    "status": "状态",
+}
+
+# 创建审计要罗列的初始关键属性（名称已作为对象名展示，不再重复）。
+ROOM_CREATE_LABELS = {
+    "code": "编号",
+    "area": "区域",
+    "building": "楼宇",
+    "floor": "楼层",
+    "address": "地址",
+    "status": "状态",
+}
 
 
 @router.get("", dependencies=[Depends(require_permission("room:view"))])
@@ -53,7 +76,7 @@ async def export_rooms(
     )
     await log_audit(
         request=request,
-        module="export",
+        module="room",
         action="export",
         object_type="机房",
         detail=f"导出机房 {len(items)} 个",
@@ -73,7 +96,7 @@ async def import_rooms(
     result = await svc.import_rooms(payload.items)
     await log_audit(
         request=request,
-        module="import",
+        module="room",
         action="import",
         object_type="机房",
         detail=f"导入机房：成功 {result.created} 个，失败 {result.failed} 个",
@@ -85,7 +108,8 @@ async def import_rooms(
 async def create_room(payload: RoomCreate, request: Request, db: AsyncSession = Depends(get_db)):
     svc = RoomService(db)
     room = await svc.create_room(payload)
-    await log_audit(request=request, module="room", action="create", object_type="机房", object_id=room.id, object_name=room.name)
+    detail = build_create_detail(room, ROOM_CREATE_LABELS)
+    await log_audit(request=request, module="room", action="create", object_type="机房", object_id=room.id, object_name=room.name, detail=detail)
     return ok(RoomOut.model_validate(room))
 
 
@@ -101,8 +125,10 @@ async def update_room(
     room_id: str, payload: RoomUpdate, request: Request, db: AsyncSession = Depends(get_db)
 ):
     svc = RoomService(db)
+    before = RoomOut.model_validate(await svc.get_room(room_id))
     room = await svc.update_room(room_id, payload)
-    await log_audit(request=request, module="room", action="update", object_type="机房", object_id=room.id, object_name=room.name)
+    detail = build_update_detail(before, RoomOut.model_validate(room), ROOM_FIELD_LABELS)
+    await log_audit(request=request, module="room", action="update", object_type="机房", object_id=room.id, object_name=room.name, detail=detail)
     return ok(RoomOut.model_validate(room))
 
 

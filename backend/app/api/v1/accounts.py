@@ -11,10 +11,13 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit import log_audit
+from app.core.audit_diff import build_update_detail
 from app.core.deps import get_db
 from app.core.exceptions import AppError
 from app.core.rbac import (
@@ -30,6 +33,13 @@ from app.schemas.account import AccountCreate, AccountOut, AccountUpdate
 from app.schemas.common import ok
 
 router = APIRouter(prefix="/accounts", tags=["accounts"])
+
+# 更新审计要记录的字段（中文标签）。密码绝不进审计；权限为嵌套结构，单独标注「已更新」。
+ACCOUNT_FIELD_LABELS = {
+    "display_name": "显示名",
+    "role": "角色",
+    "disabled": "已禁用",
+}
 
 
 def _to_out(user) -> dict:
@@ -105,6 +115,14 @@ async def update_account(
     if not user:
         raise AppError(status_code=404, code=404, message="账号不存在")
 
+    # 修改前快照（用于审计字段级 diff）。密码绝不以明文进入审计。
+    before_perm = user.permissions
+    before = SimpleNamespace(
+        display_name=user.display_name,
+        role=user.role,
+        disabled=bool(user.disabled),
+    )
+
     # 末管理员守卫：若目标为有效管理员，且本次会使其失去管理员/被禁用，且系统中无其他
     # 有效管理员，则拒绝，避免锁死。
     will_lose_admin = (body.role is not None and body.role != "admin") or (
@@ -137,7 +155,20 @@ async def update_account(
             # 由 admin 降级为 user 且未提供权限 -> 默认只读
             user.permissions = default_permissions()
     await session.commit()
-    await log_audit(request=request, module="account", action="update", object_type="账号", object_id=user.id, object_name=user.username, detail=f"更新账号（角色：{user.role}）")
+
+    after = SimpleNamespace(
+        display_name=user.display_name,
+        role=user.role,
+        disabled=bool(user.disabled),
+    )
+    parts = [build_update_detail(before, after, ACCOUNT_FIELD_LABELS)]
+    if body.password:
+        parts.append("密码：已更新")
+    if user.permissions != before_perm:
+        parts.append("权限：已更新")
+    detail = "；".join(parts)
+
+    await log_audit(request=request, module="account", action="update", object_type="账号", object_id=user.id, object_name=user.username, detail=detail)
     return ok(_to_out(user))
 
 

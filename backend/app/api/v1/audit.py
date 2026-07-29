@@ -41,12 +41,21 @@ async def list_audit_logs(
     action: Optional[str] = None,
     keyword: Optional[str] = None,
     operator: Optional[str] = None,
+    start_time: Optional[str] = Query(None, description="起始日期 YYYY-MM-DD（含当日，按上海展示时区）"),
+    end_time: Optional[str] = Query(None, description="结束日期 YYYY-MM-DD（含当日，按上海展示时区）"),
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=200),
 ):
     repo = AuditLogRepository(db)
     items, total = await repo.list(
-        page=page, size=size, module=module, action=action, keyword=keyword, operator=operator
+        page=page,
+        size=size,
+        module=module,
+        action=action,
+        keyword=keyword,
+        operator=operator,
+        start_time=start_time,
+        end_time=end_time,
     )
     return paginated(
         [AuditLogOut.model_validate(r).model_dump(mode="json") for r in items],
