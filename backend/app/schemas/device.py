@@ -29,6 +29,8 @@ class DeviceCreate(BaseModel):
     model: Optional[str] = Field(default=None, max_length=128)
     sn: Optional[str] = Field(default=None, max_length=128)
     ip_address: Optional[str] = Field(default=None, max_length=64)
+    # 带外管理 IP（可选，仅登记用）。同一设备允许与业务 IP 相同；不同设备间不可相同。
+    oob_ip: Optional[str] = Field(default=None, max_length=64)
     warranty_expire: Optional[date] = None
     remark: Optional[str] = Field(default=None, max_length=512)
     # 额定功率：设备厂家铭牌标注的满载工况下最大耗电功率（W），选填。
@@ -54,6 +56,8 @@ class DeviceUpdate(BaseModel):
     model: Optional[str] = Field(default=None, max_length=128)
     sn: Optional[str] = Field(default=None, max_length=128)
     ip_address: Optional[str] = Field(default=None, max_length=64)
+    # 带外管理 IP（可选，仅登记用）。同一设备允许与业务 IP 相同；不同设备间不可相同。
+    oob_ip: Optional[str] = Field(default=None, max_length=64)
     warranty_expire: Optional[date] = None
     remark: Optional[str] = Field(default=None, max_length=512)
     rated_power: Optional[float] = Field(default=None, ge=0)
@@ -76,6 +80,8 @@ class DeviceOut(BaseModel):
     model: Optional[str] = None
     sn: Optional[str] = None
     ip_address: Optional[str] = None
+    # 带外管理 IP（可选）。同一设备允许与业务 IP 相同。
+    oob_ip: Optional[str] = None
     warranty_expire: Optional[date] = None
     remark: Optional[str] = None
     status: str
@@ -113,6 +119,8 @@ class DeviceImportItem(BaseModel):
     model: Optional[str] = Field(default=None, max_length=128)
     sn: Optional[str] = Field(default=None, max_length=128)
     ip_address: Optional[str] = Field(default=None, max_length=64)
+    # 带外管理 IP（可选，仅登记用）。同一设备允许与业务 IP 相同；不同设备间不可相同。
+    oob_ip: Optional[str] = Field(default=None, max_length=64)
     warranty_expire: Optional[date] = None
     remark: Optional[str] = Field(default=None, max_length=512)
     rated_power: Optional[float] = Field(default=None, ge=0)

@@ -20,6 +20,7 @@ from app.core.database import utcnow
 from app.core.enums import DevicePowerStatus, DeviceStatus, DeviceType, MountRecordStatus
 from app.core.exceptions import ConflictError, NotFoundError, ValidationError
 from app.core.ip_conflict import assert_ip_cidr, assert_ip_unique
+from app.core.device_fields import assert_device_fields_unique
 from app.core.meta import FACILITY_TYPES
 from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy.exc import IntegrityError
@@ -168,6 +169,23 @@ class DeviceService:
             data = data.model_copy(update={"ip_address": raw_ip})
         else:
             data = data.model_copy(update={"ip_address": None})
+        # 带外管理 IP：可选，要求 CIDR 前缀（与业务 IP 一致），空串归 None。
+        raw_oob = (data.oob_ip or "").strip()
+        if raw_oob:
+            assert_ip_cidr(raw_oob)
+            data = data.model_copy(update={"oob_ip": raw_oob})
+        else:
+            data = data.model_copy(update={"oob_ip": None})
+        # SN：可选，空串归 None。
+        raw_sn = (data.sn or "").strip()
+        data = data.model_copy(update={"sn": raw_sn or None})
+        # 三字段唯一性（SN / 业务IP / 带外管理IP）+ 跨字段放行规则统一校验。
+        await assert_device_fields_unique(
+            self.device_repo,
+            sn=raw_sn or None,
+            ip_address=raw_ip or None,
+            oob_ip=raw_oob or None,
+        )
         try:
             device = await self.device_repo.create(data)
             await self.session.commit()
@@ -201,6 +219,21 @@ class DeviceService:
             data = data.model_copy(update={"ip_address": raw_ip})
         else:
             data = data.model_copy(update={"ip_address": None})
+        raw_oob = (data.oob_ip or "").strip()
+        if raw_oob:
+            assert_ip_cidr(raw_oob)
+            data = data.model_copy(update={"oob_ip": raw_oob})
+        else:
+            data = data.model_copy(update={"oob_ip": None})
+        raw_sn = (data.sn or "").strip()
+        data = data.model_copy(update={"sn": raw_sn or None})
+        # 三字段唯一性（SN / 业务IP / 带外管理IP）+ 跨字段放行规则统一校验。
+        await assert_device_fields_unique(
+            self.device_repo,
+            sn=raw_sn or None,
+            ip_address=raw_ip or None,
+            oob_ip=raw_oob or None,
+        )
         return data
 
     async def import_devices(self, items: list[dict]) -> ImportResult:
@@ -249,6 +282,8 @@ class DeviceService:
                 raw["sn"] = item.sn.strip()
             if item.ip_address not in (None, ""):
                 raw["ip_address"] = item.ip_address
+            if item.oob_ip not in (None, ""):
+                raw["oob_ip"] = item.oob_ip.strip()
             if item.warranty_expire is not None:
                 raw["warranty_expire"] = item.warranty_expire
             if item.remark and item.remark.strip():
@@ -279,7 +314,7 @@ class DeviceService:
             except Exception as exc:  # 唯一约束 / IP 冲突 / 其它异常 → 仅该条失败
                 await self.session.rollback()
                 if isinstance(exc, (IntegrityError, ConflictError)):
-                    reason = "设备编号或 IP 冲突，或数据不合法"
+                    reason = "设备编号、IP、SN 或带外管理IP 冲突，或数据不合法"
                 elif isinstance(exc, ValidationError):
                     reason = str(exc)
                 else:
@@ -380,10 +415,13 @@ class DeviceService:
         active = None
         if data.u_height is not None and data.u_height != (device.u_height or 1):
             active = await self.mount_repo.get_active_by_device(device_id)
-        # 全局 IP 唯一校验（设备级 IP 与接口级 IP 之间不重复）。清空（空串）跳过。
+        # 全局 IP / 字段唯一校验（业务IP、带外管理IP、SN 之间不重复；同一设备允许 oob_ip==业务IP）。
+        # 清空（空串）跳过对应字段；仅当值发生变化时才校验 CIDR，避免历史无前缀数据无法编辑。
+        norm_ip = None
+        norm_oob = None
+        norm_sn = None
         if data.ip_address is not None:
             new_ip = data.ip_address.strip()
-            # 仅当 IP 发生变化时才校验 CIDR 格式，避免历史无前缀数据（如种子设备）无法编辑。
             if new_ip and new_ip != (device.ip_address or ""):
                 assert_ip_cidr(new_ip)
             if new_ip:
@@ -393,7 +431,32 @@ class DeviceService:
                     new_ip,
                     exclude_device_id=device_id,
                 )
-            data = data.model_copy(update={"ip_address": new_ip or None})
+            norm_ip = new_ip or None
+        if data.oob_ip is not None:
+            new_oob = data.oob_ip.strip()
+            if new_oob and new_oob != (device.oob_ip or ""):
+                assert_ip_cidr(new_oob)
+            norm_oob = new_oob or None
+        if data.sn is not None:
+            norm_sn = data.sn.strip() or None
+        # 应用归一化值（仅对显式提供的字段）。
+        updates: dict = {}
+        if data.ip_address is not None:
+            updates["ip_address"] = norm_ip
+        if data.oob_ip is not None:
+            updates["oob_ip"] = norm_oob
+        if data.sn is not None:
+            updates["sn"] = norm_sn
+        if updates:
+            data = data.model_copy(update=updates)
+        # 统一唯一性校验（含跨字段放行；exclude 自身避免同一设备 oob_ip==业务IP 误报）。
+        await assert_device_fields_unique(
+            self.device_repo,
+            sn=norm_sn,
+            ip_address=norm_ip,
+            oob_ip=norm_oob,
+            exclude_device_id=device_id,
+        )
         # 把 repo 写操作与同步 flush 纳入 try：否则 update 内部 flush 抛出的 IntegrityError
         # 会在 try 块之外冒泡，被 FastAPI 当作 500 而非转成 409 冲突提示。
         try:

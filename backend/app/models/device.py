@@ -49,8 +49,11 @@ class Device(Base):
     model: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     # 序列号（SN，厂商出厂序列号）。
     sn: Mapped[Optional[str]] = mapped_column(String(128), nullable=True, index=True)
-    # IP 地址（可选，仅登记用）。
+    # 业务 IP 地址（可选，仅登记用）。对应于前端「业务IP地址」字段。
     ip_address: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # 带外管理 IP（可选，仅登记用）。区别于业务 IP，用于设备带外管理网口 / 管理交换机接入。
+    # 同一设备允许与业务 IP 相同；不同设备间二者不可相同（跨字段唯一由应用层校验）。
+    oob_ip: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     # 维保到期日。
     warranty_expire: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     # 备注。

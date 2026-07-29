@@ -52,6 +52,26 @@ class DeviceRepository:
         # scalar_one_or_none() 会抛 MultipleResultsFound -> 500；first() 取首行即可。
         return result.scalars().first()
 
+    async def get_by_sn_excluding(
+        self, sn: str, exclude_id: Optional[str] = None
+    ) -> Optional[Device]:
+        """按 SN 查设备（排除指定 id），用于 SN 全系统唯一校验。"""
+        stmt = select(Device).where(Device.sn == sn)
+        if exclude_id:
+            stmt = stmt.where(Device.id != exclude_id)
+        result = await self.session.execute(stmt)
+        return result.scalars().first()
+
+    async def get_by_oob_ip_excluding(
+        self, oob_ip: str, exclude_id: Optional[str] = None
+    ) -> Optional[Device]:
+        """按带外管理 IP 查设备（排除指定 id），用于列内唯一 + 跨字段（业务IP）校验。"""
+        stmt = select(Device).where(Device.oob_ip == oob_ip)
+        if exclude_id:
+            stmt = stmt.where(Device.id != exclude_id)
+        result = await self.session.execute(stmt)
+        return result.scalars().first()
+
     async def list(
         self,
         *,
@@ -82,6 +102,7 @@ class DeviceRepository:
                 | (Device.sn.like(like))
                 | (Device.device_code.like(like))
                 | (Device.ip_address.like(like))
+                | (Device.oob_ip.like(like))
             )
 
         base = select(Device)

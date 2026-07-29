@@ -397,6 +397,78 @@ async def _migrate_status_rename(session: AsyncSession) -> None:
     await session.flush()
 
 
+async def _migrate_device_oob_ip(session: AsyncSession) -> None:
+    """设备新增带外管理IP(oob_ip)列，并为 SN / 带外管理IP 建立部分唯一索引。
+
+    - ``oob_ip``：设备级带外管理IP，可空，与业务IP(ip_address)区分；同一设备允许两者
+      相同，不同设备间不可相同（跨字段规则由应用层 ``assert_device_fields_unique`` 保证）。
+    - ``sn``：需求要求全系统唯一；建唯一索引前先清理同表内重复 SN（保留一条，其余置 NULL）。
+    - ``oob_ip``：同理清理重复后建部分唯一索引（仅非空生效）。
+    列均允许 NULL，幂等 ALTER，SQLite / PostgreSQL 通吃。
+    """
+    dcols = await _existing_columns(session, "devices")
+    if "oob_ip" not in dcols:
+        await session.execute(text("ALTER TABLE devices ADD COLUMN oob_ip VARCHAR(64)"))
+    await session.flush()
+
+    # SN 去重（保留首条，其余置 NULL），避免唯一索引创建因重复行失败。
+    sn_dups = (
+        await session.execute(
+            text(
+                "SELECT sn, COUNT(*) c FROM devices "
+                "WHERE sn IS NOT NULL AND sn <> '' GROUP BY sn HAVING COUNT(*) > 1"
+            )
+        )
+    ).fetchall()
+    for sn_val, _ in sn_dups:
+        ids = (
+            await session.execute(
+                text("SELECT id FROM devices WHERE sn=:sn ORDER BY id"),
+                {"sn": sn_val},
+            )
+        ).fetchall()
+        for rid in ids[1:]:
+            await session.execute(
+                text("UPDATE devices SET sn=NULL WHERE id=:id"), {"id": rid[0]}
+            )
+    # 带外管理IP 去重（历史库一般无，防御性处理）。
+    oob_dups = (
+        await session.execute(
+            text(
+                "SELECT oob_ip, COUNT(*) c FROM devices "
+                "WHERE oob_ip IS NOT NULL AND oob_ip <> '' GROUP BY oob_ip HAVING COUNT(*) > 1"
+            )
+        )
+    ).fetchall()
+    for oob_val, _ in oob_dups:
+        ids = (
+            await session.execute(
+                text("SELECT id FROM devices WHERE oob_ip=:ip ORDER BY id"),
+                {"ip": oob_val},
+            )
+        ).fetchall()
+        for rid in ids[1:]:
+            await session.execute(
+                text("UPDATE devices SET oob_ip=NULL WHERE id=:id"), {"id": rid[0]}
+            )
+    await session.flush()
+
+    # 部分唯一索引（仅非空生效），作为并发写入最后防线。
+    await session.execute(
+        text(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_device_sn "
+            "ON devices(sn) WHERE sn IS NOT NULL AND sn <> ''"
+        )
+    )
+    await session.execute(
+        text(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_device_oob_ip "
+            "ON devices(oob_ip) WHERE oob_ip IS NOT NULL AND oob_ip <> ''"
+        )
+    )
+    await session.flush()
+
+
 async def seed_data(session: AsyncSession) -> None:
     """初始化种子数据（幂等）。
 
@@ -488,4 +560,5 @@ MIGRATIONS: list = [
     ("0003_power", _migrate_power),
     ("0004_rack_status", _migrate_rack_status),
     ("0005_status_rename", _migrate_status_rename),
+    ("0006_device_oob_ip", _migrate_device_oob_ip),
 ]
