@@ -17,6 +17,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.cache import Cache
+from app.core.config import settings
 from app.core.database import utcnow
 from app.core.enums import DeviceStatus, MountRecordStatus, RackBizStatus
 from app.core.exceptions import ConflictError, NotFoundError
@@ -371,7 +372,26 @@ class RackService:
         return rack
 
     async def list_racks(self, room_id: str) -> list[Rack]:
-        return await self.rack_repo.list_by_room(room_id)
+        """机房机柜列表（2D 平面图 / 机柜总览共用）。
+
+        缓存到 ``racks:layout:{room_id}``：机柜布局属半静态数据，2D 平面图与
+        机柜总览高频读取，缓存可省整体查询；机柜增删改、上架下架、2D 拖拽
+        均经 ``_invalidate_room_cache`` 自动失效，不会脏读。
+        """
+        cache_key = f"racks:layout:{room_id}"
+        cached = await self.cache.get(cache_key)
+        if cached is not None:
+            try:
+                return [RackOut.model_validate(d) for d in cached]
+            except Exception:
+                logger.warning("机柜布局缓存解析失败（已忽略）", exc_info=True)
+        racks = await self.rack_repo.list_by_room(room_id)
+        try:
+            payload = [RackOut.model_validate(r).model_dump(mode="json") for r in racks]
+            await self.cache.set(cache_key, payload, ttl=settings.CACHE_TTL)
+        except Exception:
+            logger.warning("机柜布局缓存写入失败（已忽略）", exc_info=True)
+        return racks
 
     async def list_filtered(
         self,
@@ -413,6 +433,19 @@ class RackService:
         """批量写入机柜网格坐标（2D 平面图拖拽持久化）。"""
         await self.rack_repo.update_positions(positions)
         await self.session.commit()
+        # 2D 平面图拖拽改变机柜网格坐标，布局缓存必须失效。
+        room_ids: set[str] = set()
+        for p in positions:
+            rid = p.get("id")
+            if not rid:
+                continue
+            try:
+                rack = await self.get_rack(rid)
+                room_ids.add(rack.room_id)
+            except Exception:
+                continue
+        for rid_room in room_ids:
+            await self._invalidate_room_cache(rid_room)
 
     async def delete_rack(self, rack_id: str) -> None:
         rack = await self.get_rack(rack_id)
@@ -542,3 +575,4 @@ class RackService:
     async def _invalidate_room_cache(self, room_id: str) -> None:
         await self.cache.delete_prefix(f"room_stats:{room_id}")
         await self.cache.delete_prefix(f"dashboard:{room_id}")
+        await self.cache.delete_prefix(f"racks:layout:{room_id}")

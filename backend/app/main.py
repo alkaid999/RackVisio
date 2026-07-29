@@ -124,6 +124,23 @@ class AuthMiddleware(BaseHTTPMiddleware):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期：建表 → 迁移 → 种子数据。"""
+    # 缓存后端启动自检：真正 ping 一次 Redis，避免连不上时静默降级无人察觉。
+    import logging
+    _cache_log = logging.getLogger("cache")
+    if settings.REDIS_ENABLED:
+        try:
+            import redis.asyncio as aioredis
+            # 与 RedisCache 保持一致用 RESP2（protocol=2）：Windows 原生
+            # Redis 5.x 无 HELLO 命令，默认协议握手会失败。
+            _probe = aioredis.from_url(settings.REDIS_URL, decode_responses=False, protocol=2)
+            await _probe.ping()
+            _cache_log.info("Cache backend: Redis 已连接 (%s)", settings.REDIS_URL)
+        except Exception as e:
+            _cache_log.warning(
+                "Cache backend: 内存模式 (REDIS_ENABLED=true 但 Redis 连接失败: %s)", e
+            )
+    else:
+        _cache_log.info("Cache backend: 内存模式 (REDIS_ENABLED=false)")
     await init_models()
     async with async_session_factory() as session:
         await migrate(session)

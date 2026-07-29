@@ -1,7 +1,7 @@
 # RackVisio Docker 部署指南
 
 本文档说明如何使用 Docker Compose 将 RackVisio（机柜 3D 可视化平台）以
-**PostgreSQL + 后端 API + 前端 Nginx** 的三容器架构部署到服务器（含内网环境）。
+**PostgreSQL + Redis + 后端 API + 前端 Nginx** 的四容器架构部署到服务器（含内网环境）。
 
 ---
 
@@ -18,17 +18,24 @@
 │                                          │                  │
 │                                [ backend 容器 ]              │
 │                                FastAPI + uvicorn (8000)      │
+│                                ├─▶ db:5432（业务数据）       │
+│                                └─▶ redis:6379（缓存层）     │
 │                                          │                  │
 │                                [ db 容器 ]                   │
 │                                PostgreSQL 16                │
 │                                pgdata 持久化卷               │
+│                                                              │
+│                                [ redis 容器 ]                │
+│                                redis:7-alpine               │
+│                                redisdata 持久化卷            │
 └─────────────────────────────────────────────────────────────┘
-        三者通过自定义桥接网络 appnet 互通；db/backend 不对外暴露端口。
+        四者通过自定义桥接网络 appnet 互通；db/backend/redis 不对外暴露端口。
 ```
 
 | 服务     | 镜像                | 端口（容器内） | 对外暴露        | 作用                                   |
 | -------- | ------------------- | -------------- | --------------- | -------------------------------------- |
 | `db`     | postgres:16-alpine  | 5432           | 否（仅内网）    | 持久化存储所有业务数据                 |
+| `redis`  | redis:7-alpine      | 6379           | 否（仅内网）    | 看板/统计缓存层（AOF 持久化）          |
 | `backend`| 本地构建（Python）  | 8000           | 否（nginx 反代）| 提供 `/api/v1` REST 接口 + JWT 鉴权    |
 | `frontend`| 本地构建（Nginx）  | 80             | 是（`HTTP_PORT`）| 托管前端 + 反代 API                    |
 
@@ -38,7 +45,7 @@
 
 | 文件                       | 说明                                              |
 | -------------------------- | ------------------------------------------------- |
-| `docker-compose.yml`       | 三服务编排（含健康检查、依赖顺序、数据卷）        |
+| `docker-compose.yml`       | 四服务编排（db/redis/backend/frontend，含健康检查、依赖顺序、数据卷） |
 | `backend/Dockerfile`       | 后端镜像：Python 3.12-slim + uvicorn             |
 | `backend/.dockerignore`    | 排除 `.venv` / `*.db` 等无需入镜的内容            |
 | `frontend/Dockerfile`      | 前端镜像：Node 构建 → Nginx 托管（多阶段）        |
@@ -252,7 +259,8 @@ docker compose up -d --build
 | `TOKEN_EXPIRE_HOURS`    | `12`                              | 登录令牌有效期（小时）                            |
 | `INITIAL_ADMIN_PASSWORD`| `admin123`                        | 首次 seed 的默认管理员密码（用户名固定 `admin`）  |
 | `CACHE_TTL`             | `30`                              | 机房统计/看板缓存 TTL（秒）                       |
-| `REDIS_ENABLED`         | `false`                           | 是否启用 Redis 缓存（见下方「扩展说明」）         |
+| `REDIS_ENABLED`         | `true`（Docker）/ `false`（本地） | 是否启用 Redis 缓存层；Docker 部署已开启          |
+| `REDIS_URL`             | `redis://redis:6379/0`            | Redis 连接串（`REDIS_ENABLED=true` 时生效）       |
 
 ### 前端 / 访问
 | 变量         | 默认    | 说明                                  |
@@ -354,15 +362,22 @@ cp .env .env.bak_$(date +%F)   # 与数据库备份放在同一处妥善保管
 ## 八、扩展说明与注意事项
 
 ### 1. 缓存与多实例
-当前缓存为**进程内字典**。后端以**单 worker** 启动时完全一致；
-若需水平扩展（多 worker：`--workers N`，或多后端实例 + 负载均衡），进程内缓存会出现
-跨进程不一致，此时应启用 Redis（`REDIS_ENABLED=true`）。
-> ⚠️ 注意：当前 `RedisCache` 直接存储 Python 字典（未序列化），启用前需先补 `pickle/json`
-> 序列化处理，否则写入缓存会报错。该改动不在本次部署范围内。
+后端统一通过 `app/core/cache.py` 的 `Cache` 门面读写缓存：
+
+- `REDIS_ENABLED=false`（含本地零配置开发）→ 使用**进程内字典**（`InMemoryCache`），单 worker 完全一致，零依赖。
+- `REDIS_ENABLED=true` → 使用 **Redis**（`RedisCache`，`redis.asyncio` 驱动）。
+
+`RedisCache` 的序列化已在提交 **`44a9a0e`** 修复：`set` 时 `json.dumps` 编码、`get` 时 `json.loads` 还原，
+非 JSON 类型兜底原样返回——不再存在「写入静默丢弃 / 读出原始 bytes」问题，可放心启用。
+若 Redis 连接失败，缓存层会降级回源数据库（缓存 miss），不影响功能可用性。
+
+> 📌 **Docker 部署现已默认启用 Redis**：`docker-compose.yml` 的 `redis` 服务段（及其 `redisdata` 卷）
+> 已取消注释，后端 `REDIS_ENABLED=true`、`REDIS_URL=redis://redis:6379/0`，并以
+> `depends_on: redis: condition: service_healthy` 保证启动顺序。启用 Redis 后，看板/统计类接口
+> （如 `/stats/overview`）结果会被缓存，命中 `dashboard:overview` 等键，降低数据库压力。
 >
-> 📌 `docker-compose.yml` 已预置一个**默认注释掉的 `redis` 服务段**（及其 `redisdata` 卷）。
-> 轻量单实例部署无需启用；将来需多实例时，取消该段注释、在 `.env` 设
-> `REDIS_ENABLED=true` 与 `REDIS_URL=redis://redis:6379/0` 即可，无需重写编排。
+> 本地非 Docker 开发若已自建 Redis（默认 `localhost:6379`），只需在 `.env` 设 `REDIS_ENABLED=true`
+> 并填 `REDIS_URL=redis://localhost:6379/0` 即可复用同一条缓存代码路径。
 
 ### 2. CORS
 `backend/app/main.py` 的 `CORSMiddleware` 当前为 `allow_origins=["*"]`（含 `allow_credentials=True`）。

@@ -3,7 +3,7 @@
 #
 # ✅ Docker 为本项目的正式部署方式。
 #    - 本地开发：直接 `python -m uvicorn` + 默认 SQLite（零配置，见 README）。
-#    - 服务器部署：本文件，使用 PostgreSQL 持久化，无需额外中间件。
+#    - 服务器部署：本文件，使用 PostgreSQL 持久化，并启用 Redis 作为缓存层。
 #
 # 快速开始：
 #   1) cp .env.example .env        # 按需修改数据库密码与 JWT 密钥
@@ -46,7 +46,8 @@ services:
     environment:
       # 连接 PostgreSQL（asyncpg 异步驱动）；服务名 db 即 compose 内网主机名
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-rackvisio}:${POSTGRES_PASSWORD:-rackvisio_pass}@db:5432/${POSTGRES_DB:-rackvisio}
-      REDIS_ENABLED: "false"
+      REDIS_ENABLED: "true"
+      REDIS_URL: "redis://redis:6379/0"
       SECRET_KEY: ${SECRET_KEY:-change-me-in-prod-rackvisio-secret-key}
       TOKEN_EXPIRE_HOURS: "${TOKEN_EXPIRE_HOURS:-12}"
       INITIAL_ADMIN_PASSWORD: ${INITIAL_ADMIN_PASSWORD:-admin123}
@@ -54,6 +55,8 @@ services:
     depends_on:
       db:
         condition: service_healthy        # 等数据库就绪再启动，避免建表失败
+      redis:
+        condition: service_healthy        # 等 Redis 就绪再启动，缓存写入不丢
     expose:
       - "8000"                            # 仅内网暴露，由前端 nginx 反代
     healthcheck:
@@ -85,25 +88,27 @@ services:
     networks:
       - appnet
 
-  # ------------------------------------------------------------
-  # 可选：Redis 缓存（默认【不启用】）
-  #   当前缓存为进程内字典，单实例已满足轻量定位，无需 Redis。
-  #   仅在「多 worker / 多后端实例」部署、且已修复 RedisCache 序列化
-  #   （见 docs/DEPLOY.md 第八节）后，取消下方注释并将
-  #   .env 的 REDIS_ENABLED 置 true 才启用。
-  # ------------------------------------------------------------
-  # redis:
-  #   image: redis:7-alpine
-  #   restart: unless-stopped
-  #   command: ["redis-server", "--appendonly", "yes"]
-  #   volumes:
-  #     - redisdata:/data
-  #   networks:
-  #     - appnet
+  # ============ Redis 缓存（看板/统计缓存层）============
+  #   已修复 RedisCache JSON 序列化（提交 44a9a0e），可安全启用。
+  #   后端通过 REDIS_URL=redis://redis:6379/0 连接 compose 内网服务名。
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    networks:
+      - appnet
 
 volumes:
   pgdata:                                 # 数据库数据持久化卷
-  # redisdata:                           # 启用上方 redis 时取消注释
+  redisdata:                              # Redis 持久化卷（AOF 落盘）
 
 networks:
   appnet:

@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 from typing import Any, Optional
@@ -58,19 +59,34 @@ class RedisCache:
     def __init__(self, url: str) -> None:
         import redis.asyncio as aioredis
 
-        self._client = aioredis.from_url(url, decode_responses=False)
+        # 强制 RESP2 协议（protocol=2）：新版 redis-py(>=5) 默认连接时会发
+        # `HELLO 3` 握手，但 Windows 原生 Redis（如 tporadowski/redis 5.0.x）
+        # 低于 6.0 无 HELLO 命令，会握手失败并静默降级。RESP2 对所有
+        # 6.0 之前的版本兼容，对 6.0+ 也向下兼容，故统一指定。
+        self._client = aioredis.from_url(url, decode_responses=False, protocol=2)
 
     async def get(self, key: str) -> Optional[Any]:
         # 缓存读取失败降级为「未命中」（回源 DB），绝不冒泡影响业务。
         try:
-            return await self._client.get(key)
+            raw = await self._client.get(key)
+            if raw is None:
+                return None
+            # 写入时统一 JSON 编码（见 set），此处解码还原原对象。
+            try:
+                return json.loads(raw)
+            except (TypeError, ValueError):
+                # 兜底：非 JSON 负载（理论上不会发生）原样返回。
+                return raw
         except Exception:
             logger.warning("Redis get 失败（已降级回源）", exc_info=True)
             return None
 
     async def set(self, key: str, value: Any, ttl: int) -> None:
         try:
-            await self._client.set(key, value, ex=ttl)
+            # 统一序列化为 JSON 字节：缓存值多为 dict/list 等结构化数据，
+            # 直接传入 redis 客户端会因类型不支持而静默失败（序列化修复见提交 44a9a0e）。
+            payload = json.dumps(value).encode("utf-8")
+            await self._client.set(key, payload, ex=ttl)
         except Exception:
             logger.warning("Redis set 失败（已忽略）", exc_info=True)
 

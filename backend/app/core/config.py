@@ -22,9 +22,10 @@ class Settings(BaseSettings):
     # 数据库连接串；默认 SQLite（开发/测试）。
     DATABASE_URL: str = "sqlite+aiosqlite:///./idc.db"
 
-    # 是否启用 Redis 缓存；默认 false 使用进程内字典缓存。
-    REDIS_ENABLED: bool = False
-    REDIS_URL: str = "redis://localhost:6379/0"
+    # 是否启用 Redis 缓存；默认 true（本地 Redis 常驻时直接命中缓存，
+    # 若 Redis 不可用则自动降级为进程内字典，不影响功能）。
+    REDIS_ENABLED: bool = True
+    REDIS_URL: str = "redis://127.0.0.1:6379/0"
 
     # 统一 API 前缀。
     API_PREFIX: str = "/api/v1"
