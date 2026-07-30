@@ -50,7 +50,7 @@
             ><CircleSlash class="h-3.5 w-3.5" />已禁用</span>
             <span v-else class="inline-flex items-center gap-1 text-xs text-emerald-600"><CircleCheck class="h-3.5 w-3.5" />正常</span>
           </TableCell>
-          <TableCell class="text-muted-foreground">{{ row.created_at || '—' }}</TableCell>
+          <TableCell class="text-muted-foreground">{{ formatDateTime(row.created_at) }}</TableCell>
           <TableCell class="text-right">
             <div class="flex justify-end gap-1">
               <Button variant="ghost" size="icon" aria-label="查看" title="查看" @click="openView(row)"><Eye class="h-4 w-4" /></Button>
@@ -162,6 +162,7 @@ import {
   defaultPermissions,
   permissionSummary,
 } from '@/utils/constants'
+import { formatDateTime } from '@/utils/datetime'
 import { CirclePlus, Eye, Pencil, Trash2, Lock, ShieldCheck, CircleSlash, CircleCheck } from 'lucide-vue-next'
 import Button from '@/components/ui/button.vue'
 import Dialog from '@/components/ui/dialog.vue'

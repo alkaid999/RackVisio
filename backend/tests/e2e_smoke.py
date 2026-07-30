@@ -61,8 +61,8 @@ async def main() -> int:
     log_path = os.path.join(ROOT, "backend", "tests", "e2e_uvicorn.log")
     logf = open(log_path, "w", encoding="utf-8")
     proc = subprocess.Popen(
-        [PY, "-m", "uvicorn", "backend.main:app", "--host", "127.0.0.1", "--port", str(PORT)],
-        cwd=ROOT,
+        [PY, "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", str(PORT)],
+        cwd=os.path.join(ROOT, "backend"),
         env=env,
         stdout=logf,
         stderr=subprocess.STDOUT,
@@ -77,33 +77,31 @@ async def main() -> int:
             if not ready:
                 return 1
 
-            # ① 创建机房
+            # 登录（AuthMiddleware 对 /api/v1 强制鉴权，需 Bearer token）
+            lr = await client.post(
+                "/api/v1/auth/login",
+                json={"username": "admin", "password": "admin123"},
+            )
+            check("登录 admin", lr.status_code == 200, f"status={lr.status_code}")
+            if lr.status_code != 200:
+                return 1
+            token = lr.json()["data"]["token"]
+            client.headers.update({"Authorization": f"Bearer {token}"})
+
+            # ① 创建机房（RoomCreate：name/code + 可选 alias/area/building/floor/address）
             r = await client.post(
                 "/api/v1/rooms",
-                json={
-                    "name": "E2E机房",
-                    "code": "ROOM-E2E",
-                    "location": "3F",
-                    "category": "T2",
-                    "rows": 1,
-                    "cols": 1,
-                },
+                json={"name": "E2E机房", "code": "ROOM-E2E", "floor": "3F", "building": "A栋"},
             )
             check("① 创建机房", r.status_code == 200, f"status={r.status_code}")
             if r.status_code != 200:
                 return 1
             room_id = r.json()["data"]["id"]
 
-            # ② 机房下创建机柜
+            # ② 机房下创建机柜（RackCreate：code + column_code + 可选 total_u/name）
             r = await client.post(
                 f"/api/v1/rooms/{room_id}/racks",
-                json={
-                    "name": "E2E机柜",
-                    "code": "RACK-E2E",
-                    "row_num": 0,
-                    "col_num": 0,
-                    "total_u": 10,
-                },
+                json={"code": "RACK-E2E", "column_code": "A", "total_u": 10},
             )
             check("② 创建机柜", r.status_code == 200, f"status={r.status_code}")
             if r.status_code != 200:
@@ -112,51 +110,52 @@ async def main() -> int:
             rack_id = rack["id"]
             total_u = rack["total_u"]
 
-            # ③ 合法 U 位创建设备 A（U1-5）
+            # ③ 创建设备 A（仅固有属性），再上架到 U1（占 U1-5）
             r = await client.post(
                 "/api/v1/devices",
-                json={
-                    "rack_id": rack_id,
-                    "name": "E2E-A",
-                    "device_type": "server",
-                    "start_u": 1,
-                    "size_u": 5,
-                },
+                json={"name": "E2E-A", "device_type": "server", "u_height": 5},
             )
-            check("③ 创建设备A(合法U)", r.status_code == 201, f"status={r.status_code}")
+            check("③ 创建设备A", r.status_code == 201, f"status={r.status_code}")
             if r.status_code != 201:
                 return 1
             A = r.json()["data"]["id"]
+            r = await client.post(
+                f"/api/v1/racks/{rack_id}/mount",
+                json={"device_id": A, "start_u": 1},
+            )
+            check("③ 上架设备A(U1)", r.status_code == 200, f"status={r.status_code}")
+            if r.status_code != 200:
+                return 1
 
-            # ④ 重叠 U 位创建设备（冲突） -> 期望 409
+            # ④ 重叠 U 位上架另一台设备 -> 期望 409（U 位冲突）
             r = await client.post(
                 "/api/v1/devices",
-                json={
-                    "rack_id": rack_id,
-                    "name": "E2E-B-conflict",
-                    "device_type": "server",
-                    "start_u": 1,
-                    "size_u": 5,
-                },
+                json={"name": "E2E-B-conflict", "device_type": "server", "u_height": 5},
+            )
+            conflict_dev = r.json()["data"]["id"]
+            r = await client.post(
+                f"/api/v1/racks/{rack_id}/mount",
+                json={"device_id": conflict_dev, "start_u": 1},
             )
             ok_conflict = r.status_code == 409 and "冲突" in r.json().get("message", "")
-            check("④ 重叠U创建设备->409", ok_conflict, f"status={r.status_code} msg={r.json().get('message','') if r.status_code!=200 else ''}")
+            check("④ 重叠U上架->409", ok_conflict, f"status={r.status_code} msg={r.json().get('message','') if r.status_code!=200 else ''}")
 
-            # ④b 为完成链路，以合法 U 位（U6-10）创建设备 B
+            # ④b 以合法 U 位（U6-10）创建设备 B 并上架，完成链路串联
             r = await client.post(
                 "/api/v1/devices",
-                json={
-                    "rack_id": rack_id,
-                    "name": "E2E-B",
-                    "device_type": "switch",
-                    "start_u": 6,
-                    "size_u": 5,
-                },
+                json={"name": "E2E-B", "device_type": "switch", "u_height": 5},
             )
-            check("④b 创建设备B(合法U)", r.status_code == 201, f"status={r.status_code}")
+            check("④b 创建设备B", r.status_code == 201, f"status={r.status_code}")
             if r.status_code != 201:
                 return 1
             B = r.json()["data"]["id"]
+            r = await client.post(
+                f"/api/v1/racks/{rack_id}/mount",
+                json={"device_id": B, "start_u": 6},
+            )
+            check("④b 上架设备B(U6)", r.status_code == 200, f"status={r.status_code}")
+            if r.status_code != 200:
+                return 1
 
             # ⑤ 给 A、B 各建接口
             ra = await client.post(
@@ -174,7 +173,7 @@ async def main() -> int:
             pa = ra.json()["data"]["id"]
             pb = rb.json()["data"]["id"]
 
-            # ⑥ 用 A、B 接口建链路
+            # ⑥ 用 A、B 接口建链路（两端设备须均已上架）
             r = await client.post(
                 "/api/v1/links",
                 json={
@@ -189,7 +188,7 @@ async def main() -> int:
                 return 1
             link_id = r.json()["data"]["id"]
 
-            # ⑧ 机房大屏 KPI
+            # ⑧ 机房大屏 KPI（验证 dashboard 不再 500，且聚合正确）
             r = await client.get(f"/api/v1/rooms/{room_id}/dashboard")
             check("⑧ 获取大屏", r.status_code == 200, f"status={r.status_code}")
             if r.status_code != 200:

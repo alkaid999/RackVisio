@@ -34,21 +34,31 @@ def _b64url_decode(text: str) -> bytes:
 
 
 # ——— 密码哈希 ———
+# OWASP 2023 建议 PBKDF2-HMAC-SHA256 至少 600,000 次迭代（旧默认值 100,000 偏弱）。
+# 已存在的账户可能仍用 100,000 次哈希，verify_password 兼容新旧两种，迁移期无需改库。
+PBKDF2_ITERATIONS = 600_000
+_LEGACY_PBKDF2_ITERATIONS = 100_000
+
+
 def hash_password(password: str) -> tuple[str, str]:
-    """返回 (password_hash, salt)，均为 hex 字符串。"""
+    """返回 (password_hash, salt)，均为 hex 字符串（使用当前推荐迭代次数）。"""
     salt = secrets.token_bytes(16)
-    dk = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 100_000)
+    dk = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, PBKDF2_ITERATIONS)
     return dk.hex(), salt.hex()
 
 
 def verify_password(password: str, password_hash: str, salt: str) -> bool:
-    """恒定时间比对，防时序攻击。"""
+    """恒定时间比对，防时序攻击；兼容新旧迭代次数（迁移期透明验证）。"""
     try:
         salt_bytes = bytes.fromhex(salt)
-        dk = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt_bytes, 100_000)
     except (ValueError, TypeError):
         return False
-    return hmac.compare_digest(dk.hex(), password_hash)
+    # 先按当前推荐次数校验；不匹配再尝试旧次数（历史账户），任一通过即视为有效。
+    for iterations in (PBKDF2_ITERATIONS, _LEGACY_PBKDF2_ITERATIONS):
+        dk = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt_bytes, iterations)
+        if hmac.compare_digest(dk.hex(), password_hash):
+            return True
+    return False
 
 
 # ——— 令牌签发 / 校验 ———

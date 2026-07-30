@@ -47,9 +47,19 @@ async def setup_database():
 
 @pytest.fixture
 async def client():
-    """异步测试客户端（不触发 lifespan，建表由 setup_database 负责）。"""
+    """异步测试客户端（不触发 lifespan，建表由 setup_database 负责）。
+
+    默认以种子管理员（admin/admin123）登录并注入 Bearer 令牌，使所有受保护接口
+    可通过 AuthMiddleware 鉴权；公开接口（/health、/auth/login 等）不受影响。
+    """
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        login = await ac.post(
+            "/api/v1/auth/login", json={"username": "admin", "password": "admin123"}
+        )
+        assert login.status_code == 200, login.text
+        token = login.json()["data"]["token"]
+        ac.headers["Authorization"] = f"Bearer {token}"
         yield ac
 
 

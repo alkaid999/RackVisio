@@ -24,8 +24,8 @@
                 <SelectContent>
                   <div class="px-2 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground select-none">设备（资产）</div>
                   <SelectItem v-for="o in assetTypeOptions" :key="o.value" :value="o.value">{{ o.label }}</SelectItem>
-                  <div class="mt-1 px-2 py-1.5 text-xs font-semibold uppercase tracking-wide text-amber-600 dark:text-amber-400 select-none">基础设施（非资产）</div>
-                  <SelectItem v-for="o in facilityTypeOptions" :key="o.value" :value="o.value" class="text-amber-700 dark:text-amber-300">{{ o.label }}</SelectItem>
+                  <div class="mt-1 px-2 py-1.5 text-xs font-semibold uppercase tracking-wide text-warning select-none">基础设施（非资产）</div>
+                  <SelectItem v-for="o in facilityTypeOptions" :key="o.value" :value="o.value" class="text-warning">{{ o.label }}</SelectItem>
                 </SelectContent>
               </Select>
             </FormItem>

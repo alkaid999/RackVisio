@@ -20,6 +20,8 @@ from app.schemas.common import paginated
 router = APIRouter(prefix="/audit-logs", tags=["audit"])
 
 # 前端筛选下拉用的模块 / 操作枚举（与写日志时保持一致语义）。
+# 注意：import / export 是「操作(action)」而非模块(module)，不在此列出；
+# 写日志时 module 恒为实体名（room/rack/device/...），action 才用 import/export。
 AUDIT_MODULES = [
     "room",
     "rack",
@@ -27,8 +29,6 @@ AUDIT_MODULES = [
     "account",
     "link",
     "consumable",
-    "import",
-    "export",
     "system",
 ]
 AUDIT_ACTIONS = ["create", "update", "delete", "restore", "purge", "import", "export", "login"]

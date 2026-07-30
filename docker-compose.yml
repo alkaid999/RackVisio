@@ -17,7 +17,7 @@ name: rackvisio
 services:
   # ============ PostgreSQL 数据库（唯一持久化存储）============
   db:
-    image: postgres:16-alpine
+    image: postgres:16.4-alpine
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-rackvisio}
@@ -44,6 +44,9 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     environment:
+      # 运行环境：production 会强制校验 SECRET_KEY / INITIAL_ADMIN_PASSWORD，
+      # 使用默认值将拒绝启动（见 docs/DEPLOY.md 安全基线）。
+      ENVIRONMENT: "${ENVIRONMENT:-production}"
       # 连接 PostgreSQL（asyncpg 异步驱动）；服务名 db 即 compose 内网主机名
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-rackvisio}:${POSTGRES_PASSWORD:-rackvisio_pass}@db:5432/${POSTGRES_DB:-rackvisio}
       REDIS_ENABLED: "true"
@@ -92,7 +95,7 @@ services:
   #   后端通过 REDIS_URL=redis://redis:6379/0 连接 compose 内网服务名 redis，
   #   appendonly 开启 AOF 持久化，数据落盘至 redisdata 卷。
   redis:
-    image: redis:7-alpine
+    image: redis:7.2-alpine
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
     volumes:

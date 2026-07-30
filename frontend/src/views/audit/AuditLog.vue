@@ -105,15 +105,15 @@
                   class="flex flex-wrap items-center gap-1.5 text-sm leading-6"
                 >
                   <span class="font-medium text-foreground/80">{{ c.label }}：</span>
-                  <span class="text-red-600 line-through dark:text-red-400">{{ c.old }}</span>
+                  <span class="text-destructive line-through">{{ c.old }}</span>
                   <ArrowRight class="h-3 w-3 shrink-0 text-muted-foreground" />
-                  <span class="font-medium text-green-600 dark:text-green-400">{{ c.new }}</span>
+                  <span class="font-medium text-success">{{ c.new }}</span>
                 </div>
                 <div v-if="r.view.notes && r.view.notes.length" class="flex flex-wrap gap-x-3 gap-y-1 pt-0.5">
                   <span
                     v-for="n in r.view.notes"
                     :key="n.label"
-                    class="text-sm text-amber-600 dark:text-amber-400"
+                    class="text-sm text-warning"
                   >{{ n.label }}：{{ n.text }}</span>
                 </div>
               </template>

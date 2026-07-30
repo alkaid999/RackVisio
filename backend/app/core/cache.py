@@ -1,7 +1,7 @@
 """可选缓存抽象层（架构文档 §1.1 / §8）。
 
-- ``REDIS_ENABLED=false``（默认）：使用进程内字典（带 TTL），零外部依赖即可跑通。
-- ``REDIS_ENABLED=true``：使用 Redis（lazy import，避免未安装时阻塞）。
+- ``REDIS_ENABLED``（默认 ``true``）：为 ``true`` 时使用 Redis（lazy import，避免未安装时阻塞）。
+- 本地未装 / Redis 不可达时自动降级为进程内字典（带 TTL），零外部依赖即可跑通，接口正常返回。
 - 缓存键约定：``room_stats:{room_id}``、``dashboard:{room_id}``。
 - 设备/机柜变更时通过 ``delete`` / ``delete_prefix`` 主动失效。
 

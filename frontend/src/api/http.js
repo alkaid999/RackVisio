@@ -10,7 +10,7 @@ const http = axios.create({
   timeout: 15000,
 })
 
-// 请求拦截器：自动附带 Bearer 令牌（令牌由登录接口签发，存于 localStorage）。
+// 请求拦截器：自动附带 Bearer 令牌（令牌由登录接口签发，存于 sessionStorage，键名 rv_token）。
 http.interceptors.request.use((config) => {
   const token = getToken()
   if (token) {

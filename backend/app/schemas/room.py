@@ -80,12 +80,17 @@ class RackStatusDistribution(BaseModel):
 
 
 class DeviceStatusDistribution(BaseModel):
-    """设备状态分布。"""
+    """设备状态分布（按真实 DeviceStatus 枚举统计）。
 
-    running: int = 0
-    offline: int = 0
-    fault: int = 0
-    maintenance: int = 0
+    枚举取值见 ``app.core.enums.DeviceStatus``：在库 / 已上架 / 已下架 / 待报废 / 借出。
+    旧 schema 的 running/offline/fault/maintenance 为历史遗留、与真实枚举无对应，已移除。
+    """
+
+    in_stock: int = 0    # 在库
+    mounted: int = 0     # 已上架
+    unmounted: int = 0   # 已下架（历史遗留，仅用于兼容统计分类）
+    scrapped: int = 0    # 待报废
+    lent: int = 0        # 借出
 
 
 class DashboardKPI(BaseModel):
@@ -94,7 +99,6 @@ class DashboardKPI(BaseModel):
     rack_count: int = 0
     device_count: int = 0
     utilization: float = 0.0
-    fault_count: int = 0
 
 
 class RoomDashboard(BaseModel):

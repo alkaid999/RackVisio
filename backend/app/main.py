@@ -8,14 +8,19 @@
 
 from __future__ import annotations
 
+import logging
 import time
+import traceback
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
+
+logger = logging.getLogger("app")
 
 from app.api.v1 import (
     accounts,
@@ -166,12 +171,14 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     其余业务接口仍使用严格 CSP。
     """
 
+    # 业务接口（JSON）响应本就不含内联脚本/样式；移除 'unsafe-inline' 收紧 XSS 防护面。
+    # 注意：API 文档路由（/docs、/redoc）依赖 CDN 内联资源，仍由 _CSP_DOCS 单独放宽。
     _CSP = (
         "default-src 'self'; "
         "img-src 'self' data: blob:; "
         "font-src 'self'; "
-        "style-src 'self' 'unsafe-inline'; "
-        "script-src 'self' 'unsafe-inline'; "
+        "style-src 'self'; "
+        "script-src 'self'; "
         "frame-ancestors 'none'"
     )
 
@@ -203,6 +210,10 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 # 允许的前端跨域源（显式白名单，禁止 "*" + allow_credentials 的危险组合）。
 _cors_origins = [o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()]
+# 中间件执行顺序（外层→内层）= 注册顺序的反序。将 CORS 注册为最后一项使其处于最外层，
+# 确保鉴权中间件提前返回 401/403 时响应仍经过 CORS 中间件、带上跨域头，避免开发期跨域 401 白屏。
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(AuthMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins,
@@ -210,8 +221,6 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type"],
 )
-app.add_middleware(AuthMiddleware)
-app.add_middleware(SecurityHeadersMiddleware)
 
 # 挂载全部 v1 路由（前缀统一为 /api/v1）。
 for module in (rooms, racks, devices, interfaces, links, stats, mount_records, auth, accounts, consumables, meta, audit):
@@ -236,6 +245,40 @@ async def validation_error_handler(request: Request, exc: RequestValidationError
     )
 
 
+@app.exception_handler(StarletteHTTPException)
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    """任意 ``HTTPException``（含路由未匹配 404 与各端点直接抛出的 4xx/5xx）→ 统一信封。
+
+    注意：本环境安装的 FastAPI 中 ``fastapi.HTTPException`` 与 ``starlette.exceptions.
+    HTTPException`` 并非同一类（路由未匹配的 404 抛的是后者），故两者都注册以确保
+    统一信封覆盖全部 4xx/5xx（含 404）。原先默认 ``{"detail": ...}`` 与统一信封
+    ``{"code","message","data"}`` 不一致，此处归一到相同结构（code 取状态码）。
+    """
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "code": exc.status_code,
+            "message": exc.detail if isinstance(exc.detail, str) else "请求错误",
+            "data": None,
+        },
+    )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    """未捕获异常兜底 → 500 统一信封。
+
+    避免将堆栈/内部实现细节直接透传给前端；同时记录完整堆栈便于排查。
+    """
+    logger.error("未捕获异常: %s\n%s", exc, traceback.format_exc())
+    return JSONResponse(
+        status_code=500,
+        content={"code": 500, "message": "服务器内部错误", "data": None},
+    )
+
+
 @app.get("/health")
 async def health():
-    return {"status": "ok"}
+    # 统一信封，与全局异常处理器及前端拦截器约定一致（/health 为公开探针）。
+    return {"code": 0, "message": "ok", "data": {"status": "up"}}

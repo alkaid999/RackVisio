@@ -25,7 +25,7 @@ from __future__ import annotations
 
 from typing import Iterable, Optional
 
-from fastapi import Depends, HTTPException, Request
+from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_db
@@ -114,14 +114,14 @@ async def _resolve_effective(request: Request, session: AsyncSession) -> set[str
 
     payload = getattr(request.state, "user", None)
     if not payload:
-        raise HTTPException(status_code=401, detail="未认证")
+        raise AppError(status_code=401, code=401, message="未认证")
 
     if is_admin(payload.get("role", "user")):
         eff = set(ALL_PERMISSIONS)
     else:
         user = await UserRepository(session).get(payload.get("sub"))
         if user is None:
-            raise HTTPException(status_code=401, detail="用户不存在或已被删除")
+            raise AppError(status_code=401, code=401, message="用户不存在或已被删除")
         eff = effective_permissions(user)
 
     request.state.effective_permissions = eff
@@ -137,7 +137,7 @@ async def get_current_user(request: Request) -> dict:
 
     payload = getattr(request.state, "user", None)
     if not payload:
-        raise HTTPException(status_code=401, detail="未认证")
+        raise AppError(status_code=401, code=401, message="未认证")
     return payload
 
 

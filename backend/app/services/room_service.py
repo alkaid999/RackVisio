@@ -114,7 +114,11 @@ class RoomService:
         cache_key = f"room_stats:{room_id}"
         cached = await self.cache.get(cache_key)
         if cached is not None:
-            return RoomStats(**cached)
+            try:
+                return RoomStats(**cached)
+            except Exception:
+                # 缓存结构变更或脏数据：丢弃并回源重算，避免脏缓存导致 500。
+                pass
         racks = await self.rack_repo.list_by_room(room_id)
         rack_count = len(racks)
         total_u = sum(r.total_u for r in racks)
@@ -123,7 +127,7 @@ class RoomService:
         stats = RoomStats(
             rack_count=rack_count, total_u=total_u, used_u=used_u, utilization=utilization
         )
-        await self.cache.set(cache_key, stats.model_dump(), ttl=30)
+        await self.cache.set(cache_key, stats.model_dump(mode="json"), ttl=30)
         return stats
 
     # ----------------------------------------------------- 批量导入

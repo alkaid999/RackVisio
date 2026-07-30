@@ -39,7 +39,7 @@
                   <span
                     v-for="f in requiredFields"
                     :key="f.key"
-                    class="inline-flex items-center gap-0.5 rounded-full border border-red-200/70 bg-red-50/50 px-2 py-0.5 text-xs font-medium text-red-500 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-400"
+                    class="inline-flex items-center gap-0.5 rounded-full border border-destructive/30 bg-destructive/10 px-2 py-0.5 text-xs font-medium text-destructive"
                   >
                     <span class="text-red-500">*</span>{{ f.label }}
                   </span>
@@ -134,7 +134,7 @@
                 <span class="text-muted-foreground">
                   已读取 <span class="font-semibold text-foreground">{{ records.length }}</span> 行
                 </span>
-                <span v-if="tooMany" class="rounded-full bg-red-100/70 px-2.5 py-0.5 text-xs font-medium text-red-500 dark:bg-red-900/40 dark:text-red-400">
+                <span v-if="tooMany" class="rounded-full bg-destructive/15 px-2.5 py-0.5 text-xs font-medium text-destructive">
                   超过 500 行上限，请拆分文件
                 </span>
               </div>
@@ -142,12 +142,12 @@
               <!-- 必填缺失：整块浅红提示 -->
               <div
                 v-if="requiredErrors.length"
-                class="mb-3 rounded-xl border border-red-200 bg-red-50/70 p-3 text-sm dark:border-red-900/50 dark:bg-red-950/30"
+                class="mb-3 rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-sm"
               >
-                <div class="mb-1 font-medium text-red-500 dark:text-red-400">
+                <div class="mb-1 font-medium text-destructive">
                   发现 {{ requiredErrors.length }} 处必填缺失，请修正后重新选择文件：
                 </div>
-                <ul class="list-disc space-y-0.5 pl-4 text-red-500 dark:text-red-400">
+                <ul class="list-disc space-y-0.5 pl-4 text-destructive">
                   <li v-for="(e, i) in requiredErrors.slice(0, 20)" :key="i">第 {{ e.row }} 行：{{ e.errors.join('；') }}</li>
                   <li v-if="requiredErrors.length > 20">…共 {{ requiredErrors.length }} 处</li>
                 </ul>
@@ -162,11 +162,11 @@
                   v-for="(row, i) in pagedRows"
                   :key="i"
                   class="rounded-xl border bg-card p-3.5 transition-colors duration-200 hover:border-primary/40"
-                  :class="errorRows.has(rowNo(i)) ? 'border-red-200 dark:border-red-900/50' : 'border-border/60'"
+                  :class="errorRows.has(rowNo(i)) ? 'border-destructive/30' : 'border-border/60'"
                 >
                   <div class="mb-2.5 flex items-center gap-2 text-xs font-medium text-muted-foreground">
                     第 {{ rowNo(i) }} 行
-                    <span v-if="errorRows.has(rowNo(i))" class="rounded-full bg-red-100/70 px-1.5 py-0.5 text-red-500 dark:bg-red-900/40 dark:text-red-400">必填缺失</span>
+                    <span v-if="errorRows.has(rowNo(i))" class="rounded-full bg-destructive/15 px-1.5 py-0.5 text-destructive">必填缺失</span>
                   </div>
                   <dl class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-3">
                     <div v-for="f in config.fields" :key="f.key" class="flex min-w-0 gap-1">
@@ -193,12 +193,12 @@
             <div v-if="result" class="space-y-2.5">
               <div
                 v-if="result.failures.length"
-                class="max-h-56 overflow-y-auto rounded-xl border border-red-200 bg-red-50/70 p-3 text-sm dark:border-red-900/50 dark:bg-red-950/30"
+                class="max-h-56 overflow-y-auto rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-sm"
               >
-                <div class="mb-1 font-medium text-red-500 dark:text-red-400">
+                <div class="mb-1 font-medium text-destructive">
                   失败明细（共 {{ result.failures.length }} 条，已通过右上角通知汇总）：
                 </div>
-                <ul class="list-disc space-y-0.5 pl-4 text-red-500 dark:text-red-400">
+                <ul class="list-disc space-y-0.5 pl-4 text-destructive">
                   <li v-for="(f, i) in result.failures.slice(0, 50)" :key="i">
                     第 {{ f.row }} 行：{{ f.errors.join('；') }}
                   </li>

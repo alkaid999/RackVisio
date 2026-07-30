@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.device import Device
 from app.models.link import DeviceLink
 from app.models.interface import DeviceInterface
+from app.repositories.mount_record_repo import MountRecordRepository
 from app.schemas.device import DeviceCreate, DeviceUpdate
 
 
@@ -97,12 +98,12 @@ class DeviceRepository:
         if keyword:
             like = f"%{keyword}%"
             conditions.append(
-                (Device.name.like(like))
-                | (Device.model.like(like))
-                | (Device.sn.like(like))
-                | (Device.device_code.like(like))
-                | (Device.ip_address.like(like))
-                | (Device.oob_ip.like(like))
+                (Device.name.ilike(like))
+                | (Device.model.ilike(like))
+                | (Device.sn.ilike(like))
+                | (Device.device_code.ilike(like))
+                | (Device.ip_address.ilike(like))
+                | (Device.oob_ip.ilike(like))
             )
 
         base = select(Device)
@@ -135,6 +136,25 @@ class DeviceRepository:
         if not ids:
             return []
         stmt = select(Device).where(Device.id.in_(ids))
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def list_by_room(self, room_id: str) -> list[Device]:
+        """机房内全部「当前有效上架」的设备（经上架记录表跨机柜聚合）。
+
+        设备表不含位置字段，故先经 ``MountRecordRepository.list_device_ids_by_room``
+        取该机房有效上架设备 id 集合，再回查设备实体。供机房大屏/3D 总览聚合使用。
+
+        返回值已按 Device.created_at 升序，便于前端稳定渲染。
+        """
+        ids = await MountRecordRepository(self.session).list_device_ids_by_room(room_id)
+        if not ids:
+            return []
+        stmt = (
+            select(Device)
+            .where(Device.id.in_(ids))
+            .order_by(Device.created_at.asc())
+        )
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
