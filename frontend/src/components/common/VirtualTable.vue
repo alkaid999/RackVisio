@@ -66,7 +66,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, nextTick, onBeforeUnmount } from 'vue'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import Checkbox from '@/components/ui/checkbox.vue'
 import Spinner from '@/components/ui/spinner.vue'
@@ -125,12 +125,21 @@ function setRowRef(el) {
   if (el) virtualizer.value.measureElement(el)
 }
 
-// 数据量变化后强制重新测量，避免缓存旧高度导致错位。
+// 数据量变化后延迟到 DOM 更新完毕再重测，避免在旧布局上测量导致行高/偏移全错。
 watch(
   () => props.rows.length,
   () => {
-    virtualizer.value.measure()
+    nextTick(() => virtualizer.value?.measure())
   }
+)
+
+// 数据引用整体替换（同长度但内容变）时也触发重测，覆盖搜索/筛选/翻页场景。
+watch(
+  () => props.rows,
+  () => {
+    nextTick(() => virtualizer.value?.measure())
+  },
+  { deep: true }
 )
 
 onBeforeUnmount(() => {

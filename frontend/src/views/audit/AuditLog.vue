@@ -128,7 +128,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   ScrollText,
@@ -334,7 +334,9 @@ const auditColumns = [
 ]
 
 const logs = ref([])
-const rows = computed(() => logs.value.map((l) => ({ ...l, view: detailView(l) })))
+// 行数据：在 load() 回调中与 logs 同步赋值（对齐 DeviceList/RackListPanel 的直传 ref 模式，
+// 避免 computed 每次重建对象引用导致 @tanstack/vue-virtual 虚拟器状态异常）。
+const rows = ref([])
 const total = ref(0)
 const page = ref(1)
 const pageSize = ref(50)
@@ -357,11 +359,13 @@ async function load() {
   try {
     const data = await auditApi.list(buildParams())
     logs.value = data.items || []
+    rows.value = (data.items || []).map((l) => ({ ...l, view: detailView(l) }))
     total.value = data.total || 0
     if (logs.value.length === 0 && page.value > 1) {
       page.value = 1
       const again = await auditApi.list(buildParams())
       logs.value = again.items || []
+      rows.value = (again.items || []).map((l) => ({ ...l, view: detailView(l) }))
       total.value = again.total || 0
     }
   } finally {
