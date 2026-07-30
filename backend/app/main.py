@@ -160,6 +160,10 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
     说明：script-src 保留 'unsafe-inline' 以兼容 Vite 开发期注入脚本；
     真正的 XSS 风险已在各视图层通过转义彻底消除（见 Room3DView/Rack3DView）。
+
+    对 FastAPI 自带的 API 文档路由（/docs、/redoc、/openapi.json）针对性放宽 CSP，
+    放行其从 jsdelivr CDN 加载 Swagger UI / ReDoc 的脚本与样式，避免文档页白屏；
+    其余业务接口仍使用严格 CSP。
     """
 
     _CSP = (
@@ -171,6 +175,19 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         "frame-ancestors 'none'"
     )
 
+    # API 文档路由依赖公网 CDN（cdn.jsdelivr.net）的脚本与样式，
+    # 严格 CSP 会拦截其跨域脚本执行导致页面白屏，故仅对此类路径放宽。
+    _CSP_DOCS = (
+        "default-src 'self'; "
+        "img-src 'self' data: blob:; "
+        "font-src 'self' https://cdn.jsdelivr.net; "
+        "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+        "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+        "frame-ancestors 'none'"
+    )
+
+    _DOCS_PATHS = {"/docs", "/redoc", "/openapi.json"}
+
     async def dispatch(self, request: Request, call_next):
         response = await call_next(request)
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
@@ -179,7 +196,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers.setdefault(
             "Permissions-Policy", "geolocation=(), microphone=(), camera=()"
         )
-        response.headers.setdefault("Content-Security-Policy", self._CSP)
+        csp = self._CSP_DOCS if request.url.path in self._DOCS_PATHS else self._CSP
+        response.headers.setdefault("Content-Security-Policy", csp)
         return response
 
 
