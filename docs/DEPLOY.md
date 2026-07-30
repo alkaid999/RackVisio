@@ -70,7 +70,7 @@ COPY . .
 RUN useradd -m -s /usr/sbin/nologin appuser && chown -R appuser:appuser /app
 USER appuser
 EXPOSE 8000
-# 单 worker：当前缓存为进程内字典，多 worker 会不一致
+# 单 worker：当前缓存已走 Redis（共享），多 worker 也能保持一致；单 worker 足以覆盖轻量场景
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 ```
 
@@ -78,7 +78,7 @@ CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 - **层缓存**：依赖安装单独成层，改代码不改 `requirements.txt` 时秒过；
 - **国内加速**：默认走清华 PyPI 源，海外服务器可把 `PIP_INDEX_URL` 改回 `https://pypi.org/simple`；
 - **非 root**：以 `appuser` 运行，缩小容器被攻破时的权限面；
-- **单 worker**：因缓存为进程内字典（见第八节），多 worker 需先启用 Redis。
+- **单 worker**：当前缓存已走 Redis（见第八节），多 worker 同样共享缓存、保持一致；默认单 worker 足以覆盖轻量场景。
 
 ### 前端镜像（frontend/Dockerfile，多阶段）
 
@@ -343,7 +343,7 @@ cp .env .env.bak_$(date +%F)   # 与数据库备份放在同一处妥善保管
 启动 seed（`lifespan` 中的 `init_models` → `migrate` → `seed_data`）均已方言无关，
 无需额外修改即可在 PostgreSQL 上运行。
 
-### 后续补充的 PostgreSQL 方言坑（提交 331c4dc）
+### PostgreSQL 方言兼容注意事项
 
 除 `CHAR` 外，迁移中还出现过**布尔列使用整数字面量**导致 PostgreSQL 启动崩溃的问题：
 
@@ -361,23 +361,18 @@ cp .env .env.bak_$(date +%F)   # 与数据库备份放在同一处妥善保管
 
 ## 八、扩展说明与注意事项
 
-### 1. 缓存与多实例
+### 1. Redis 缓存（默认开启）
+
 后端统一通过 `app/core/cache.py` 的 `Cache` 门面读写缓存：
 
-- `REDIS_ENABLED=false`（含本地零配置开发）→ 使用**进程内字典**（`InMemoryCache`），单 worker 完全一致，零依赖。
-- `REDIS_ENABLED=true` → 使用 **Redis**（`RedisCache`，`redis.asyncio` 驱动）。
+- `REDIS_ENABLED=true` → 使用 **Redis**（`RedisCache`，`redis.asyncio` 驱动，RESP2 协议）。
+- `REDIS_ENABLED=false`（或 Redis 不可达）→ 自动降级为**进程内字典**（`InMemoryCache`），零依赖，接口正常返回。
 
-`RedisCache` 的序列化已在提交 **`44a9a0e`** 修复：`set` 时 `json.dumps` 编码、`get` 时 `json.loads` 还原，
-非 JSON 类型兜底原样返回——不再存在「写入静默丢弃 / 读出原始 bytes」问题，可放心启用。
-若 Redis 连接失败，缓存层会降级回源数据库（缓存 miss），不影响功能可用性。
+缓存值采用 JSON 序列化，确保跨进程可读；任何 Redis 读写异常都会被静默捕获并降级为回源数据库（缓存 miss），不会出现 500。
 
-> 📌 **Docker 部署现已默认启用 Redis**：`docker-compose.yml` 的 `redis` 服务段（及其 `redisdata` 卷）
-> 已取消注释，后端 `REDIS_ENABLED=true`、`REDIS_URL=redis://redis:6379/0`，并以
-> `depends_on: redis: condition: service_healthy` 保证启动顺序。启用 Redis 后，看板/统计类接口
-> （如 `/stats/overview`）结果会被缓存，命中 `dashboard:overview` 等键，降低数据库压力。
->
-> 本地非 Docker 开发若已自建 Redis（默认 `localhost:6379`），只需在 `.env` 设 `REDIS_ENABLED=true`
-> 并填 `REDIS_URL=redis://localhost:6379/0` 即可复用同一条缓存代码路径。
+**Docker 部署默认已启用 Redis**：`docker-compose.yml` 的 `redis` 服务段（及其 `redisdata` 持久化卷）已就绪，后端 `REDIS_ENABLED=true`、`REDIS_URL=redis://redis:6379/0`，并以 `depends_on: redis: condition: service_healthy` 保证启动顺序。本地开发在 `.env` 设 `REDIS_ENABLED=true` 并填 `REDIS_URL=redis://127.0.0.1:6379/0` 即可。
+
+**缓存内容**：看板与统计类聚合结果，键名形如 `dashboard:overview`、`dashboard:{room_id}`、`room_stats:{room_id}`、`racks:layout:{room_id}`，TTL 由 `CACHE_TTL`（默认 30 秒，环境变量可调）控制。任意写操作（增删改机房 / 机柜 / 设备）都会自动失效对应机房的上述缓存前缀，保证数据新鲜；明细列表与常量接口（`/meta`）不缓存。
 
 ### 2. CORS
 `backend/app/main.py` 的 `CORSMiddleware` 当前为 `allow_origins=["*"]`（含 `allow_credentials=True`）。
@@ -404,6 +399,8 @@ cp .env .env.bak_$(date +%F)   # 与数据库备份放在同一处妥善保管
 | 前端页面白屏 / 刷新子路由 404     | 确认 `frontend/nginx.conf` 已正确 COPY 且含 SPA 回退 `try_files` |
 | 接口 401 / 登录失败               | 检查 `SECRET_KEY` 是否变更（变更后旧令牌失效，重新登录）；`INITIAL_ADMIN_PASSWORD` 仅首次 seed 生效 |
 | 修改 `.env` 不生效                | `docker compose down` 后 `up -d --build` 重新加载 |
+| 看板/统计接口响应偏慢、疑似未命中缓存 | 确认 `REDIS_ENABLED=true` 且 `REDIS_URL` 可达；查看后端启动日志首行 `Cache backend:` 状态；用 `docker compose exec redis redis-cli monitor` 观察是否有 `SET/GET dashboard:*` |
+| 修改数据后看板未立即刷新          | 缓存 TTL 内（默认 30 秒）为预期行为；写操作会自动失效对应机房缓存，最多 30 秒后生效；如需立即刷新：`docker compose exec redis redis-cli flushall`（开发环境） |
 | 想清空数据重来                    | `docker compose down -v && docker compose up -d --build` |
 
 ---

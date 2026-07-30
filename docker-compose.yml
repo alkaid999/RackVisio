@@ -89,8 +89,8 @@ services:
       - appnet
 
   # ============ Redis 缓存（看板/统计缓存层）============
-  #   已修复 RedisCache JSON 序列化（提交 44a9a0e），可安全启用。
-  #   后端通过 REDIS_URL=redis://redis:6379/0 连接 compose 内网服务名。
+  #   后端通过 REDIS_URL=redis://redis:6379/0 连接 compose 内网服务名 redis，
+  #   appendonly 开启 AOF 持久化，数据落盘至 redisdata 卷。
   redis:
     image: redis:7-alpine
     restart: unless-stopped

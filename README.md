@@ -14,7 +14,6 @@ RackVisio 是一个轻量级的机房机柜三维可视化工具。它把机房�
 
 - ✅ **轻量级**：本地开发零配置——SQLite 单机文件数据库 + 单进程后端 + 进程内缓存，开箱即用，无需安装任何额外中间件；Docker 部署由 `docker-compose.yml` 自带 PostgreSQL，仍保持单服务形态。
 - ✅ 适合**中小型机房 / 单数据中心**的空间规划与资产可视化。
-- ⚠️ **不适用于超大规模场景**：未实现 Redis 等分布式缓存（缓存为进程内字典，多实例间不共享），不面向多数据中心联邦、海量设备高并发写入等大型部署。需要更大容量时可切换 PostgreSQL，但整体定位仍为轻量工具。
 
 ### 功能概览
 
@@ -42,7 +41,7 @@ RackVisio 是一个轻量级的机房机柜三维可视化工具。它把机房�
 | 类别 | 技术 |
 | --- | --- |
 | 框架 | Vue 3（`<script setup>` 组合式 API） |
-| 构建 | Vite 5 |
+| 构建 | Vite 8 |
 | 样式 | Tailwind CSS 3 + shadcn-vue 风格组件（reka-ui） |
 | 状态 / 路由 | Pinia 2、vue-router 4（history 模式） |
 | 3D 渲染 | Three.js 0.169 |
@@ -59,7 +58,7 @@ RackVisio 是一个轻量级的机房机柜三维可视化工具。它把机房�
 | ORM | SQLAlchemy 2.x（异步） |
 | 数据库驱动 | aiosqlite（开发默认）/ asyncpg（PostgreSQL 生产） |
 | 校验 / 配置 | Pydantic、Pydantic-Settings |
-| 可选 | Redis（多实例缓存，默认关闭，使用进程内字典缓存） |
+| 缓存层 | Redis（看板/统计缓存层，默认开启；不可用时自动降级为进程内字典） |
 
 ### 基础设施 / 部署
 
@@ -72,9 +71,9 @@ RackVisio 是一个轻量级的机房机柜三维可视化工具。它把机房�
 
 ### 环境要求
 
-- Node.js ≥ 18（推荐 22 LTS）
+- Node.js ≥ 24（配套 Vite 8）
 - Python ≥ 3.10（推荐 3.13）
-- 包管理：npm（前端）、pip 或 uv（后端）
+- 包管理：npm（前端）、uv（后端，亦可用 pip + venv）
 - 可选：Docker / Docker Compose（一键部署）
 
 ### 方式一：本地运行（开发 / 体验）
@@ -94,8 +93,10 @@ cd RackVisio
 
 ```bash
 cd backend
-python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
+# 推荐 uv（自动建 .venv 并依据 pyproject 安装依赖）
+uv sync
+# 传统方式亦可：python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
+# pip install -r requirements.txt
 # 首次启动自动建表并 seed 默认管理员（用户名 admin，密码 admin123）
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
@@ -155,6 +156,16 @@ docker compose up -d --build         # 重新构建 backend / frontend 镜像并
 - 若镜像来自镜像仓库、仅想拉取新镜像，可执行 `docker compose pull && docker compose up -d`。
 - ⚠️ 不要用 `docker compose down -v` 来「更新」——`-v` 会删除数据卷、清空所有数据；那属于「重置整个系统」（见 `docs/DEPLOY.md` 第四节）。
 - 修改 `.env` 后必须 `docker compose down && docker compose up -d --build` 才能重新加载。
+
+**4. Redis 缓存（默认开启，可选关闭）**
+
+RackVisio 的缓存层原生支持 Redis，且**默认开启**：
+
+- **Docker 部署**：`docker-compose.yml` 自带 `redis` 服务（`redis:7-alpine` + 持久化卷），后端 `REDIS_ENABLED=true`，开箱即用，无需额外配置。
+- **本地开发**：默认同样 `REDIS_ENABLED=true`、连接 `redis://127.0.0.1:6379/0`；本机已运行 Redis 则立即生效。
+- **自动降级**：若 Redis 不可达，缓存层自动回源数据库，接口照常返回，不报错、不影响功能。
+
+**缓存内容**：看板与统计类聚合结果，键名形如 `dashboard:overview`、`dashboard:{room_id}`、`room_stats:{room_id}`、`racks:layout:{room_id}`，TTL 由 `CACHE_TTL`（默认 30 秒）控制。任意写操作（增删改机房 / 机柜 / 设备）都会自动失效对应机房的上述缓存键，保证数据新鲜；明细列表与常量接口（`/meta`）不缓存。缓存的部署与运维细节见 `docs/DEPLOY.md`。
 
 ---
 
