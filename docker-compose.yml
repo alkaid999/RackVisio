@@ -44,8 +44,8 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     environment:
-      # 运行环境：production 会强制校验 SECRET_KEY / INITIAL_ADMIN_PASSWORD，
-      # 使用默认值将拒绝启动（见 docs/DEPLOY.md 安全基线）。
+      # 运行环境：production 下若 SECRET_KEY / INITIAL_ADMIN_PASSWORD 仍为默认值，
+      # 后端启动时仅打印安全告警（不拦截启动）；上线前请按 docs/DEPLOY.md 安全基线覆盖。
       ENVIRONMENT: "${ENVIRONMENT:-production}"
       # 连接 PostgreSQL（asyncpg 异步驱动）；服务名 db 即 compose 内网主机名
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-rackvisio}:${POSTGRES_PASSWORD:-rackvisio_pass}@db:5432/${POSTGRES_DB:-rackvisio}

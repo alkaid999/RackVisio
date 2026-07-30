@@ -187,15 +187,15 @@ cp .env.example .env
 #   INITIAL_ADMIN_PASSWORD —— 管理员初始密码
 ```
 
-> ⚠️ **安全红线（production 环境）**：Docker 部署默认 `ENVIRONMENT=production`，后端在启动时会
-> **强制校验** `SECRET_KEY` 与 `INITIAL_ADMIN_PASSWORD`，若仍为默认值
-> （`change-me-in-prod-rackvisio-secret-key` / `admin123`）将**直接拒绝启动**并退出。
-> 因此生产部署**必须先**用强随机值覆盖这两项再 `up`：
+> ⚠️ **安全基线建议（production 环境）**：Docker 部署默认 `ENVIRONMENT=production`，后端启动时会
+> 检查 `SECRET_KEY` 与 `INITIAL_ADMIN_PASSWORD`，若仍为默认值
+> （`change-me-in-prod-rackvisio-secret-key` / `admin123`）会**打印安全告警，但不再拒绝启动**（便于内网快速拉起）。
+> 强烈建议生产部署前用强随机值覆盖这两项再 `up`：
 > ```bash
 > SECRET_KEY=$(openssl rand -hex 32)            # 写入 .env 的 SECRET_KEY
 > INITIAL_ADMIN_PASSWORD=$(openssl rand -base64 18)  # 写入 .env 的 INITIAL_ADMIN_PASSWORD
 > ```
-> 仅本地开发可把 `ENVIRONMENT` 改为 `development` 放宽此校验（但不应在服务器上这样做）。
+> 覆盖后告警消失；不覆盖也能正常启动，仅日志提示风险。
 
 ### 3. 构建并启动
 ```bash
@@ -271,10 +271,10 @@ docker compose up -d --build
 ### 后端
 | 变量                    | 默认                              | 说明                                              |
 | ----------------------- | --------------------------------- | ------------------------------------------------- |
-| `ENVIRONMENT`           | `production`（Docker）           | 运行环境。`production` 下后端启动时**强制校验** `SECRET_KEY` 与 `INITIAL_ADMIN_PASSWORD`，仍为默认值将直接拒绝启动（见下方安全基线）。本地开发可改为 `development` 放宽。 |
-| `SECRET_KEY`            | `change-me-in-prod-...`          | JWT HMAC 签名密钥。**生产必须改为强随机值**（如 `openssl rand -hex 32`）。保持默认值时 `production` 环境后端启动失败。 |
+| `ENVIRONMENT`           | `production`（Docker）           | 运行环境。`production` 下后端启动时会**检查** `SECRET_KEY` 与 `INITIAL_ADMIN_PASSWORD`，仍为默认值仅**打印安全告警、不拦截启动**（见下方安全基线）。本地开发可改为 `development`（无实质差异）。 |
+| `SECRET_KEY`            | `change-me-in-prod-...`          | JWT HMAC 签名密钥。**生产建议改为强随机值**（如 `openssl rand -hex 32`）。保持默认值时启动会打印安全告警，但不影响运行。 |
 | `TOKEN_EXPIRE_HOURS`    | `12`                              | 登录令牌有效期（小时）                            |
-| `INITIAL_ADMIN_PASSWORD`| `admin123`                        | 首次 seed 的默认管理员密码（用户名固定 `admin`）。**生产必须修改**，保持 `admin123` 时 `production` 环境后端启动失败。 |
+| `INITIAL_ADMIN_PASSWORD`| `admin123`                        | 首次 seed 的默认管理员密码（用户名固定 `admin`）。**生产建议修改**，保持 `admin123` 时启动会打印安全告警，但不影响运行。 |
 | `CACHE_TTL`             | `30`                              | 机房统计/看板缓存 TTL（秒）                       |
 | `REDIS_ENABLED`         | `true`（Docker）/ `false`（本地） | 是否启用 Redis 缓存层；Docker 部署已开启          |
 | `REDIS_URL`             | `redis://redis:6379/0`            | Redis 连接串（`REDIS_ENABLED=true` 时生效）       |
@@ -399,7 +399,7 @@ cp .env .env.bak_$(date +%F)   # 与数据库备份放在同一处妥善保管
 若宿主机 8080 被占用，修改 `.env` 的 `HTTP_PORT`（如 `HTTP_PORT=80` 或 `9000`）。
 
 ### 4. 安全基线建议（生产）
-- 修改 `.env` 中所有默认密码与 `SECRET_KEY`（**production 环境已强制拦截默认值，未改则后端拒绝启动**）；
+- 修改 `.env` 中所有默认密码与 `SECRET_KEY`（**production 环境会打印安全告警提示，强烈建议上线前覆盖**，未改也能启动）；
 - 通过反向代理（如外层 Nginx / Traefik）增加 HTTPS；
 - 数据库 `db` 服务不暴露宿主机端口（当前默认如此），仅内网互通；
 - 定期备份 `pgdata` 卷或执行 `pg_dump`。

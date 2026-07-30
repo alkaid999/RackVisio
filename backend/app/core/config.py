@@ -55,28 +55,25 @@ settings = Settings()
 
 
 def _enforce_production_security() -> None:
-    """生产环境安全基线校验：在导入期即失败，避免带弱密钥上线。
+    """安全基线提示：使用弱密钥/默认密码时打印告警，但**不阻断启动**。
 
-    开发/测试环境仅对默认弱密钥打印告警，不阻断启动。
+    内网 DCIM 场景不强制 crash——保留告警以提示运维上线前覆盖 SECRET_KEY 与
+    INITIAL_ADMIN_PASSWORD，安全基线详见 docs/DEPLOY.md。开发/生产均只告警、不退出。
     """
-    if settings.ENVIRONMENT.lower() != "production":
-        if settings.SECRET_KEY == "change-me-in-prod-rackvisio-secret-key":
-            import sys
+    import sys
 
-            print(
-                "[warn] 使用默认弱 SECRET_KEY，仅限开发环境；"
-                "生产请通过环境变量 SECRET_KEY 设置强随机密钥。",
-                file=sys.stderr,
-            )
-        return
     weak_keys = {"", "change-me-in-prod-rackvisio-secret-key"}
     if settings.SECRET_KEY in weak_keys:
-        raise RuntimeError(
-            "生产环境必须通过环境变量 SECRET_KEY 设置强随机密钥，禁止使用默认/空值。"
+        print(
+            "[warn] SECRET_KEY 仍为默认/空值，生产环境存在 JWT 伪造风险；"
+            "请通过环境变量 SECRET_KEY 设置强随机密钥（如 openssl rand -hex 32）。",
+            file=sys.stderr,
         )
     if settings.INITIAL_ADMIN_PASSWORD == "admin123":
-        raise RuntimeError(
-            "生产环境必须修改 INITIAL_ADMIN_PASSWORD，禁止使用默认密码 admin123。"
+        print(
+            "[warn] INITIAL_ADMIN_PASSWORD 仍为默认密码 admin123；"
+            "请通过环境变量 INITIAL_ADMIN_PASSWORD 修改为强密码后再上线。",
+            file=sys.stderr,
         )
 
 
