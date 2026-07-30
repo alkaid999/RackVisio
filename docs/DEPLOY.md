@@ -46,9 +46,9 @@
 | 文件                       | 说明                                              |
 | -------------------------- | ------------------------------------------------- |
 | `docker-compose.yml`       | 四服务编排（db/redis/backend/frontend，含健康检查、依赖顺序、数据卷） |
-| `backend/Dockerfile`       | 后端镜像：Python 3.12-slim + uvicorn             |
+| `backend/Dockerfile`       | 后端镜像：Python 3.12-slim + uv 锁版本构建 + uvicorn |
 | `backend/.dockerignore`    | 排除 `.venv` / `*.db` 等无需入镜的内容            |
-| `frontend/Dockerfile`      | 前端镜像：Node 构建 → Nginx 托管（多阶段）        |
+| `frontend/Dockerfile`      | 前端镜像：Node 24 构建 → Nginx 托管（多阶段）     |
 | `frontend/nginx.conf`      | Nginx：SPA 回退 + `/api` 反代后端                  |
 | `frontend/.dockerignore`   | 排除 `node_modules` / `dist` 等                   |
 | `.env.example`             | 环境变量模板（复制为 `.env` 后修改）              |
@@ -60,22 +60,28 @@ FROM python:3.12-slim
 WORKDIR /app
 # 关闭字节码写入与输出缓冲；指定清华 PyPI 镜像（国内加速，可换官方源）
 ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 PIP_NO_CACHE_DIR=1 \
-    PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
-# 先拷依赖清单，利用层缓存（仅 requirements.txt 变更才重装）
-COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
-# 复制源码（node_modules/.venv/*.db 已被 .dockerignore 排除）
+    PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
+    UV_DEFAULT_INDEX=https://pypi.tuna.tsinghua.edu.cn/simple \
+    UV_NO_CACHE=1
+# uv 按 uv.lock 建 .venv，PATH 提前指向 /app/.venv/bin 确保 uvicorn 可被找到
+ENV PATH="/app/.venv/bin:$PATH"
+# 先拷依赖清单，利用层缓存（仅 uv.lock 变更才重装）
+COPY pyproject.toml uv.lock ./
+RUN pip install --no-cache-dir uv \
+    && uv sync --frozen --no-dev --no-install-project \
+    && uv cache clean
+# 复制源码（.venv/*.db 已被 .dockerignore 排除）
 COPY . .
 # 降权：用非 root 的 appuser 运行
 RUN useradd -m -s /usr/sbin/nologin appuser && chown -R appuser:appuser /app
 USER appuser
 EXPOSE 8000
-# 单 worker：当前缓存已走 Redis（共享），多 worker 也能保持一致；单 worker 足以覆盖轻量场景
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# 单 worker：缓存已走 Redis（共享），多 worker 也保持一致；单 worker 足以覆盖轻量场景
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", 8000]
 ```
 
 要点：
-- **层缓存**：依赖安装单独成层，改代码不改 `requirements.txt` 时秒过；
+- **层缓存**：依赖安装单独成层，改代码不改 `uv.lock` 时秒过；
 - **国内加速**：默认走清华 PyPI 源，海外服务器可把 `PIP_INDEX_URL` 改回 `https://pypi.org/simple`；
 - **非 root**：以 `appuser` 运行，缩小容器被攻破时的权限面；
 - **单 worker**：当前缓存已走 Redis（见第八节），多 worker 同样共享缓存、保持一致；默认单 worker 足以覆盖轻量场景。
@@ -84,7 +90,7 @@ CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 
 ```dockerfile
 # 阶段 1：用 Node 构建 Vite 静态产物
-FROM node:20-alpine AS build
+FROM node:24-alpine AS build
 WORKDIR /app
 # 国内加速：阿里 npmmirror（可用 --build-arg NPM_REGISTRY=官方源 切回）
 ARG NPM_REGISTRY=https://registry.npmmirror.com
@@ -106,7 +112,7 @@ EXPOSE 80
 - **多阶段构建**：最终镜像只含 Nginx + `dist`，不含 Node/构建工具，体积更小、攻击面更小；
 - **锁文件坑**：`npm ci` 会按 `package-lock.json` 里写死的源拉包，光设 `npm_config_registry` 不够，所以先 `sed` 把锁文件里的 `registry.npmjs.org` 替换成镜像源；
 - **可切官方源**：`docker compose build --build-arg NPM_REGISTRY=https://registry.npmjs.org frontend`；
-- 构建基础镜像固定为 `node:20-alpine`（与 README「Node ≥ 18，推荐 22」兼容，锁定 20 仅为保证可复现）。
+- 构建基础镜像固定为 `node:24-alpine`（与 README「Node ≥ 24（配套 Vite 8）」一致，锁定 24 以保证可复现）。
 
 ### 前端反代（frontend/nginx.conf）
 
@@ -405,4 +411,4 @@ cp .env .env.bak_$(date +%F)   # 与数据库备份放在同一处妥善保管
 
 ---
 
-> 文档版本：2026-07-27 ｜ 适用架构：PostgreSQL + FastAPI + Nginx（Docker Compose）
+> 文档版本：2026-07-30 ｜ 适用架构：PostgreSQL + FastAPI + Nginx（Docker Compose）

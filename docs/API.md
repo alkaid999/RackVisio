@@ -1,7 +1,9 @@
 # RackVisio REST API 接口速查
 
 > 本文档按模块列出 RackVisio 后端（`FastAPI`）的全部 REST 端点，供离线速查。
-> 完整、可交互的文档以 OpenAPI 为准：启动后端后访问 `http://localhost:8000/docs`（Swagger UI）或 `/redoc`。
+> 完整、可交互的文档以 OpenAPI 为准：
+> - **本地开发**：启动后端后访问 `http://localhost:8000/docs`（Swagger UI）或 `/redoc`。
+> - **Docker 部署**：Nginx 仅反代 `/api/*`，`/docs`、`/redoc`、`/openapi.json` 不对外暴露；需进容器查看：`docker compose exec backend curl -s http://localhost:8000/openapi.json`。
 
 ## 通用约定
 
