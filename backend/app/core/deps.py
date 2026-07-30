@@ -1,10 +1,9 @@
-"""FastAPI 依赖注入：数据库会话与缓存。"""
+"""FastAPI 依赖注入：数据库会话。"""
 
 from __future__ import annotations
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.cache import Cache
 from app.core.database import async_session_factory
 
 
@@ -18,8 +17,3 @@ async def get_db() -> AsyncSession:
             yield session
         finally:
             await session.close()
-
-
-def get_cache() -> Cache:
-    """提供缓存单例实例。"""
-    return Cache()

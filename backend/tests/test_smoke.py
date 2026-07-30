@@ -70,7 +70,10 @@ async def test_health(client):
     assert resp.status_code == 200
     body = resp.json()
     assert body["code"] == 0
-    assert body["data"]["status"] == "up"
+    # 新契约：data.status 为 ok/degraded，并含 db/redis 依赖探活明细。
+    assert body["data"]["status"] in ("ok", "degraded")
+    assert body["data"]["db"]["ok"] is True
+    assert "redis" in body["data"]
 
 
 # --------------------------------------------------------------------------- #

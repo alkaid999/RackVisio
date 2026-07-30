@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 import time
 import traceback
+import uuid
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
@@ -36,12 +37,14 @@ from app.api.v1 import (
     rooms,
     stats,
 )
+from app.core.cache import cache
 from app.core.config import settings
-from app.core.database import async_session_factory, init_models
+from app.core.database import async_session_factory, engine, init_models
 from app.core.exceptions import AppError
-from app.core.security import TokenError, verify_token
+from app.core.security import TokenError, is_token_revoked, verify_token
 from app.db.init_db import migrate, seed_data
 from app.repositories.user_repo import UserRepository
+from sqlalchemy import text
 
 # 重新导出，便于测试导入。
 __all__ = ["app"]
@@ -115,6 +118,12 @@ class AuthMiddleware(BaseHTTPMiddleware):
                     status_code=401,
                     content={"code": 401, "message": str(exc) or "登录已过期", "data": None},
                 )
+            # 注销吊销（黑名单）：已主动 logout 的令牌即时失效。
+            if await is_token_revoked(payload):
+                return JSONResponse(
+                    status_code=401,
+                    content={"code": 401, "message": "令牌已注销，请重新登录", "data": None},
+                )
             # 禁用账号令牌即时失效（P1：原先仅靠登录拦截，已签发令牌仍可用）。
             if await _is_user_disabled(payload.get("sub")):
                 return JSONResponse(
@@ -151,6 +160,15 @@ async def lifespan(app: FastAPI):
         await migrate(session)
         await seed_data(session)
     yield
+    # 优雅关闭：释放 DB 连接池与 Redis 连接，避免连接泄漏 / 句柄耗尽。
+    try:
+        await engine.dispose()
+    except Exception:
+        logger.warning("engine.dispose 失败", exc_info=True)
+    try:
+        await cache.close()
+    except Exception:
+        logger.warning("cache.close 失败", exc_info=True)
 
 
 app = FastAPI(
@@ -208,6 +226,33 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         return response
 
 
+class RequestTimingMiddleware(BaseHTTPMiddleware):
+    """请求计时与慢请求日志：记录 method/path/status/duration_ms/request_id。
+
+    - 正常请求 INFO 级单行日志；超过阈值（默认 1000ms）降为 WARNING 便于告警。
+    - 注入 ``X-Request-ID`` 响应头，便于链路追踪与日志关联。
+    """
+
+    _SLOW_MS = 1000.0
+
+    async def dispatch(self, request: Request, call_next):
+        request_id = uuid.uuid4().hex[:12]
+        start = time.perf_counter()
+        response = await call_next(request)
+        duration_ms = (time.perf_counter() - start) * 1000
+        response.headers["X-Request-ID"] = request_id
+        log_method = logger.warning if duration_ms > self._SLOW_MS else logger.info
+        log_method(
+            "request %s %s -> %d (%.1fms, rid=%s)",
+            request.method,
+            request.url.path,
+            response.status_code,
+            duration_ms,
+            request_id,
+        )
+        return response
+
+
 # 允许的前端跨域源（显式白名单，禁止 "*" + allow_credentials 的危险组合）。
 _cors_origins = [o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()]
 # 中间件执行顺序（外层→内层）= 注册顺序的反序。将 CORS 注册为最后一项使其处于最外层，
@@ -221,6 +266,56 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type"],
 )
+# 计时中间件注册为最后一项 → 处于最外层，包裹完整中间件链（含 CORS/鉴权），
+# 度量端到端耗时并注入 X-Request-ID。
+app.add_middleware(RequestTimingMiddleware)
+
+class GlobalRateLimitMiddleware(BaseHTTPMiddleware):
+    """全站通用限流（按客户端 IP 固定窗口）：防接口被恶意刷量 / 爬取。
+
+    - 以「当前分钟 + IP」为桶，每分钟上限 ``_MAX_PER_MIN``；超出返回 429 信封。
+    - 豁免健康检查 / 文档 / 登录（避免锁定合法登录入口）。
+    - 限流状态存于共享缓存（Redis），多实例一致；缓存写入/读取异常 fail-open，
+      绝不因限流组件故障阻塞正常业务。
+    """
+
+    _MAX_PER_MIN = 600
+    _WINDOW = 60
+
+    _EXEMPT_PATHS = (
+        "/health",
+        "/docs",
+        "/redoc",
+        "/openapi.json",
+        f"{settings.API_PREFIX}/auth/login",
+        f"{settings.API_PREFIX}/auth/default-credentials-active",
+    )
+
+    async def dispatch(self, request: Request, call_next):
+        path = request.url.path
+        if request.method == "OPTIONS" or path in self._EXEMPT_PATHS:
+            return await call_next(request)
+        host = request.client.host if request.client else "unknown"
+        minute = int(time.time() // self._WINDOW)
+        key = f"ratelimit:global:{host}:{minute}"
+        try:
+            count = await cache.get(key) or 0
+            if isinstance(count, list):  # 防御：历史脏数据非 int 时重置
+                count = 0
+            if count >= self._MAX_PER_MIN:
+                return JSONResponse(
+                    status_code=429,
+                    content={"code": 429, "message": "请求过于频繁，请稍后再试", "data": None},
+                )
+            await cache.set(key, count + 1, ttl=self._WINDOW)
+        except Exception:
+            # 限流组件异常 fail-open：不阻塞业务。
+            pass
+        return await call_next(request)
+
+
+# 全站限流置于计时之内、业务路由之前，异常 fail-open，多实例经 Redis 共享计数。
+app.add_middleware(GlobalRateLimitMiddleware)
 
 # 挂载全部 v1 路由（前缀统一为 /api/v1）。
 for module in (rooms, racks, devices, interfaces, links, stats, mount_records, auth, accounts, consumables, meta, audit):
@@ -280,5 +375,33 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 
 @app.get("/health")
 async def health():
-    # 统一信封，与全局异常处理器及前端拦截器约定一致（/health 为公开探针）。
-    return {"code": 0, "message": "ok", "data": {"status": "up"}}
+    # 依赖探活：DB(SELECT 1) + Redis(ping)，统一信封。
+    # 任一关键依赖不可用时返回 503，便于 k8s/编排探针判定「不健康」。
+    db_ok, db_detail = True, "up"
+    try:
+        async with async_session_factory() as session:
+            await session.execute(text("SELECT 1"))
+    except Exception as e:  # 探测失败 fail-close：标记为不可用，避免误报健康
+        db_ok, db_detail = False, str(e)[:200]
+    redis_ok, redis_detail = True, "up"
+    if settings.REDIS_ENABLED:
+        try:
+            redis_ok = await cache.ping()
+            redis_detail = "up" if redis_ok else "ping 失败"
+        except Exception as e:
+            redis_ok, redis_detail = False, str(e)[:200]
+    else:
+        redis_detail = "disabled"
+    healthy = db_ok and redis_ok
+    return JSONResponse(
+        status_code=200 if healthy else 503,
+        content={
+            "code": 0 if healthy else 503,
+            "message": "ok" if healthy else "degraded",
+            "data": {
+                "status": "ok" if healthy else "degraded",
+                "db": {"ok": db_ok, "detail": db_detail},
+                "redis": {"ok": redis_ok, "detail": redis_detail},
+            },
+        },
+    )

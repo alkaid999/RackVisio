@@ -7,7 +7,6 @@ from typing import Optional, Tuple
 from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.enums import RoomStatus
 from app.models.room import Room
 from app.schemas.room import RoomCreate, RoomUpdate
 
@@ -101,12 +100,6 @@ class RoomRepository:
         stmt = select(Room).order_by(Room.created_at.desc())
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
-
-    async def soft_delete(self, room: Room) -> Room:
-        """软删除：状态置为 disabled。"""
-        room.status = RoomStatus.DISABLED.value
-        await self.session.flush()
-        return room
 
     async def delete(self, room: Room) -> None:
         """物理删除机房（连同其机柜、上架记录由调用方先清理）。"""

@@ -1,8 +1,10 @@
 <template>
   <!-- 整体布局：无外框，靠留白与分层营造空间感；明暗主题平滑过渡 -->
   <TooltipProvider :delay-duration="200">
-    <!-- 全屏独立页（如登录页）不套用侧边栏/顶栏布局 -->
-    <router-view v-if="isFullscreen" />
+    <!-- 全屏独立页（如登录页）不套用侧边栏/顶栏布局；仍用 ErrorBoundary 兜底渲染错误 -->
+    <ErrorBoundary v-if="isFullscreen">
+      <router-view />
+    </ErrorBoundary>
 
     <div v-else class="flex h-screen overflow-hidden bg-background text-foreground">
       <!-- 侧边栏（桌面端，可折叠为图标轨） -->
@@ -102,11 +104,13 @@
 
         <!-- 内容区 -->
         <main class="relative flex-1 overflow-y-auto overflow-x-hidden scroll-thin page-pad">
-          <router-view v-slot="{ Component }">
-            <Transition name="page">
-              <component :is="Component" />
-            </Transition>
-          </router-view>
+          <ErrorBoundary>
+            <router-view v-slot="{ Component }">
+              <Transition name="page">
+                <component :is="Component" />
+              </Transition>
+            </router-view>
+          </ErrorBoundary>
         </main>
       </div>
     </div>
@@ -154,6 +158,7 @@ import Toaster from '@/components/ui/toaster.vue'
 import ConfirmDialog from '@/components/ui/confirm-dialog.vue'
 import Kbd from '@/components/ui/kbd.vue'
 import GlobalSearch from '@/components/layout/GlobalSearch.vue'
+import ErrorBoundary from '@/components/common/ErrorBoundary.vue'
 
 const router = useRouter()
 const route = useRoute()

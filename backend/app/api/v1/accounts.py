@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from types import SimpleNamespace
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -80,7 +81,7 @@ async def create_account(body: AccountCreate, request: Request, session: AsyncSe
     repo = UserRepository(session)
     if await repo.get_by_username(body.username):
         raise AppError(status_code=409, code=409, message="用户名已存在")
-    password_hash, salt = hash_password(body.password)
+    password_hash, salt = await asyncio.to_thread(hash_password, body.password)
     # 管理员忽略权限字段（恒全权限）；普通用户存储映射，缺省全模块只读。
     if body.role == "admin":
         permissions = None
@@ -144,7 +145,7 @@ async def update_account(
     if body.disabled is not None:
         user.disabled = body.disabled
     if body.password:
-        user.password_hash, user.salt = hash_password(body.password)
+        user.password_hash, user.salt = await asyncio.to_thread(hash_password, body.password)
     # 细粒度权限映射：仅普通用户生效，管理员恒全权限（NULL）。
     if user.role == "admin":
         user.permissions = None

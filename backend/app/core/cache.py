@@ -52,6 +52,14 @@ class InMemoryCache:
     async def clear(self) -> None:
         self._store.clear()
 
+    async def ping(self) -> bool:
+        """进程内缓存恒可用。"""
+        return True
+
+    async def close(self) -> None:
+        """无外部资源，空操作。"""
+        return None
+
 
 class RedisCache:
     """Redis 缓存后端（lazy import redis，避免未安装时阻塞）。"""
@@ -110,6 +118,21 @@ class RedisCache:
             await self._client.flushdb()
         except Exception:
             logger.warning("Redis clear 失败（已忽略）", exc_info=True)
+
+    async def ping(self) -> bool:
+        """探活 Redis；失败降级为 False（健康检查据此判定依赖不可用）。"""
+        try:
+            return bool(await self._client.ping())
+        except Exception:
+            logger.warning("Redis ping 失败", exc_info=True)
+            return False
+
+    async def close(self) -> None:
+        """释放 Redis 连接池（优雅关闭时调用）。"""
+        try:
+            await self._client.aclose()
+        except Exception:
+            logger.warning("Redis close 失败（已忽略）", exc_info=True)
 
 
 # 模块级单例后端，全应用共享同一份缓存。
@@ -175,6 +198,20 @@ class Cache:
             await _get_backend().clear()
         except Exception:
             logger.warning("cache clear 失败（已忽略）", exc_info=True)
+
+    async def ping(self) -> bool:
+        """依赖探活门面：缓存不可用时返回 False（健康检查用）。"""
+        try:
+            return await _get_backend().ping()
+        except Exception:
+            return False
+
+    async def close(self) -> None:
+        """优雅关闭时释放底层后端资源（Redis 连接池等）。"""
+        try:
+            await _get_backend().close()
+        except Exception:
+            pass
 
 
 # 全局缓存单例，供服务层直接引用。

@@ -12,7 +12,7 @@ from app.core.exceptions import NotFoundError
 from app.repositories.device_repo import DeviceRepository
 from app.repositories.rack_repo import RackRepository
 from app.repositories.room_repo import RoomRepository
-from app.core.enums import DeviceStatus, calculate_rack_status
+from app.core.enums import DeviceStatus, RackStatus, calculate_rack_status
 from app.schemas.room import (
     DashboardKPI,
     DeviceStatusDistribution,
@@ -57,11 +57,11 @@ class DashboardService:
         rack_status_dist = RackStatusDistribution()
         for r in racks:
             cap = calculate_rack_status(r.used_u, r.total_u)
-            if cap.value == "empty":
+            if cap == RackStatus.EMPTY:
                 rack_status_dist.empty += 1
-            elif cap.value == "partial":
+            elif cap == RackStatus.PARTIAL:
                 rack_status_dist.partial += 1
-            elif cap.value == "full":
+            elif cap == RackStatus.FULL:
                 rack_status_dist.full += 1
 
         device_status_dist = DeviceStatusDistribution()

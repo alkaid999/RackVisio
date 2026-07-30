@@ -11,6 +11,7 @@ from app.models.rack import Rack
 from app.models.room import Room
 from app.models.device import Device
 from app.models.mount_record import MountRecord
+from app.core.enums import MountRecordStatus
 from app.schemas.rack import RackCreate, RackListItem, RackOut, RackUpdate
 
 
@@ -75,7 +76,7 @@ class RackRepository:
                 func.coalesce(func.sum(Device.rated_power), 0).label("used_power"),
             )
             .join(Device, Device.id == MountRecord.device_id)
-            .where(MountRecord.record_status == "有效")
+            .where(MountRecord.record_status == MountRecordStatus.ACTIVE.value)
             .group_by(MountRecord.rack_id)
             .subquery()
         )
@@ -145,9 +146,11 @@ class RackRepository:
         return (await self.session.execute(stmt)).first() is not None
 
     async def update(self, rack: Rack, data: RackUpdate) -> Rack:
+        # 与 device_repo 保持一致：仅更新显式提供的字段（exclude_unset），
+        # 允许将可空字段显式置空（如 rack_group / design_power / grid 坐标），
+        # 不再用 ``is not None`` 守卫拦截清空操作。
         for field, value in data.model_dump(exclude_unset=True).items():
-            if value is not None:
-                setattr(rack, field, value)
+            setattr(rack, field, value)
         await self.session.flush()
         return rack
 

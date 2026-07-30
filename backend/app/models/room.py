@@ -15,6 +15,7 @@ from sqlalchemy import DateTime, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base, utcnow
+from app.core.enums import RoomStatus
 
 if TYPE_CHECKING:  # pragma: no cover
     from app.models.rack import Rack
@@ -43,7 +44,9 @@ class Room(Base):
     # 机房地址：详细街道地址（如某市某区某路某号），选填。
     address: Mapped[str | None] = mapped_column(String(255), nullable=True)
     # active / disabled（软删除）
-    status: Mapped[str] = mapped_column(String(16), nullable=False, default="active")
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default=RoomStatus.ACTIVE.value
+    )
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(

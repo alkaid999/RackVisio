@@ -142,56 +142,39 @@
       </template>
     </div>
 
-    <!-- 表格视图 -->
+    <!-- 表格视图：虚拟滚动表（选择列 + 行窗口化），大批量设备下 DOM 有界、滚动流畅 -->
     <div v-else>
-      <div v-if="store.loading" class="flex justify-center py-16">
-        <Spinner class="h-6 w-6 text-primary" />
-      </div>
-      <Table v-else>
-        <TableHeader>
-          <TableRow>
-            <TableHead v-if="canEdit" class="w-10 text-center">
-              <Checkbox
-                :model-value="allPageSelected"
-                :indeterminate="allPageIndeterminate"
-                @update:model-value="(v) => toggleAllPage(v)"
-              />
-            </TableHead>
-            <TableHead v-for="col in deviceColumns" :key="col.key" :class="colWidthClass(col.key)">
-              {{ col.label }}
-            </TableHead>
-            <TableHead class="w-32 text-right">操作</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          <TableRow v-for="d in store.devices" :key="d.id" :data-state="isSelected(d.id) ? 'selected' : null">
-            <TableCell v-if="canEdit" class="w-10 text-center">
-              <Checkbox :model-value="isSelected(d.id)" @update:model-value="() => toggleRow(d.id)" />
-            </TableCell>
-            <TableCell
-              v-for="col in deviceColumns"
-              :key="col.key"
-              :class="[isMutedCol(col.key) ? 'text-muted-foreground' : '', colWidthClass(col.key)]"
-            >
-              <template v-if="col.key === 'name'">
-                <button class="font-medium text-primary hover:underline" @click="goDetail(d.id)">{{ d.name }}</button>
-              </template>
-              <template v-else-if="col.key === 'device_type'"><DeviceTypeTag :type="d.device_type" /></template>
-              <template v-else-if="col.key === 'status'"><StatusBadge type="device" :value="d.status" /></template>
-              <template v-else-if="col.key === 'device_code'">{{ d.device_code || '—' }}</template>
-              <template v-else-if="col.key === 'model'">{{ d.model || '—' }}</template>
-              <template v-else-if="col.key === 'ip_address'">{{ d.ip_address || '—' }}</template>
-              <template v-else-if="col.key === 'oob_ip'">{{ d.oob_ip || '—' }}</template>
-              <template v-else-if="col.key === 'u_height'">{{ d.u_height ? d.u_height + 'U' : '—' }}</template>
-            </TableCell>
-            <TableCell class="text-right">
-              <div class="flex justify-end gap-1">
-                <EntityActions :show-edit="canEdit" :show-delete="canEdit" @view="() => goDetail(d.id)" @edit="() => onEdit(d)" @delete="() => onDelete(d)" />
-              </div>
-            </TableCell>
-          </TableRow>
-        </TableBody>
-      </Table>
+      <VirtualTable
+        :columns="deviceColumns"
+        :rows="store.devices"
+        :row-height="52"
+        :height="560"
+        key-field="id"
+        :selectable="canEdit"
+        :selected-keys="[...selected]"
+        :all-selected="allPageSelected"
+        :indeterminate="allPageIndeterminate"
+        :loading="store.loading"
+        :row-class="(d) => (isSelected(d.id) ? 'bg-primary/5' : '')"
+        @toggle-row="toggleRow"
+        @toggle-all="toggleAllPage"
+      >
+        <template #row="{ row }">
+          <div class="vt-cell px-3">
+            <button class="font-medium text-primary hover:underline" @click="goDetail(row.id)">{{ row.name }}</button>
+          </div>
+          <div class="vt-cell px-3"><DeviceTypeTag :type="row.device_type" /></div>
+          <div class="vt-cell px-3 text-muted-foreground">{{ row.model || '—' }}</div>
+          <div class="vt-cell px-3"><StatusBadge type="device" :value="row.status" /></div>
+          <div class="vt-cell px-3 text-muted-foreground">{{ row.device_code || '—' }}</div>
+          <div class="vt-cell px-3 text-muted-foreground">{{ row.ip_address || '—' }}</div>
+          <div class="vt-cell px-3 text-muted-foreground">{{ row.oob_ip || '—' }}</div>
+          <div class="vt-cell px-3 text-muted-foreground">{{ row.u_height ? row.u_height + 'U' : '—' }}</div>
+          <div class="vt-cell flex justify-end gap-1 pr-3">
+            <EntityActions :show-edit="canEdit" :show-delete="canEdit" @view="() => goDetail(row.id)" @edit="() => onEdit(row)" @delete="() => onDelete(row)" />
+          </div>
+        </template>
+      </VirtualTable>
     </div>
 
     <!-- 分页（卡片/表格共用，跟随当前视图模式每页条数） -->
@@ -227,13 +210,7 @@ import DeviceForm from '@/views/device/DeviceForm.vue'
 import EntityActions from '@/components/common/EntityActions.vue'
 import DeviceTypeTag from '@/components/device/DeviceTypeTag.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
-import Table from '@/components/ui/table.vue'
-import TableHeader from '@/components/ui/table-header.vue'
-import TableBody from '@/components/ui/table-body.vue'
-import TableRow from '@/components/ui/table-row.vue'
-import TableHead from '@/components/ui/table-head.vue'
-import TableCell from '@/components/ui/table-cell.vue'
-import Checkbox from '@/components/ui/checkbox.vue'
+import VirtualTable from '@/components/common/VirtualTable.vue'
 import { DEVICE_TYPE_OPTIONS, DEVICE_STATUS_OPTIONS, SELECT_ALL, toFilterParam } from '@/utils/constants'
 import { CirclePlus, Search, Filter, Undo2, Building, Boxes, SlidersHorizontal, Activity, LayoutGrid, List, ServerCog, Download, Upload, ChevronDown, FileSpreadsheet, FileText, Trash2 } from 'lucide-vue-next'
 import { exportData } from '@/utils/excel'
@@ -306,9 +283,9 @@ function toggleFacility() {
   reload()
 }
 
-// 分页：卡片模式每页 12 条，表格模式每页 10 条（服务端分页）。
+// 分页：卡片模式每页 12 条，表格模式每页 50 条（服务端分页，配合虚拟滚动窗口化渲染）。
 const page = ref(1)
-const pageSize = computed(() => (viewMode.value === 'card' ? 12 : 10))
+const pageSize = computed(() => (viewMode.value === 'card' ? 12 : 50))
 const totalPages = computed(() => Math.max(1, Math.ceil(store.total / pageSize.value)))
 function setView(mode) {
   if (viewMode.value === mode) return
@@ -318,32 +295,18 @@ function setView(mode) {
 }
 
 // 设备列表表格固定列：移除「显示字段」配置功能，统一默认展示以下核心字段。
+// 附带列宽（供 VirtualTable 推导 grid 模板，保证表头/行对齐）；操作列右对齐。
 const deviceColumns = [
-  { key: 'name', label: '设备名称' },
-  { key: 'device_type', label: '设备类型' },
-  { key: 'model', label: '设备型号' },
-  { key: 'status', label: '设备状态' },
-  { key: 'device_code', label: '设备编号' },
-  { key: 'ip_address', label: '业务IP地址' },
-  { key: 'oob_ip', label: '带外管理IP' },
-  { key: 'u_height', label: '设备U数' },
+  { key: 'name', label: '设备名称', width: 'minmax(160px, 1.4fr)' },
+  { key: 'device_type', label: '设备类型', width: '120px' },
+  { key: 'model', label: '设备型号', width: 'minmax(120px, 1fr)' },
+  { key: 'status', label: '设备状态', width: '100px' },
+  { key: 'device_code', label: '设备编号', width: '11rem' },
+  { key: 'ip_address', label: '业务IP地址', width: '9rem' },
+  { key: 'oob_ip', label: '带外管理IP', width: '9rem' },
+  { key: 'u_height', label: '设备U数', width: '6rem' },
+  { key: 'actions', label: '操作', width: '8rem', align: 'right' },
 ]
-// 名称 / 类型 / 状态 以强调样式呈现，其余文本列用 muted。
-const EMPHASIS_COLS = new Set(['name', 'device_type', 'status'])
-function isMutedCol(key) {
-  return !EMPHASIS_COLS.has(key)
-}
-// 表格列宽：编号 / IP / U 数等文本列设最小宽度，避免内容换行。
-const COL_WIDTH = {
-  device_code: 'min-w-[11rem]',
-  ip_address: 'min-w-[9rem]',
-  oob_ip: 'min-w-[9rem]',
-  u_height: 'min-w-[6rem]',
-}
-function colWidthClass(key) {
-  return COL_WIDTH[key] || ''
-}
-
 function buildParams() {
   return {
     page: page.value,
@@ -533,9 +496,5 @@ onMounted(async () => {
 .batch-count b {
   color: hsl(var(--destructive));
   font-weight: 700;
-}
-/* 表格中被选中的行高亮 */
-:deep(tr[data-state='selected']) {
-  background: hsl(var(--primary) / 0.06);
 }
 </style>

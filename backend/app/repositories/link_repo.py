@@ -82,6 +82,11 @@ class LinkRepository:
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
+    async def count_all(self) -> int:
+        """全量链路计数（统计页使用，避免 list_all 全表拉取内存计数）。"""
+        stmt = select(func.count()).select_from(DeviceLink)
+        return int((await self.session.execute(stmt)).scalar() or 0)
+
     async def list_detailed(
         self,
         *,

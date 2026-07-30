@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@antv/g6": "^5.0.0",
+    "@tanstack/vue-virtual": "^3.13.0",
     "@vueuse/core": "^14.3.0",
     "axios": "^1.6.0",
     "class-variance-authority": "^0.7.1",

@@ -41,4 +41,6 @@ EXPOSE 8000
 # 说明：当前缓存为进程内字典，多 worker 会导致缓存不一致；
 # 如需水平扩展（多 worker / 多实例），请先将 REDIS_ENABLED 置 true 并修复 RedisCache 序列化，
 # 再追加 --workers N。详见 DEPLOY.md。
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# --timeout-graceful-shutdown 30：收到 SIGTERM 后最多等待 30s 让在途请求优雅结束，
+# 配合 lifespan 关闭时 engine.dispose()/cache.close() 释放连接，避免强杀导致连接泄漏。
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--timeout-graceful-shutdown", "30"]

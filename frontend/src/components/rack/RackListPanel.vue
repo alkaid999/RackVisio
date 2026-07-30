@@ -113,61 +113,50 @@
       </template>
     </div>
 
-    <!-- 表格视图 -->
+    <!-- 表格视图：虚拟滚动表（选择列 + 行窗口化），大批量机柜下 DOM 有界、滚动流畅 -->
     <div v-else>
-      <div v-if="loading" class="flex justify-center py-16">
-        <Spinner class="h-6 w-6 text-primary" />
-      </div>
-      <Table v-else>
-        <TableHeader>
-          <TableRow>
-            <TableHead class="w-10 text-center">
-              <Checkbox
-                :model-value="allPageSelected"
-                :indeterminate="allPageIndeterminate"
-                @update:model-value="(v) => toggleAllPage(v)"
-              />
-            </TableHead>
-            <TableHead v-for="col in columns" :key="col.key">{{ col.label }}</TableHead>
-            <TableHead class="w-32 text-right">操作</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          <TableRow v-for="row in racks" :key="row.id" :data-state="isSelected(row.id) ? 'selected' : null">
-            <TableCell class="w-10 text-center">
-              <Checkbox :model-value="isSelected(row.id)" @update:model-value="() => toggleRow(row.id)" />
-            </TableCell>
-            <TableCell v-for="col in columns" :key="col.key">
-              <template v-if="col.key === 'name'">
-                <button class="font-medium text-primary hover:underline" @click="goRack(row.id)">{{ row.name }}</button>
-              </template>
-              <template v-else-if="col.key === 'col_code'">{{ row.column_code }} / {{ row.code }}</template>
-              <template v-else-if="col.key === 'rack_group'">{{ row.rack_group || '—' }}</template>
-              <template v-else-if="col.key === 'room_name'">{{ row.room_name || '—' }}</template>
-              <template v-else-if="col.key === 'capacity'">{{ row.used_u }} / {{ row.total_u }}U</template>
-              <template v-else-if="col.key === 'usage'">
-                <div class="h-2.5 w-full overflow-hidden rounded-full bg-muted">
-                  <div class="h-full rounded-full" :style="{ width: fillPct(row) + '%', backgroundColor: capacityColor(row.used_u / row.total_u) }" />
-                </div>
-              </template>
-              <template v-else-if="col.key === 'power'">
-                <div class="flex items-center gap-2">
-                  <div class="h-2.5 flex-1 overflow-hidden rounded-full bg-muted">
-                    <div class="h-full rounded-full" :style="{ width: powerPct(row) + '%', backgroundColor: powerColor(row) }" />
-                  </div>
-                  <span class="w-9 shrink-0 text-right text-xs text-muted-foreground">{{ powerPct(row) + '%' }}</span>
-                </div>
-              </template>
-              <template v-else-if="col.key === 'status'"><StatusBadge type="rack" :value="row.status" /></template>
-            </TableCell>
-            <TableCell class="text-right">
-              <div class="flex justify-end gap-1">
-                <EntityActions :show-edit="canEdit" :show-delete="canEdit" @view="() => goRack(row.id)" @edit="() => onEdit(row)" @delete="() => onDelete(row)" />
+      <VirtualTable
+        :columns="columns"
+        :rows="racks"
+        :row-height="52"
+        :height="560"
+        key-field="id"
+        :selectable="canEdit"
+        :selected-keys="[...selected]"
+        :all-selected="allPageSelected"
+        :indeterminate="allPageIndeterminate"
+        :loading="loading"
+        :row-class="(row) => (isSelected(row.id) ? 'bg-primary/5' : '')"
+        @toggle-row="toggleRow"
+        @toggle-all="toggleAllPage"
+      >
+        <template #row="{ row }">
+          <div class="vt-cell px-3">
+            <button class="font-medium text-primary hover:underline" @click="goRack(row.id)">{{ row.name }}</button>
+          </div>
+          <div class="vt-cell px-3 text-muted-foreground">{{ row.column_code }} / {{ row.code }}</div>
+          <div class="vt-cell px-3 text-muted-foreground">{{ row.rack_group || '—' }}</div>
+          <div class="vt-cell px-3 text-muted-foreground">{{ row.room_name || '—' }}</div>
+          <div class="vt-cell px-3 text-muted-foreground">{{ row.used_u }} / {{ row.total_u }}U</div>
+          <div class="vt-cell px-3">
+            <div class="h-2.5 w-full overflow-hidden rounded-full bg-muted">
+              <div class="h-full rounded-full" :style="{ width: fillPct(row) + '%', backgroundColor: capacityColor(row.used_u / row.total_u) }" />
+            </div>
+          </div>
+          <div class="vt-cell px-3">
+            <div class="flex items-center gap-2">
+              <div class="h-2.5 flex-1 overflow-hidden rounded-full bg-muted">
+                <div class="h-full rounded-full" :style="{ width: powerPct(row) + '%', backgroundColor: powerColor(row) }" />
               </div>
-            </TableCell>
-          </TableRow>
-        </TableBody>
-      </Table>
+              <span class="w-9 shrink-0 text-right text-xs text-muted-foreground">{{ powerPct(row) + '%' }}</span>
+            </div>
+          </div>
+          <div class="vt-cell px-3"><StatusBadge type="rack" :value="row.status" /></div>
+          <div class="vt-cell flex justify-end gap-1 pr-3">
+            <EntityActions :show-edit="canEdit" :show-delete="canEdit" @view="() => goRack(row.id)" @edit="() => onEdit(row)" @delete="() => onDelete(row)" />
+          </div>
+        </template>
+      </VirtualTable>
     </div>
 
     <!-- 分页（卡片/表格共用，跟随当前视图模式每页条数） -->
@@ -207,7 +196,6 @@ import EntityActions from '@/components/common/EntityActions.vue'
 import RackForm from '@/views/rack/RackForm.vue'
 import RackBatchCreate from '@/views/rack/RackBatchCreate.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
-import Checkbox from '@/components/ui/checkbox.vue'
 import { SELECT_ALL, RACK_STATUS_OPTIONS, toFilterParam } from '@/utils/constants'
 import { useConfirm } from '@/composables/useConfirm'
 import { useToast } from '@/composables/useToast'
@@ -221,12 +209,7 @@ import Select from '@/components/ui/select.vue'
 import SelectTrigger from '@/components/ui/select-trigger.vue'
 import SelectContent from '@/components/ui/select-content.vue'
 import SelectItem from '@/components/ui/select-item.vue'
-import Table from '@/components/ui/table.vue'
-import TableHeader from '@/components/ui/table-header.vue'
-import TableBody from '@/components/ui/table-body.vue'
-import TableRow from '@/components/ui/table-row.vue'
-import TableHead from '@/components/ui/table-head.vue'
-import TableCell from '@/components/ui/table-cell.vue'
+import VirtualTable from '@/components/common/VirtualTable.vue'
 import EmptyState from '@/components/ui/empty-state.vue'
 import Spinner from '@/components/ui/spinner.vue'
 import ListPager from '@/components/common/ListPager.vue'
@@ -261,9 +244,9 @@ const loading = ref(false)
 const filterKey = props.filterKey || 'RackList'
 const { filter, clear } = usePersistentFilter(filterKey, () => ({ keyword: '', roomId: SELECT_ALL, status: SELECT_ALL }))
 const viewMode = ref('card')
-// 分页：卡片每页 12，表格每页 10（服务端分页）。
+// 分页：卡片每页 12，表格每页 50（服务端分页，配合虚拟滚动窗口化渲染）。
 const page = ref(1)
-const pageSize = computed(() => (viewMode.value === 'card' ? 12 : 10))
+const pageSize = computed(() => (viewMode.value === 'card' ? 12 : 50))
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize.value)))
 function setView(mode) {
   if (viewMode.value === mode) return
@@ -273,16 +256,17 @@ function setView(mode) {
   page.value = 1
   load()
 }
-// 机柜列表表格固定列（移除「显示字段」配置功能）。
+// 机柜列表表格固定列（移除「显示字段」配置功能）；附带列宽供 VirtualTable 推导 grid 模板。
 const rackColumns = [
-  { key: 'name', label: '名称' },
-  { key: 'col_code', label: '列/编号' },
-  { key: 'rack_group', label: '分组' },
-  { key: 'room_name', label: '所属机房' },
-  { key: 'capacity', label: '容量' },
-  { key: 'usage', label: '使用率' },
-  { key: 'power', label: '功率' },
-  { key: 'status', label: '状态' },
+  { key: 'name', label: '名称', width: 'minmax(140px, 1.4fr)' },
+  { key: 'col_code', label: '列/编号', width: '10rem' },
+  { key: 'rack_group', label: '分组', width: '8rem' },
+  { key: 'room_name', label: '所属机房', width: '10rem' },
+  { key: 'capacity', label: '容量', width: '8rem' },
+  { key: 'usage', label: '使用率', width: 'minmax(120px, 1fr)' },
+  { key: 'power', label: '功率', width: 'minmax(140px, 1fr)' },
+  { key: 'status', label: '状态', width: '100px' },
+  { key: 'actions', label: '操作', width: '8rem', align: 'right' },
 ]
 const columns = rackColumns
 const rackFormVisible = ref(false)
@@ -523,9 +507,5 @@ onMounted(async () => {
 .batch-count b {
   color: hsl(var(--destructive));
   font-weight: 700;
-}
-/* 表格中被选中的行高亮 */
-:deep(tr[data-state='selected']) {
-  background: hsl(var(--primary) / 0.06);
 }
 </style>

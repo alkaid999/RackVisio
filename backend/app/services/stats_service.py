@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from sqlalchemy import func, select
 from app.core.cache import cache
+from app.core.enums import MountRecordStatus, RoomStatus
 from app.core.meta import DEVICE_STATUS_META, DEVICE_TYPE_META
 from app.models.device import Device
 from app.models.mount_record import MountRecord
@@ -63,7 +64,7 @@ class StatsService:
             (await session.execute(
                 select(func.count())
                 .select_from(Room)
-                .where(Room.status == "active")
+                .where(Room.status == RoomStatus.ACTIVE.value)
             )).scalar() or 0
         )
         rack_count = int(
@@ -156,7 +157,7 @@ class StatsService:
         ]
 
         # 链路 / 账号 / 耗材规模（只读聚合，低成本）。
-        link_count = len(await self.link_repo.list_all())
+        link_count = await self.link_repo.count_all()
         account_count = await self.user_repo.count_all()
         consumable_type_count = len(await self.consumable_type_repo.list())
         consumable_item_count, consumable_total_quantity = (
@@ -176,7 +177,7 @@ class StatsService:
                 select(func.coalesce(func.sum(Device.rated_power), 0))
                 .select_from(MountRecord)
                 .join(Device, Device.id == MountRecord.device_id)
-                .where(MountRecord.record_status == "有效")
+                .where(MountRecord.record_status == MountRecordStatus.ACTIVE.value)
             )).scalar() or 0
         )
 

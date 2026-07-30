@@ -7,8 +7,8 @@
 
 from __future__ import annotations
 
+import asyncio
 import time
-from collections import defaultdict
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -18,7 +18,7 @@ from app.core.audit import log_audit
 from app.core.config import settings
 from app.core.exceptions import AppError
 from app.core.rbac import ROLE_LABELS, user_permission_map
-from app.core.security import TokenError, create_token, verify_password
+from app.core.security import TokenError, create_token, revoke_token, verify_password
 from app.core.deps import get_db
 from app.repositories.user_repo import UserRepository
 from app.schemas.common import ok
@@ -28,9 +28,12 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 # —— 登录限流（P2：防暴力破解 / 账号枚举）——
 # 滑动窗口：同一「IP + 用户名」在窗口内失败次数超阈值即临时锁定。
+# 限流状态迁至 Redis 共享缓存（多实例一致）；无 Redis 时降级为进程内字典，
+# 查询/写入异常均 fail-open，不阻塞正常登录。
 _LOGIN_WINDOW = 300  # 统计窗口（秒）
 _LOGIN_MAX_FAILS = 5  # 窗口内最大失败次数
-_login_failures: dict[str, list[float]] = defaultdict(list)
+
+from app.core.cache import cache  # noqa: E402
 
 
 def _login_rate_key(username: str, request: Request) -> str:
@@ -38,20 +41,34 @@ def _login_rate_key(username: str, request: Request) -> str:
     return f"{host}:{username.strip().lower()}"
 
 
-def _login_allowed(key: str) -> bool:
+async def _login_failures_get(key: str) -> list[float]:
+    try:
+        v = await cache.get(f"ratelimit:login:{key}")
+        return v if isinstance(v, list) else []
+    except Exception:
+        return []
+
+
+async def _login_allowed(key: str) -> bool:
     now = time.time()
-    tries = _login_failures[key]
-    # 仅保留窗口内的失败记录。
-    tries[:] = [t for t in tries if now - t < _LOGIN_WINDOW]
+    tries = [t for t in await _login_failures_get(key) if now - t < _LOGIN_WINDOW]
     return len(tries) < _LOGIN_MAX_FAILS
 
 
-def _record_login_failure(key: str) -> None:
-    _login_failures[key].append(time.time())
+async def _record_login_failure(key: str) -> None:
+    tries = [t for t in await _login_failures_get(key) if time.time() - t < _LOGIN_WINDOW]
+    tries.append(time.time())
+    try:
+        await cache.set(f"ratelimit:login:{key}", tries, ttl=_LOGIN_WINDOW)
+    except Exception:
+        pass
 
 
-def _clear_login_failures(key: str) -> None:
-    _login_failures.pop(key, None)
+async def _clear_login_failures(key: str) -> None:
+    try:
+        await cache.delete(f"ratelimit:login:{key}")
+    except Exception:
+        pass
 
 
 class LoginRequest(BaseModel):
@@ -84,7 +101,7 @@ async def login(body: LoginRequest, request: Request, session: AsyncSession = De
     repo = UserRepository(session)
     key = _login_rate_key(body.username, request)
     # 滑动窗口限流：超阈值直接拒绝，避免账号枚举 / 暴力破解。
-    if not _login_allowed(key):
+    if not await _login_allowed(key):
         raise AppError(
             status_code=429,
             code=429,
@@ -92,13 +109,15 @@ async def login(body: LoginRequest, request: Request, session: AsyncSession = De
         )
     user = await repo.get_by_username(body.username.strip())
     # 统一错误信息，避免暴露账号是否存在（用户枚举防护）。
-    if not user or not verify_password(body.password, user.password_hash, user.salt):
-        _record_login_failure(key)
+    if not user or not await asyncio.to_thread(
+        verify_password, body.password, user.password_hash, user.salt
+    ):
+        await _record_login_failure(key)
         raise AppError(status_code=401, code=401, message="用户名或密码错误")
     if user.disabled:
         raise AppError(status_code=403, code=403, message="该账号已被禁用")
     # 登录成功：清空失败计数。
-    _clear_login_failures(key)
+    await _clear_login_failures(key)
     token = create_token(sub=user.id, username=user.username, role=user.role)
     await log_audit(request=request, module="system", action="login", object_type="账号", object_id=user.id, object_name=user.username, detail="登录成功")
     return ok({"token": token, "user": _user_info(user)})
@@ -116,6 +135,39 @@ async def me(request: Request, session: AsyncSession = Depends(get_db)):
     return ok(_user_info(db_user))
 
 
+@router.post("/refresh")
+async def refresh(request: Request, session: AsyncSession = Depends(get_db)):
+    """令牌刷新（轮换）：用当前有效令牌换取新令牌，并立即吊销旧令牌（单次使用，防重放）。
+
+    需登录（AuthMiddleware 注入 ``request.state.user``）。旧令牌在刷新后即失效，
+    实现滑动会话而无需服务端存储会话状态；新令牌有效期自签发时刻重新计算。
+    """
+    user = getattr(request.state, "user", None)
+    if not user:
+        raise HTTPException(status_code=401, detail="未认证")
+    old_payload = dict(user)
+    repo = UserRepository(session)
+    db_user = await repo.get(user["sub"])
+    if not db_user or db_user.disabled:
+        raise HTTPException(status_code=401, detail="账号不存在或已禁用")
+    # 吊销旧令牌（单次使用）。
+    await revoke_token(old_payload)
+    token = create_token(sub=db_user.id, username=db_user.username, role=db_user.role)
+    await log_audit(request=request, module="system", action="refresh", object_type="账号", object_id=db_user.id, object_name=db_user.username, detail="令牌刷新")
+    return ok({"token": token, "user": _user_info(db_user)})
+
+
+@router.post("/logout")
+async def logout(request: Request):
+    """注销：将当前令牌加入黑名单，使其立即失效（至原过期时刻）。"""
+    user = getattr(request.state, "user", None)
+    if not user:
+        raise HTTPException(status_code=401, detail="未认证")
+    await revoke_token(dict(user))
+    await log_audit(request=request, module="system", action="logout", object_type="账号", object_id=user.get("sub"), object_name=user.get("user_name"), detail="注销登录")
+    return ok()
+
+
 @router.get("/default-credentials-active")
 async def default_credentials_active(session: AsyncSession = Depends(get_db)):
     """公开探针：默认管理员(admin)是否仍使用初始密码。
@@ -125,7 +177,10 @@ async def default_credentials_active(session: AsyncSession = Depends(get_db)):
     """
     repo = UserRepository(session)
     admin = await repo.get_by_username("admin")
-    active = bool(admin) and verify_password(
-        settings.INITIAL_ADMIN_PASSWORD, admin.password_hash, admin.salt
+    active = bool(admin) and await asyncio.to_thread(
+        verify_password,
+        settings.INITIAL_ADMIN_PASSWORD,
+        admin.password_hash,
+        admin.salt,
     )
     return ok({"active": active})

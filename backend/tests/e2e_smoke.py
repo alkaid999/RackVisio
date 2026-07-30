@@ -42,7 +42,7 @@ async def wait_health(client: httpx.AsyncClient, timeout: float = 20.0) -> bool:
     while time.time() < deadline:
         try:
             r = await client.get("/health")
-            if r.status_code == 200 and r.json().get("data", {}).get("status") == "up":
+            if r.status_code == 200 and r.json().get("data", {}).get("status") in ("ok", "degraded"):
                 return True
         except Exception:
             pass
@@ -201,6 +201,38 @@ async def main() -> int:
             check("⑧ KPI.rack_count>=1", rack_ok, f"rack_count={kpi.get('rack_count')}")
             check("⑧ KPI.device_count>=2", dev_ok, f"device_count={kpi.get('device_count')}")
             check("⑧ KPI.utilization∈[0,100]", util_ok, f"utilization={util}")
+
+            # ⑩ 令牌刷新 + 注销吊销：refresh 轮换新令牌并吊销旧令牌；logout 使新令牌立即失效
+            original_token = token
+            rf = await client.post("/api/v1/auth/refresh")
+            check("⑩ 令牌刷新", rf.status_code == 200, f"status={rf.status_code}")
+            if rf.status_code != 200:
+                return 1
+            new_token = rf.json()["data"]["token"]
+            check("⑩ 刷新返回新令牌", new_token != original_token)
+            # 新令牌可用
+            me_new = await client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {new_token}"})
+            check("⑩ 新令牌可访问", me_new.status_code == 200, f"status={me_new.status_code}")
+            # 旧令牌被刷新轮换吊销
+            me_old = await client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {original_token}"})
+            check("⑩ 旧令牌已吊销", me_old.status_code == 401, f"status={me_old.status_code}")
+            # 注销新令牌
+            lo = await client.post("/api/v1/auth/logout", headers={"Authorization": f"Bearer {new_token}"})
+            check("⑩ 注销登录", lo.status_code == 200, f"status={lo.status_code}")
+            # 注销后新令牌失效
+            me_revoked = await client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {new_token}"})
+            check("⑩ 注销后令牌失效", me_revoked.status_code == 401, f"status={me_revoked.status_code}")
+
+            # ⑪ 登录限流（Redis 共享后端）：同一「IP:用户名」窗口内失败超阈值 → 429
+            # 用独立探测用户名，避免锁定 admin 影响其他用例。
+            last_code = 200
+            for _ in range(6):
+                r = await client.post(
+                    "/api/v1/auth/login",
+                    json={"username": "rate_probe", "password": "wrong"},
+                )
+                last_code = r.status_code
+            check("⑪ 登录限流→429", last_code == 429, f"status={last_code}")
 
         failed = [s for s, ok, _ in _results if not ok]
         print("\n==== E2E 汇总 ====")

@@ -21,6 +21,7 @@ from sqlalchemy import DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base, utcnow
+from app.core.enums import MountRecordStatus
 
 if TYPE_CHECKING:  # pragma: no cover
     from app.models.device import Device
@@ -68,4 +69,6 @@ class MountRecord(Base):
     # 下架人（选填）。
     unmounted_by: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     # 记录状态：有效 / 已下架。
-    record_status: Mapped[str] = mapped_column(String(16), nullable=False, default="有效")
+    record_status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default=MountRecordStatus.ACTIVE.value
+    )

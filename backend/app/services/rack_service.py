@@ -402,10 +402,35 @@ class RackService:
         page: int = 1,
         size: int = 200,
     ) -> tuple[list[RackListItem], int]:
-        """机柜管理列表（带机房名称），支持按机房 / 关键字 / 状态过滤与分页。"""
-        return await self.rack_repo.list_filtered(
+        """机柜管理列表（带机房名称 + 已用功率聚合），支持按机房 / 关键字 / 状态过滤与分页。
+
+        短 TTL 缓存（``racks:list:`` 前缀，key 含过滤/分页参数）：机柜管理列表属高频
+        只读、半静态数据，30s 内重复翻页/过滤可直接命中；机柜增删改、2D 拖拽、上架下架
+        均经 ``_invalidate_room_cache`` 顺带失效 ``racks:list:`` 前缀，不会脏读。
+        """
+        cache_key = (
+            f"racks:list:{room_id or 'all'}:{status or 'all'}"
+            f":{keyword or 'all'}:{page}:{size}"
+        )
+        cached = await self.cache.get(cache_key)
+        if cached is not None:
+            try:
+                items = [RackListItem.model_validate(d) for d in cached["items"]]
+                return items, int(cached["total"])
+            except Exception:
+                logger.warning("机柜列表缓存解析失败（已忽略）", exc_info=True)
+        items, total = await self.rack_repo.list_filtered(
             room_id=room_id, keyword=keyword, status=status, page=page, size=size
         )
+        try:
+            payload = {
+                "items": [RackListItem.model_validate(i).model_dump(mode="json") for i in items],
+                "total": total,
+            }
+            await self.cache.set(cache_key, payload, ttl=settings.CACHE_TTL)
+        except Exception:
+            logger.warning("机柜列表缓存写入失败（已忽略）", exc_info=True)
+        return items, total
 
     async def update_rack(self, rack_id: str, data: RackUpdate) -> Rack:
         rack = await self.get_rack(rack_id)
@@ -573,6 +598,14 @@ class RackService:
 
     # --------------------------------------------------------------- 缓存失效
     async def _invalidate_room_cache(self, room_id: str) -> None:
+        """失效机房相关全部缓存前缀。
+
+        除原有 ``room_stats:`` / ``dashboard:`` / ``racks:layout:`` 外，机柜增删改、
+        2D 拖拽、上架/下架也会改变「机柜管理列表（racks:list:）」与「设备列表
+        （devices:list:，上架下架改设备状态）」，故一并失效，避免列表脏读。
+        """
         await self.cache.delete_prefix(f"room_stats:{room_id}")
         await self.cache.delete_prefix(f"dashboard:{room_id}")
         await self.cache.delete_prefix(f"racks:layout:{room_id}")
+        await self.cache.delete_prefix("racks:list:")
+        await self.cache.delete_prefix("devices:list:")

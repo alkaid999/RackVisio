@@ -61,72 +61,61 @@
       </div>
     </div>
 
-    <div v-if="loading" class="flex justify-center py-20">
-      <Spinner class="h-6 w-6 text-primary" />
-    </div>
-    <Card v-else>
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead class="w-40">时间</TableHead>
-            <TableHead class="w-28">操作人</TableHead>
-            <TableHead class="w-20">模块</TableHead>
-            <TableHead class="w-20">操作</TableHead>
-            <TableHead class="w-48">对象</TableHead>
-            <TableHead>详情</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          <TableRow v-for="r in rows" :key="r.id">
-            <TableCell class="text-muted-foreground tabular-nums">{{ formatTime(r.created_at) }}</TableCell>
-            <TableCell>
-              <span class="font-medium">{{ r.operator_name || '—' }}</span>
-              <span v-if="r.ip" class="block text-xs text-muted-foreground">{{ r.ip }}</span>
-            </TableCell>
-            <TableCell class="text-sm text-muted-foreground">{{ moduleLabel(r.module) }}</TableCell>
-            <TableCell>
-              <Badge :variant="actionBadge(r.action)">{{ actionLabel(r.action) }}</Badge>
-            </TableCell>
-            <TableCell>
-              <button
-                v-if="objectLink(r)"
-                type="button"
-                class="font-medium text-primary hover:underline"
-                @click="goObject(r)"
-              >{{ r.object_name || '—' }}</button>
-              <span v-else class="font-medium">{{ r.object_name || '—' }}</span>
-            </TableCell>
-            <TableCell>
-              <!-- 更新类：字段级 diff（直接说明改了什么） -->
-              <template v-if="r.view.kind === 'diff'">
-                <div
-                  v-for="c in r.view.changes"
-                  :key="c.label"
-                  class="flex flex-wrap items-center gap-1.5 text-sm leading-6"
-                >
-                  <span class="font-medium text-foreground/80">{{ c.label }}：</span>
-                  <span class="text-destructive line-through">{{ c.old }}</span>
-                  <ArrowRight class="h-3 w-3 shrink-0 text-muted-foreground" />
-                  <span class="font-medium text-success">{{ c.new }}</span>
-                </div>
-                <div v-if="r.view.notes && r.view.notes.length" class="flex flex-wrap gap-x-3 gap-y-1 pt-0.5">
-                  <span
-                    v-for="n in r.view.notes"
-                    :key="n.label"
-                    class="text-sm text-warning"
-                  >{{ n.label }}：{{ n.text }}</span>
-                </div>
-              </template>
-              <span v-else-if="r.view.kind === 'none'" class="text-sm text-muted-foreground">未修改字段</span>
-              <span v-else class="text-sm text-muted-foreground">{{ cleanDetail(r) }}</span>
-            </TableCell>
-          </TableRow>
-          <TableRow v-if="!logs.length">
-            <TableCell colspan="6" class="text-center text-muted-foreground">暂无审计记录</TableCell>
-          </TableRow>
-        </TableBody>
-      </Table>
-    </Card>
+    <!-- 审计日志：虚拟滚动表（变高行自动测量），大批量记录下 DOM 有界、滚动流畅 -->
+    <VirtualTable
+      :columns="auditColumns"
+      :rows="rows"
+      :row-height="64"
+      :height="560"
+      key-field="id"
+      :loading="loading"
+      empty-text="暂无审计记录"
+    >
+      <template #row="{ row }">
+        <div class="vt-cell px-3 tabular-nums text-muted-foreground">{{ formatTime(row.created_at) }}</div>
+        <div class="vt-cell px-3">
+          <span class="font-medium">{{ row.operator_name || '—' }}</span>
+          <span v-if="row.ip" class="block text-xs text-muted-foreground">{{ row.ip }}</span>
+        </div>
+        <div class="vt-cell px-3 text-sm text-muted-foreground">{{ moduleLabel(row.module) }}</div>
+        <div class="vt-cell px-3">
+          <Badge :variant="actionBadge(row.action)">{{ actionLabel(row.action) }}</Badge>
+        </div>
+        <div class="vt-cell px-3">
+          <button
+            v-if="objectLink(row)"
+            type="button"
+            class="font-medium text-primary hover:underline"
+            @click="goObject(row)"
+          >{{ row.object_name || '—' }}</button>
+          <span v-else class="font-medium">{{ row.object_name || '—' }}</span>
+        </div>
+        <div class="vt-cell px-3 text-sm">
+          <!-- 更新类：字段级 diff（直接说明改了什么） -->
+          <template v-if="row.view.kind === 'diff'">
+            <div
+              v-for="c in row.view.changes"
+              :key="c.label"
+              class="flex flex-wrap items-center gap-1.5 leading-6"
+            >
+              <span class="font-medium text-foreground/80">{{ c.label }}：</span>
+              <span class="text-destructive line-through">{{ c.old }}</span>
+              <ArrowRight class="h-3 w-3 shrink-0 text-muted-foreground" />
+              <span class="font-medium text-success">{{ c.new }}</span>
+            </div>
+            <div v-if="row.view.notes && row.view.notes.length" class="flex flex-wrap gap-x-3 gap-y-1 pt-0.5">
+              <span
+                v-for="n in row.view.notes"
+                :key="n.label"
+                class="text-warning"
+              >{{ n.label }}：{{ n.text }}</span>
+            </div>
+          </template>
+          <span v-else-if="row.view.kind === 'none'" class="text-muted-foreground">未修改字段</span>
+          <span v-else class="text-muted-foreground">{{ cleanDetail(row) }}</span>
+        </div>
+      </template>
+    </VirtualTable>
 
     <ListPager
       v-if="total > 0"
@@ -155,16 +144,9 @@ import { SELECT_ALL } from '@/utils/constants'
 import Button from '@/components/ui/button.vue'
 import Input from '@/components/ui/input.vue'
 import Label from '@/components/ui/label.vue'
-import Card from '@/components/ui/card.vue'
-import Table from '@/components/ui/table.vue'
-import TableHeader from '@/components/ui/table-header.vue'
-import TableBody from '@/components/ui/table-body.vue'
-import TableRow from '@/components/ui/table-row.vue'
-import TableHead from '@/components/ui/table-head.vue'
-import TableCell from '@/components/ui/table-cell.vue'
 import Badge from '@/components/ui/badge.vue'
-import Spinner from '@/components/ui/spinner.vue'
 import ListPager from '@/components/common/ListPager.vue'
+import VirtualTable from '@/components/common/VirtualTable.vue'
 import Select from '@/components/ui/select.vue'
 import SelectTrigger from '@/components/ui/select-trigger.vue'
 import SelectContent from '@/components/ui/select-content.vue'
@@ -341,11 +323,21 @@ function cleanDetail(log) {
 const moduleOptions = Object.keys(MODULE_LABELS).filter((m) => m !== 'import' && m !== 'export')
 const actionOptions = Object.keys(ACTION_LABELS).filter((a) => a !== 'restore' && a !== 'purge')
 
+// 虚拟表列定义：与详情渲染顺序一致；grid 模板由 VirtualTable 统一推导，列宽自适应对齐。
+const auditColumns = [
+  { key: 'created_at', label: '时间', width: '10rem' },
+  { key: 'operator_name', label: '操作人', width: '7rem' },
+  { key: 'module', label: '模块', width: '5rem' },
+  { key: 'action', label: '操作', width: '5rem' },
+  { key: 'object_name', label: '对象', width: '12rem' },
+  { key: 'detail', label: '详情', width: 'minmax(280px, 1fr)' },
+]
+
 const logs = ref([])
 const rows = computed(() => logs.value.map((l) => ({ ...l, view: detailView(l) })))
 const total = ref(0)
 const page = ref(1)
-const pageSize = ref(20)
+const pageSize = ref(50)
 const loading = ref(false)
 const filter = reactive({ keyword: '', module: SELECT_ALL, action: SELECT_ALL, operator: '', start_date: '', end_date: '' })
 

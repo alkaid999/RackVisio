@@ -471,6 +471,29 @@ async def _migrate_device_oob_ip(session: AsyncSession) -> None:
     await session.flush()
 
 
+async def _migrate_hot_indexes(session: AsyncSession) -> None:
+    """热点查询索引迁移：为高频过滤/聚合列补全 B-Tree 索引（方言无关）。
+
+    这些列被统计聚合与列表过滤频繁使用（devices.status / is_asset /
+    device_type、racks.status、rooms.status、mount_records.record_status），
+    建索引可显著加速统计页与机柜/设备列表查询。纯 ``CREATE INDEX IF NOT EXISTS``
+    （SQLite / PostgreSQL 通吃），重复执行幂等；不与模型 ``index=True`` 重复，
+    避免全新库在 create_all 后再建同名索引造成冗余。
+    """
+    index_ddls = [
+        "CREATE INDEX IF NOT EXISTS ix_mount_records_record_status "
+        "ON mount_records(record_status)",
+        "CREATE INDEX IF NOT EXISTS ix_devices_status ON devices(status)",
+        "CREATE INDEX IF NOT EXISTS ix_devices_device_type ON devices(device_type)",
+        "CREATE INDEX IF NOT EXISTS ix_devices_is_asset ON devices(is_asset)",
+        "CREATE INDEX IF NOT EXISTS ix_racks_status ON racks(status)",
+        "CREATE INDEX IF NOT EXISTS ix_rooms_status ON rooms(status)",
+    ]
+    for ddl in index_ddls:
+        await session.execute(text(ddl))
+    await session.flush()
+
+
 async def seed_data(session: AsyncSession) -> None:
     """初始化种子数据（幂等）。
 
@@ -563,4 +586,5 @@ MIGRATIONS: list = [
     ("0004_rack_status", _migrate_rack_status),
     ("0005_status_rename", _migrate_status_rename),
     ("0006_device_oob_ip", _migrate_device_oob_ip),
+    ("0007_hot_indexes", _migrate_hot_indexes),
 ]

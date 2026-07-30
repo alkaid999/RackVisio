@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import datetime
 from typing import Optional, Tuple
@@ -16,6 +17,7 @@ from typing import Optional, Tuple
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.cache import Cache
+from app.core.config import settings
 from app.core.database import utcnow
 from app.core.enums import DevicePowerStatus, DeviceStatus, DeviceType, MountRecordStatus
 from app.core.exceptions import ConflictError, NotFoundError, ValidationError
@@ -28,6 +30,8 @@ from app.models.device import Device
 from app.models.mount_record import MountRecord
 from app.repositories.device_repo import DeviceRepository
 from app.repositories.interface_repo import InterfaceRepository
+
+logger = logging.getLogger(__name__)
 from app.repositories.mount_record_repo import MountRecordRepository
 from app.repositories.rack_repo import RackRepository
 from app.repositories.room_repo import RoomRepository
@@ -61,6 +65,21 @@ class DeviceService:
         self.rack_repo = RackRepository(session)
         self.room_repo = RoomRepository(session)
         self.interface_repo = InterfaceRepository(session)
+
+    # ----------------------------------------------------- 缓存失效
+    async def _invalidate_device_lists(self) -> None:
+        """失效设备主列表缓存（设备增删改会改变列表内容）。
+
+        设备改额定功率（rated_power）还会影响机柜列表的「已用功率」聚合，故同时失效
+        ``racks:list:``；机柜列表的其余失效由 rack_service 的 ``_invalidate_room_cache``
+        统一处理。缓存失效为非关键操作，Redis 临时不可用时静默忽略，避免事务已提交后
+        因缓存抛异常导致接口 500 且审计漏记。
+        """
+        try:
+            await self.cache.delete_prefix("devices:list:")
+            await self.cache.delete_prefix("racks:list:")
+        except Exception:
+            logger.warning("设备列表缓存失效失败（已忽略）", exc_info=True)
 
     # ----------------------------------------------------- 当前位置派生
     def _build_out(self, device: Device, active: Optional[MountRecord]) -> DeviceOut:
@@ -195,6 +214,7 @@ class DeviceService:
         except IntegrityError:
             await self.session.rollback()
             raise ConflictError("IP 地址冲突：该地址已被占用（可能由并发写入导致）")
+        await self._invalidate_device_lists()
         return await self._to_out(device)
 
     async def _prepare_device_import(
@@ -349,6 +369,20 @@ class DeviceService:
         keyword: Optional[str] = None,
         is_asset: Optional[bool] = None,
     ) -> Tuple[list[DeviceOut], int]:
+        # 设备主列表高频只读、半静态；短 TTL 缓存（``devices:list:`` 前缀，key 含过滤/分页
+        # 参数），30s 内重复翻页/过滤命中缓存省去多表联查与 N+1 预取。设备增删改经
+        # ``_invalidate_device_lists`` 失效；上架/下架经 rack_service 的缓存失效连带清理。
+        cache_key = (
+            f"devices:list:{page}:{size}:{rack_id or 'all'}:{device_type or 'all'}"
+            f":{status or 'all'}:{room_id or 'all'}:{keyword or 'all'}:{is_asset}"
+        )
+        cached = await self.cache.get(cache_key)
+        if cached is not None:
+            try:
+                outs = [DeviceOut.model_validate(d) for d in cached["items"]]
+                return outs, int(cached["total"])
+            except Exception:
+                logger.warning("设备列表缓存解析失败（已忽略）", exc_info=True)
         # 当前位置过滤（机柜 / 机房）→ 经上架记录表得到设备 id 集合。
         device_ids: Optional[list[str]] = None
         if rack_id:
@@ -397,6 +431,14 @@ class DeviceService:
                     room=rooms.get(a.room_id) if a else None,
                 )
             )
+        try:
+            payload = {
+                "items": [o.model_dump(mode="json") for o in outs],
+                "total": total,
+            }
+            await self.cache.set(cache_key, payload, ttl=settings.CACHE_TTL)
+        except Exception:
+            logger.warning("设备列表缓存写入失败（已忽略）", exc_info=True)
         return outs, total
 
     async def update_device(self, device_id: str, data: DeviceUpdate) -> DeviceOut:
@@ -480,6 +522,7 @@ class DeviceService:
         except IntegrityError:
             await self.session.rollback()
             raise ConflictError("IP 地址冲突：该地址已被占用（可能由并发写入导致）")
+        await self._invalidate_device_lists()
         return await self._to_out(device)
 
     async def delete_device(self, device_id: str) -> None:
@@ -492,6 +535,7 @@ class DeviceService:
             raise ConflictError("设备已上架，请先下架再删除")
         await self.device_repo.delete_device(device_id)
         await self.session.commit()
+        await self._invalidate_device_lists()
 
     # --------------------------------------------------- 上下架操作流水
     async def get_mount_history(self, device_id: str) -> list[dict]:

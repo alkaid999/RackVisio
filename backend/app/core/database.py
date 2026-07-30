@@ -7,13 +7,28 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.pool import StaticPool
 
 from app.core.config import settings
+
+# 慢查询日志：仅对超过阈值的 SQL 记录 WARNING，便于定位性能瓶颈（正常请求静默）。
+_sql_logger = logging.getLogger("sql")
+
+
+# 慢查询阈值（秒）：仅捕获明显病态的查询（>1s），避免正常/环境抖动刷屏。
+# 生产环境正常查询通常 <10ms；沙箱慢磁盘下的写入偶发 ~1s 属环境噪声，不应告警。
+SLOW_QUERY_SECONDS = 1.0
+
+
+def _log_slow_query(conn, cursor, statement, parameters, context, execution_time):
+    if execution_time and execution_time > SLOW_QUERY_SECONDS:
+        _sql_logger.warning("SLOW SQL %.3fs: %s", execution_time, statement)
 
 
 def utcnow() -> datetime:
@@ -49,6 +64,8 @@ def _create_engine():
 
 # 模块级引擎与会话工厂单例。
 engine = _create_engine()
+# 注册慢查询日志监听（监听同步底层引擎；异步引擎的 cursor 执行会回放至此）。
+event.listen(engine.sync_engine, "after_cursor_execute", _log_slow_query)
 async_session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 
