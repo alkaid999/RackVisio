@@ -94,8 +94,10 @@ services:
   # ============ Redis 缓存（看板/统计缓存层）============
   #   后端通过 REDIS_URL=redis://redis:6379/0 连接 compose 内网服务名 redis，
   #   appendonly 开启 AOF 持久化，数据落盘至 redisdata 卷。
+  #   镜像钉选到实际运行版本 7.4：redisdata 卷内的 AOF 由 7.4 写入，
+  #   降级到更低版本会导致二进制拒绝加载更高版本 AOF 而启动失败。升级前务必先备份卷。
   redis:
-    image: redis:7.2-alpine
+    image: redis:7.4-alpine
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
