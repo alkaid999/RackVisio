@@ -156,8 +156,8 @@
                   </dd>
                 </div>
               </div>
-              <!-- 删除类操作：展示删除前快照 -->
-              <div v-else-if="oldItems(activeDetail).length" class="diff-block">
+              <!-- 删除类操作：展示删除前快照（仅 DELETE 显示全量旧值） -->
+              <div v-else-if="isDeleteAction(activeRow) && oldItems(activeDetail).length" class="diff-block">
                 <div class="diff-head">删除前内容</div>
                 <dl class="detail-list">
                   <div v-for="(item, i) in oldItems(activeDetail)" :key="'o' + i" class="detail-row">
@@ -409,6 +409,7 @@ const FIELD_LABELS = {
   record_status: '记录状态',
   // 账号字段
   username: '用户名',
+  password: '密码',
   password_hash: '密码',
   permissions: '权限',
   disabled: '已禁用',
@@ -500,6 +501,11 @@ function dataItems(detail) {
 }
 
 // 弹窗里的「删除前快照」字段列表：从 detail.old + detail.old_names 拼出可读内容。
+function isDeleteAction(row) {
+  if (!row) return false
+  return row.action === 'delete' || row.method === 'DELETE'
+}
+
 function oldItems(detail) {
   const old = detail?.old
   if (!old || typeof old !== 'object') return []

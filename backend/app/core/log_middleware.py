@@ -294,6 +294,10 @@ def _build_diff(old_dict: dict, new_data: dict, old_names: dict, new_names: dict
         return diff
     for key, new_val in new_data.items():
         if key in _SENSITIVE:
+            # 敏感字段（密码等）：仅记录「已变更」，不泄漏明文。
+            # masked_data 中非空敏感字段已被遮蔽为 "******"，出现即代表用户提交了新值。
+            if new_val == "******":
+                diff.append({"field": key, "old": "******", "new": "******"})
             continue
         if key not in old_dict:
             # 实体无此列（关系/计算字段）：仅在提供有意义新值时记一笔「设为」。
@@ -558,6 +562,9 @@ class OperationLogMiddleware(BaseHTTPMiddleware):
                 user = getattr(request.state, "user", None) or {}
                 masked_data = _mask_sensitive(data)
                 old_dict, old_names = old_snapshot or (None, {})
+                # 旧值快照中的敏感字段（password_hash/salt）同样遮蔽，不落库明文哈希。
+                if old_dict:
+                    old_dict = _mask_sensitive(old_dict)
                 detail = {
                     "data": masked_data,
                     "old": old_dict,
