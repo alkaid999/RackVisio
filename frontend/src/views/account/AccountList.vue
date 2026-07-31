@@ -80,7 +80,7 @@
         <FormItem name="display_name" label="显示名">
           <Input v-model="form.display_name" :disabled="viewMode || saving" placeholder="可选，如「张三」" autocomplete="off" />
         </FormItem>
-        <FormItem v-if="mode === 'create' || (mode === 'edit' && !viewMode)" :name="mode === 'create' ? 'password' : 'password_edit'" :label="mode === 'create' ? '密码' : '重置密码'" :icon="Lock">
+        <FormItem v-if="mode === 'create' || (mode === 'edit' && !viewMode)" name="password" :label="mode === 'create' ? '密码' : '重置密码'" :icon="Lock">
           <Input v-model="form.password" type="password" :disabled="viewMode || saving" :placeholder="mode === 'create' ? '6-128 个字符' : '留空表示不修改'" autocomplete="new-password" />
         </FormItem>
         <FormItem name="role" label="角色" :icon="ShieldCheck">
@@ -183,7 +183,7 @@ import TableHead from '@/components/ui/table-head.vue'
 import TableCell from '@/components/ui/table-cell.vue'
 
 const auth = useAuthStore()
-const { success } = useToast()
+const { success, warning } = useToast()
 const { confirm } = useConfirm()
 
 // 账号管理（创建 / 编辑 / 删除）需 account:edit。
@@ -298,7 +298,10 @@ function openView(row) {
 async function onSubmit() {
   if (saving.value) return
   const okValid = await (formRef.value && formRef.value.validate ? formRef.value.validate() : Promise.resolve(true))
-  if (okValid !== true) return
+  if (okValid !== true) {
+    warning('请检查表单填写')
+    return
+  }
 
   saving.value = true
   try {
