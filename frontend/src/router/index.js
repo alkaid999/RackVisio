@@ -70,7 +70,7 @@ const routes = [
     path: '/links',
     name: 'LinkList',
     component: () => import('@/views/link/LinkList.vue'),
-    meta: { title: '连接总览', requiresAuth: true, permission: 'link:view' },
+    meta: { title: '链路总览', requiresAuth: true, permission: 'link:view' },
   },
   {
     path: '/3d',

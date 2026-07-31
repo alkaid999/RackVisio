@@ -2,7 +2,7 @@
   <div class="link-list">
     <div class="page-head">
       <div>
-        <h2 class="page-title">连接总览</h2>
+        <h2 class="page-title">链路总览</h2>
         <p class="page-sub">设备间物理连接全景（本端/对端设备与接口、连接介质、线缆长度）；可勾选「孤儿口」查看尚未连线的接口</p>
       </div>
       <Button
@@ -63,10 +63,10 @@
       </div>
     </div>
 
-    <!-- 连接总览（扁平全局表） -->
+    <!-- 链路总览（扁平全局表） -->
     <Card class="mb-5">
       <template #header>
-        <span class="section-title">连接总览（{{ totalCount }} 条）</span>
+        <span class="section-title">链路总览（{{ totalCount }} 条）</span>
       </template>
 
       <div v-if="loading" class="flex justify-center py-16">
@@ -149,9 +149,8 @@
             <TableCell class="text-right">
               <div class="flex justify-end gap-1">
                 <template v-if="row.kind === 'link'">
-                  <Button variant="ghost" size="icon" aria-label="查看" title="查看" @click="openView(row)"><Eye class="h-4 w-4" /></Button>
                   <Button v-if="canEdit" variant="ghost" size="icon" aria-label="编辑" title="编辑" @click="openEdit(row)"><Pencil class="h-4 w-4" /></Button>
-                  <Button v-if="canEdit" variant="ghost" size="icon" class="text-destructive hover:text-destructive" aria-label="删除" title="删除" @click="onDelete(row)"><Trash2 class="h-4 w-4" /></Button>
+                  <Button v-if="canEdit" variant="ghost" size="icon" class="text-destructive hover:text-destructive" aria-label="断开" title="断开" @click="onDelete(row)"><Unplug class="h-4 w-4" /></Button>
                 </template>
                 <Button v-else variant="ghost" size="icon" aria-label="查看设备" title="查看设备" @click="goDevice(row.sourceDeviceId)"><ExternalLink class="h-4 w-4" /></Button>
               </div>
@@ -184,7 +183,7 @@ import interfaceApi from '@/api/interface'
 import deviceApi from '@/api/device'
 import { useAuthStore } from '@/stores/auth'
 import LinkFormDialog from '@/views/link/LinkFormDialog.vue'
-import { Eye, Pencil, Trash2, TriangleAlert, Unplug, ExternalLink } from 'lucide-vue-next'
+import { Pencil, Unplug, TriangleAlert, ExternalLink } from 'lucide-vue-next'
 import {
   LINK_MEDIUM_LABELS,
   LINK_MEDIUM_COLORS,
@@ -217,7 +216,7 @@ const { success } = useToast()
 const { confirm } = useConfirm()
 const auth = useAuthStore()
 const router = useRouter()
-// 新建 / 编辑 / 删除链路需 link:edit；只读用户隐藏全部写操作按钮。
+// 新建 / 编辑 / 断开链路需 link:edit；只读用户隐藏全部写操作按钮。
 const canEdit = computed(() => auth.hasPermission('link:edit'))
 
 // 连接器筛选选项：双绞线与光纤连接器合并（不随介质联动，仅作宽松过滤）。
@@ -391,32 +390,26 @@ function openEdit(row) {
   dialogMode.value = 'edit'
   dialogViewMode.value = false
   editLinkId.value = row.id
-  editLink.value = row
-  dialogVisible.value = true
-}
-// 查看模式：普通用户无需编辑权限即可只读浏览链路详情。
-function openView(row) {
-  dialogMode.value = 'edit'
-  dialogViewMode.value = true
-  editLinkId.value = row.id
-  editLink.value = row
+  // LinkFormDialog 编辑模式读取 snake_case 字段（source_device_name 等），
+  // 而 rows 是 camelCase 子集；须从原始 allLinks 取回后端对象再传，否则端点卡本端/对端设备名全空。
+  editLink.value = allLinks.value.find((l) => l.id === row.id) || row
   dialogVisible.value = true
 }
 async function onDelete(row) {
   const ok = await confirm({
-    title: '提示',
-    description: `确认删除链路「${row.sourceDeviceName} ↔ ${row.targetDeviceName}」？`,
+    title: '断开链路',
+    description: `确认断开「${row.sourceDeviceName} ↔ ${row.targetDeviceName}」？断开后两端接口状态将回落为未连接。`,
     variant: 'danger',
-    confirmText: '删除',
+    confirmText: '断开',
     cancelText: '取消',
   })
   if (!ok) return
   try {
     await linkApi.remove(row.id)
-    success('删除成功')
+    success('已断开')
     loadAll()
   } catch (e) {
-    // 取消
+    // 拦截器提示
   }
 }
 function onSaved() {
