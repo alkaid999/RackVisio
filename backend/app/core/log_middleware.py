@@ -56,7 +56,9 @@ _WRITE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 # 不记操作日志的路径前缀：认证域由 login_logs 单独负责。
 _EXEMPT_PREFIX = f"{settings.API_PREFIX}/auth"
 # 导入 / 导出不审计（业务决策），且请求体可能极大，直接跳过整条日志。
-_SKIP_HINTS = ("/import", "/export")
+# check-u 是只读查询（但用 POST），无业务写语义，不审计。
+# cleanup 是日志自清理，由服务器访问日志可追溯，不写入审计表避免递归。
+_SKIP_HINTS = ("/import", "/export", "/check-u", "/cleanup")
 # 请求体抓取上限（字节），超过不抓 detail（如超大 payload）。
 _BODY_SIZE_LIMIT = 4096
 
@@ -198,6 +200,8 @@ def _classify(path: str) -> tuple[str | None, type | None, int]:
         return "interface", DeviceInterface, 0
     if "links" in segs:
         return "link", DeviceLink, 0
+    if "mount" in segs or "unmount" in segs:
+        return "mount-record", MountRecord, 0
     if "mount-records" in segs:
         return "mount-record", MountRecord, 0
     if "accounts" in segs:
@@ -304,8 +308,16 @@ def _build_diff(old_dict: dict, new_data: dict, old_names: dict, new_names: dict
     return diff
 
 
-# HTTP 方法 → 操作动作归一化键（前端「操作」列据此只展示新增 / 更新 / 删除三态）。
+# HTTP 方法 → 操作动作归一化键（前端「操作」列据此展示）。
 _ACTION_MAP = {"POST": "create", "PUT": "update", "PATCH": "update", "DELETE": "delete"}
+
+# 路径段 → 语义动作映射表：POST 请求中若路径包含以下段，
+# 用对应的业务动作替代泛化的 "create"。新增操作只需加一行配置。
+_PATH_ACTION_OVERRIDES: dict[str, str] = {
+    "mount": "mount",        # 设备上架
+    "unmount": "unmount",    # 设备下架
+    "adjust": "adjust",      # 耗材库存调整
+}
 
 
 def _device_id_from_path(path: str) -> str | None:
@@ -451,8 +463,31 @@ async def _resolve_target(
     if resource_key == "mount-record":
         dev = all_names.get("device_id")
         rack = all_names.get("rack_id")
+        # 上架/下架路径 /racks/{rack_id}/mount|unmount：body 不含 rack_id，从路径提取。
+        if not rack:
+            path_segs = [seg for seg in path.split("/") if seg]
+            for i, seg in enumerate(path_segs):
+                if seg == "racks" and i + 1 < len(path_segs):
+                    rack = await _name_of(session, Rack, path_segs[i + 1])
+                    break
         if dev or rack:
-            return f"{dev or '?'} @ {rack or '?'}"
+            # 补充 U 位信息，让操作对象更完整（如「服务器A @ 机柜B U5-U6」）。
+            u_info = ""
+            start_u = body_d.get("start_u") or old_d.get("start_u")
+            occ_u = body_d.get("occupied_u") or old_d.get("occupied_u")
+            if start_u is not None:
+                u_info = f" U{start_u}"
+                if occ_u and int(occ_u) > 1:
+                    u_info = f" U{start_u}-U{int(start_u) + int(occ_u) - 1}"
+            return f"{dev or '?'} @ {rack or '?'}{u_info}"
+
+    if resource_key == "account":
+        # User 模型无 name 字段，用 display_name 或 username 作为操作对象。
+        uname = body_d.get("display_name") or body_d.get("username")
+        if not uname:
+            uname = old_d.get("display_name") or old_d.get("username")
+        if uname:
+            return s(uname)
 
     if resource_key == "rack" and "/positions" in path:
         # 机柜平面图坐标更新：按位置数组里的机柜 id 解析可读机柜名（含编号），
@@ -546,8 +581,13 @@ class OperationLogMiddleware(BaseHTTPMiddleware):
                         detail["diff"] = _build_diff(
                             old_dict, masked_data, old_names, detail["names"]
                         )
-                    # 操作动作（create/update/delete）与操作对象可读名称（设备名 / 机柜名等）。
+                    # 操作动作：先按 HTTP 方法取默认值，再用路径语义映射表覆盖。
                     action = _ACTION_MAP.get(request.method)
+                    clean_segs = [seg for seg in path.split("/") if seg]
+                    for seg, override_action in _PATH_ACTION_OVERRIDES.items():
+                        if seg in clean_segs:
+                            action = override_action
+                            break
                     # 机柜平面图坐标批量更新（POST /racks/positions）：请求体带 id 走更新、
                     # 不带 id 走新增。此前机械按 HTTP 方法把 POST 记为 create，导致平面移动
                     # 被误记为「新增」，此处按请求体是否含 id 纠正动作，与后端 update_positions
@@ -560,6 +600,10 @@ class OperationLogMiddleware(BaseHTTPMiddleware):
                                 if any(isinstance(p, dict) and p.get("id") for p in positions)
                                 else "create"
                             )
+                    # DELETE 操作：把旧实体快照的可读摘要写入 detail，
+                    # 让前端能展示「删除了什么」而非只有一个 UUID。
+                    if request.method == "DELETE" and old_dict:
+                        detail["old_names"] = old_names
                     target = await _resolve_target(
                         resource_key, masked_data, old_dict, detail["names"], old_names, session, path
                     )

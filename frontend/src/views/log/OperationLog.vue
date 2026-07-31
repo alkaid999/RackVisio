@@ -142,7 +142,7 @@
               </div>
             </div>
 
-            <div v-if="!hasDetail(activeDetail)" class="text-muted-foreground text-sm py-2">该记录无详细内容（历史数据、读请求、导入/导出，或删除类操作不展示操作前内容）。</div>
+            <div v-if="!hasDetail(activeDetail)" class="text-muted-foreground text-sm py-2">该记录无详细内容（历史数据、读请求或导入/导出）。</div>
             <template v-else>
               <!-- 修改类操作：字段级变更（原值 → 新值） -->
               <div v-if="diffItems(activeDetail).length" class="diff-block">
@@ -155,6 +155,16 @@
                     <span class="diff-new">{{ d.new }}</span>
                   </dd>
                 </div>
+              </div>
+              <!-- 删除类操作：展示删除前快照 -->
+              <div v-else-if="oldItems(activeDetail).length" class="diff-block">
+                <div class="diff-head">删除前内容</div>
+                <dl class="detail-list">
+                  <div v-for="(item, i) in oldItems(activeDetail)" :key="'o' + i" class="detail-row">
+                    <dt class="detail-label">{{ item.label }}</dt>
+                    <dd class="detail-value">{{ item.value }}</dd>
+                  </div>
+                </dl>
               </div>
               <!-- 新增/默认：请求体字段 -->
               <dl v-else class="detail-list">
@@ -190,12 +200,14 @@ import SelectItem from '@/components/ui/select-item.vue'
 
 const formatTime = formatDateTime
 
-// 操作动作筛选（后端归一化键：create=新增 / update=更新 / delete=删除）。
-// 与用户诉求一致：操作只看三大类，不再区分 PUT/PATCH 等方法。
+// 操作动作筛选（后端归一化键）。
 const actionOptions = [
   { value: 'create', label: '新增' },
   { value: 'update', label: '更新' },
   { value: 'delete', label: '删除' },
+  { value: 'mount', label: '上架' },
+  { value: 'unmount', label: '下架' },
+  { value: 'adjust', label: '库存调整' },
 ]
 // 资源类型筛选下拉（与后端 operation_logs.resource 归一化键一致）
 const resourceOptions = [
@@ -213,7 +225,7 @@ const resourceOptions = [
 const columns = [
   { key: 'created_at', label: '时间', width: '11rem' },
   { key: 'operator_name', label: '操作人', width: '8rem' },
-  { key: 'operation', label: '操作', width: '6rem' },
+  { key: 'operation', label: '操作', width: '7.5rem' },
   { key: 'resType', label: '资源类型', width: '7rem' },
   { key: 'target', label: '操作对象', width: 'minmax(160px, 1.3fr)' },
   { key: 'ip', label: 'IP', width: '10rem' },
@@ -288,11 +300,11 @@ function openDetail(row) {
 function hasDetail(d) {
   if (!d) return false
   if (d.diff && d.diff.length) return true
+  // 删除类操作：有旧值快照即视为有详情（展示「删除前内容」）。
+  if (d.old && typeof d.old === 'object' && Object.keys(d.old).length > 0) return true
   const data = d.data
   if (Array.isArray(data)) return data.length > 0
   if (!data || typeof data !== 'object') return false
-  // 删除类操作的 data 只有中间件从路径回填的 {id}，展示一串裸 UUID 毫无价值
-  // （对象名已在「操作对象」列呈现），故视为无详情。
   const keys = Object.keys(data).filter((k) => k !== 'id')
   return keys.length > 0
 }
@@ -314,7 +326,7 @@ const RESOURCE_LABELS = {
 }
 // HTTP 方法 → 动作（兜底用，优先 row.action）。PUT/PATCH 合并为「更新」。
 const METHOD_VERB = { POST: '新增', PUT: '更新', PATCH: '更新', DELETE: '删除' }
-const ACTION_VERB = { create: '新增', update: '更新', delete: '删除' }
+const ACTION_VERB = { create: '新增', update: '更新', delete: '删除', mount: '上架', unmount: '下架', adjust: '库存调整' }
 
 const STATUS_LABELS = {
   200: '成功', 201: '已创建', 202: '已接受', 204: '无内容',
@@ -387,6 +399,20 @@ const FIELD_LABELS = {
   department: '部门',
   spec: '规格',
   is_asset: '是否资产',
+  // 上下架记录字段
+  start_u: '起始U位',
+  occupied_u: '占用U数',
+  mounted_at: '上架时间',
+  mounted_by: '上架人',
+  unmounted_at: '下架时间',
+  unmounted_by: '下架人',
+  record_status: '记录状态',
+  // 账号字段
+  username: '用户名',
+  password_hash: '密码',
+  permissions: '权限',
+  disabled: '已禁用',
+  current_quantity: '当前库存',
 }
 
 function cap(s) {
@@ -473,11 +499,33 @@ function dataItems(detail) {
   })
 }
 
-// 动作药丸（语义化配色）：create=绿 / update=琥珀 / delete=红。
+// 弹窗里的「删除前快照」字段列表：从 detail.old + detail.old_names 拼出可读内容。
+function oldItems(detail) {
+  const old = detail?.old
+  if (!old || typeof old !== 'object') return []
+  const oldNames = detail?.old_names || {}
+  // 过滤无意义字段（纯 ID、密码哈希等）。
+  const skip = new Set(['password_hash', 'salt'])
+  return Object.entries(old)
+    .filter(([k, v]) => v != null && v !== '' && !skip.has(k))
+    .map(([k, v]) => {
+      const label = FIELD_LABELS[k] || prettyKey(k)
+      let value
+      if (oldNames[k]) value = `${oldNames[k]}`
+      else if (typeof v === 'object') value = JSON.stringify(v)
+      else value = String(v)
+      return { label, value }
+    })
+}
+
+// 动作药丸（语义化配色）：create=绿 / update=琥珀 / delete=红 / mount=蓝 / unmount=紫 / adjust=青。
 const ACTION_BADGE = {
   create: 'badge--create',
   update: 'badge--update',
   delete: 'badge--delete',
+  mount: 'badge--mount',
+  unmount: 'badge--unmount',
+  adjust: 'badge--adjust',
 }
 function actionBadgeClass(a) {
   return ACTION_BADGE[a] || 'badge--default'
@@ -767,6 +815,18 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onEsc))
 .badge--delete {
   background: hsl(0 84% 60% / 0.14);
   color: hsl(0 84% 52%);
+}
+.badge--mount {
+  background: hsl(210 80% 52% / 0.14);
+  color: hsl(210 80% 44%);
+}
+.badge--unmount {
+  background: hsl(270 70% 55% / 0.14);
+  color: hsl(270 70% 48%);
+}
+.badge--adjust {
+  background: hsl(180 70% 42% / 0.14);
+  color: hsl(180 70% 36%);
 }
 .badge--default {
   background: hsl(var(--muted));

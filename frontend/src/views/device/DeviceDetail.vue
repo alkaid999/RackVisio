@@ -309,7 +309,7 @@
         </template>
       </Dialog>
 
-      <!-- 编辑链路弹窗（设备视角：复用连接总览的 LinkFormDialog，编辑模式仅改链路属性） -->
+      <!-- 编辑链路弹窗（设备视角：复用链路总览的 LinkFormDialog，编辑模式仅改链路属性） -->
       <LinkFormDialog
         v-model:visible="linkEditVisible"
         mode="edit"
@@ -413,7 +413,7 @@ const listRef = ref(null)
 // 设备视角链路（本设备接口 → 对端设备/接口）。
 const links = ref([])
 const linkLoading = ref(false)
-// 链路编辑弹窗状态（复用连接总览的 LinkFormDialog，编辑模式仅改链路属性，不改两端）。
+// 链路编辑弹窗状态（复用链路总览的 LinkFormDialog，编辑模式仅改链路属性，不改两端）。
 const linkEditVisible = ref(false)
 const linkEditTarget = ref(null)
 
