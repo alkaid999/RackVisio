@@ -203,7 +203,7 @@
             </div>
             <div v-if="canEditLink" class="link-view__actions">
               <Button variant="ghost" size="icon-sm" aria-label="编辑" title="编辑" @click="openEditLink(lk)"><Pencil class="h-3.5 w-3.5" /></Button>
-              <Button variant="ghost" size="icon-sm" class="text-destructive hover:text-destructive" aria-label="断开" title="断开" @click="onUnlink(lk)"><Unlink class="h-3.5 w-3.5" /></Button>
+              <Button variant="ghost" size="icon-sm" class="text-destructive hover:text-destructive" aria-label="断开" title="断开" @click="onUnlink(lk)"><Unplug class="h-3.5 w-3.5" /></Button>
             </div>
           </li>
         </ul>
@@ -344,7 +344,7 @@ import DeviceTypeTag from '@/components/device/DeviceTypeTag.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import DeviceForm from '@/views/device/DeviceForm.vue'
 import LinkFormDialog from '@/views/link/LinkFormDialog.vue'
-import { Network, ServerCog, Cable, ArrowRight, Unlink, Zap } from 'lucide-vue-next'
+import { Network, ServerCog, Cable, ArrowRight, Unplug, Zap } from 'lucide-vue-next'
 import {
   Pencil,
   Trash2,
