@@ -97,10 +97,16 @@ const routes = [
     meta: { title: '账号管理', requiresAuth: true, permission: 'account:view' },
   },
   {
-    path: '/audit-logs',
-    name: 'AuditLog',
-    component: () => import('@/views/audit/AuditLog.vue'),
-    meta: { title: '操作审计', requiresAuth: true, permission: 'account:view' },
+    path: '/logs/operations',
+    name: 'OperationLog',
+    component: () => import('@/views/log/OperationLog.vue'),
+    meta: { title: '操作日志', requiresAuth: true, permission: 'account:view' },
+  },
+  {
+    path: '/logs/logins',
+    name: 'LoginLog',
+    component: () => import('@/views/log/LoginLog.vue'),
+    meta: { title: '登录日志', requiresAuth: true, permission: 'account:view' },
   },
   {
     path: '/consumables',

@@ -16,11 +16,9 @@ from __future__ import annotations
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.audit import log_audit
-from app.core.audit_diff import build_create_detail, build_update_detail
 from app.core.deps import get_db
 from app.core.rbac import get_current_user, require_permission
 from app.schemas.common import ok, paginated
@@ -45,23 +43,6 @@ def _operator(payload: dict) -> Optional[str]:
     return payload.get("user_name") or payload.get("sub")
 
 
-def _ident(obj):
-    """从 ORM 模型或 dict 提取 (id, name)，用于审计对象标识。"""
-    if obj is None:
-        return None, None
-    if isinstance(obj, dict):
-        return obj.get("id"), obj.get("name")
-    return getattr(obj, "id", None), getattr(obj, "name", None)
-
-
-# 更新审计要记录的字段（中文标签）
-CONSUMABLE_TYPE_LABELS = {"name": "名称", "description": "描述"}
-CONSUMABLE_CATEGORY_LABELS = {"name": "名称", "description": "描述"}
-CONSUMABLE_ITEM_LABELS = {"name": "名称", "spec": "规格", "unit": "单位", "remark": "备注"}
-# 创建审计标签（名称已作为对象名展示，不再重复）。
-CONSUMABLE_ITEM_CREATE_LABELS = {"spec": "规格", "unit": "单位", "remark": "备注"}
-
-
 router = APIRouter(prefix="/consumables", tags=["consumables"])
 
 
@@ -73,12 +54,9 @@ async def list_types(db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/types", dependencies=[Depends(require_permission("consumable:edit"))])
-async def create_type(payload: ConsumableTypeCreate, request: Request, db: AsyncSession = Depends(get_db)):
+async def create_type(payload: ConsumableTypeCreate, db: AsyncSession = Depends(get_db)):
     svc = ConsumableService(db)
     obj = await svc.create_type(payload)
-    _id, name = _ident(obj)
-    detail = build_create_detail(obj, CONSUMABLE_TYPE_LABELS)
-    await log_audit(request=request, module="consumable", action="create", object_type="耗材类型", object_id=_id, object_name=name, detail=detail)
     return ok(obj)
 
 
@@ -90,24 +68,17 @@ async def get_type(type_id: str, db: AsyncSession = Depends(get_db)):
 
 @router.put("/types/{type_id}", dependencies=[Depends(require_permission("consumable:edit"))])
 async def update_type(
-    type_id: str, payload: ConsumableTypeUpdate, request: Request, db: AsyncSession = Depends(get_db)
+    type_id: str, payload: ConsumableTypeUpdate, db: AsyncSession = Depends(get_db)
 ):
     svc = ConsumableService(db)
-    before = await svc.get_type(type_id)
     obj = await svc.update_type(type_id, payload)
-    _id, name = _ident(obj)
-    detail = build_update_detail(before, obj, CONSUMABLE_TYPE_LABELS)
-    await log_audit(request=request, module="consumable", action="update", object_type="耗材类型", object_id=_id, object_name=name, detail=detail)
     return ok(obj)
 
 
 @router.delete("/types/{type_id}", dependencies=[Depends(require_permission("consumable:edit"))])
-async def delete_type(type_id: str, request: Request, db: AsyncSession = Depends(get_db)):
+async def delete_type(type_id: str, db: AsyncSession = Depends(get_db)):
     svc = ConsumableService(db)
-    obj = await svc.get_type(type_id)
-    _id, name = _ident(obj)
     await svc.delete_type(type_id)
-    await log_audit(request=request, module="consumable", action="delete", object_type="耗材类型", object_id=_id, object_name=name, detail=f"删除耗材类型「{name}」")
     return ok()
 
 
@@ -126,13 +97,10 @@ async def list_categories(type_id: str, db: AsyncSession = Depends(get_db)):
     dependencies=[Depends(require_permission("consumable:edit"))],
 )
 async def create_category(
-    type_id: str, payload: ConsumableCategoryCreate, request: Request, db: AsyncSession = Depends(get_db)
+    type_id: str, payload: ConsumableCategoryCreate, db: AsyncSession = Depends(get_db)
 ):
     svc = ConsumableService(db)
     obj = await svc.create_category(type_id, payload)
-    _id, name = _ident(obj)
-    detail = build_create_detail(obj, CONSUMABLE_CATEGORY_LABELS)
-    await log_audit(request=request, module="consumable", action="create", object_type="耗材分类", object_id=_id, object_name=name, detail=detail)
     return ok(obj)
 
 
@@ -150,14 +118,10 @@ async def get_category(category_id: str, db: AsyncSession = Depends(get_db)):
     dependencies=[Depends(require_permission("consumable:edit"))],
 )
 async def update_category(
-    category_id: str, payload: ConsumableCategoryUpdate, request: Request, db: AsyncSession = Depends(get_db)
+    category_id: str, payload: ConsumableCategoryUpdate, db: AsyncSession = Depends(get_db)
 ):
     svc = ConsumableService(db)
-    before = await svc.get_category(category_id)
     obj = await svc.update_category(category_id, payload)
-    _id, name = _ident(obj)
-    detail = build_update_detail(before, obj, CONSUMABLE_CATEGORY_LABELS)
-    await log_audit(request=request, module="consumable", action="update", object_type="耗材分类", object_id=_id, object_name=name, detail=detail)
     return ok(obj)
 
 
@@ -165,12 +129,9 @@ async def update_category(
     "/categories/{category_id}",
     dependencies=[Depends(require_permission("consumable:edit"))],
 )
-async def delete_category(category_id: str, request: Request, db: AsyncSession = Depends(get_db)):
+async def delete_category(category_id: str, db: AsyncSession = Depends(get_db)):
     svc = ConsumableService(db)
-    obj = await svc.get_category(category_id)
-    _id, name = _ident(obj)
     await svc.delete_category(category_id)
-    await log_audit(request=request, module="consumable", action="delete", object_type="耗材分类", object_id=_id, object_name=name, detail=f"删除耗材分类「{name}」")
     return ok()
 
 
@@ -194,15 +155,11 @@ async def list_items(
 @router.post("/items", dependencies=[Depends(require_permission("consumable:edit"))])
 async def create_item(
     payload: ConsumableItemCreate,
-    request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
     svc = ConsumableService(db)
     obj = await svc.create_item(payload, operator=_operator(current_user))
-    _id, name = _ident(obj)
-    detail = build_create_detail(obj, CONSUMABLE_ITEM_CREATE_LABELS)
-    await log_audit(request=request, module="consumable", action="create", object_type="耗材", object_id=_id, object_name=name, detail=detail)
     return ok(obj)
 
 
@@ -214,24 +171,17 @@ async def get_item(item_id: str, db: AsyncSession = Depends(get_db)):
 
 @router.put("/items/{item_id}", dependencies=[Depends(require_permission("consumable:edit"))])
 async def update_item(
-    item_id: str, payload: ConsumableItemUpdate, request: Request, db: AsyncSession = Depends(get_db)
+    item_id: str, payload: ConsumableItemUpdate, db: AsyncSession = Depends(get_db)
 ):
     svc = ConsumableService(db)
-    before = await svc.get_item(item_id)
     obj = await svc.update_item(item_id, payload)
-    _id, name = _ident(obj)
-    detail = build_update_detail(before, obj, CONSUMABLE_ITEM_LABELS)
-    await log_audit(request=request, module="consumable", action="update", object_type="耗材", object_id=_id, object_name=name, detail=detail)
     return ok(obj)
 
 
 @router.delete("/items/{item_id}", dependencies=[Depends(require_permission("consumable:edit"))])
-async def delete_item(item_id: str, request: Request, db: AsyncSession = Depends(get_db)):
+async def delete_item(item_id: str, db: AsyncSession = Depends(get_db)):
     svc = ConsumableService(db)
-    obj = await svc.get_item(item_id)
-    _id, name = _ident(obj)
     await svc.delete_item(item_id)
-    await log_audit(request=request, module="consumable", action="delete", object_type="耗材", object_id=_id, object_name=name, detail=f"删除耗材「{name}」")
     return ok()
 
 
@@ -243,14 +193,11 @@ async def delete_item(item_id: str, request: Request, db: AsyncSession = Depends
 async def adjust_stock(
     item_id: str,
     payload: StockAdjustRequest,
-    request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
     svc = ConsumableService(db)
     obj = await svc.adjust_stock(item_id, payload, operator=_operator(current_user))
-    _id, name = _ident(obj)
-    await log_audit(request=request, module="consumable", action="update", object_type="耗材", object_id=_id, object_name=name, detail=f"库存变动：{payload.operation_type} {payload.quantity}")
     return ok(obj)
 
 

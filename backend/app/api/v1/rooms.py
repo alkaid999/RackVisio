@@ -4,11 +4,9 @@ from __future__ import annotations
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.audit import log_audit
-from app.core.audit_diff import build_create_detail, build_update_detail
 from app.core.deps import get_db
 from app.core.rbac import require_permission
 from app.schemas.common import ImportResult, ok, paginated
@@ -20,28 +18,6 @@ from app.services.rack_service import RackService
 from app.services.room_service import RoomService
 
 router = APIRouter(prefix="/rooms", tags=["rooms"])
-
-# 更新审计要记录的字段（中文标签）
-ROOM_FIELD_LABELS = {
-    "name": "名称",
-    "code": "编号",
-    "alias": "别名",
-    "area": "区域",
-    "building": "楼宇",
-    "floor": "楼层",
-    "address": "地址",
-    "status": "状态",
-}
-
-# 创建审计要罗列的初始关键属性（名称已作为对象名展示，不再重复）。
-ROOM_CREATE_LABELS = {
-    "code": "编号",
-    "area": "区域",
-    "building": "楼宇",
-    "floor": "楼层",
-    "address": "地址",
-    "status": "状态",
-}
 
 
 @router.get("", dependencies=[Depends(require_permission("room:view"))])
@@ -63,7 +39,6 @@ async def list_rooms(
 
 @router.get("/export", dependencies=[Depends(require_permission("room:view"))])
 async def export_rooms(
-    request: Request,
     db: AsyncSession = Depends(get_db),
     area: Optional[str] = None,
     status: Optional[str] = None,
@@ -74,19 +49,12 @@ async def export_rooms(
     items, _ = await svc.list_rooms(
         page=1, size=100000, area=area, status=status, keyword=keyword
     )
-    await log_audit(
-        request=request,
-        module="room",
-        action="export",
-        object_type="机房",
-        detail=f"导出机房 {len(items)} 个",
-    )
     return ok([RoomOut.model_validate(r).model_dump() for r in items])
 
 
 @router.post("/import", dependencies=[Depends(require_permission("room:edit"))])
 async def import_rooms(
-    payload: RoomImportRowsRequest, request: Request, db: AsyncSession = Depends(get_db)
+    payload: RoomImportRowsRequest, db: AsyncSession = Depends(get_db)
 ):
     """批量导入机房：前端解析文件为 JSON 行后提交，后端逐行校验并创建。
 
@@ -94,22 +62,13 @@ async def import_rooms(
     """
     svc = RoomService(db)
     result = await svc.import_rooms(payload.items)
-    await log_audit(
-        request=request,
-        module="room",
-        action="import",
-        object_type="机房",
-        detail=f"导入机房：成功 {result.created} 个，失败 {result.failed} 个",
-    )
     return ok(ImportResult.model_validate(result))
 
 
 @router.post("", dependencies=[Depends(require_permission("room:edit"))])
-async def create_room(payload: RoomCreate, request: Request, db: AsyncSession = Depends(get_db)):
+async def create_room(payload: RoomCreate, db: AsyncSession = Depends(get_db)):
     svc = RoomService(db)
     room = await svc.create_room(payload)
-    detail = build_create_detail(room, ROOM_CREATE_LABELS)
-    await log_audit(request=request, module="room", action="create", object_type="机房", object_id=room.id, object_name=room.name, detail=detail)
     return ok(RoomOut.model_validate(room))
 
 
@@ -122,23 +81,17 @@ async def get_room(room_id: str, db: AsyncSession = Depends(get_db)):
 
 @router.put("/{room_id}", dependencies=[Depends(require_permission("room:edit"))])
 async def update_room(
-    room_id: str, payload: RoomUpdate, request: Request, db: AsyncSession = Depends(get_db)
+    room_id: str, payload: RoomUpdate, db: AsyncSession = Depends(get_db)
 ):
     svc = RoomService(db)
-    before = RoomOut.model_validate(await svc.get_room(room_id))
     room = await svc.update_room(room_id, payload)
-    detail = build_update_detail(before, RoomOut.model_validate(room), ROOM_FIELD_LABELS)
-    await log_audit(request=request, module="room", action="update", object_type="机房", object_id=room.id, object_name=room.name, detail=detail)
     return ok(RoomOut.model_validate(room))
 
 
 @router.delete("/{room_id}", dependencies=[Depends(require_permission("room:edit"))])
-async def delete_room(room_id: str, request: Request, db: AsyncSession = Depends(get_db)):
+async def delete_room(room_id: str, db: AsyncSession = Depends(get_db)):
     svc = RoomService(db)
-    room = await svc.get_room(room_id)
-    name = room.name
     await svc.delete_room(room_id)
-    await log_audit(request=request, module="room", action="delete", object_type="机房", object_id=room_id, object_name=name, detail=f"删除机房「{name}」")
     return ok()
 
 
@@ -171,21 +124,12 @@ async def room_devices(room_id: str, db: AsyncSession = Depends(get_db)):
 
 @router.post("/{room_id}/racks", dependencies=[Depends(require_permission("rack:edit"))])
 async def create_rack_in_room(
-    room_id: str, payload: RackCreate, request: Request, db: AsyncSession = Depends(get_db)
+    room_id: str, payload: RackCreate, db: AsyncSession = Depends(get_db)
 ):
     svc = RackService(db)
-    room = await RoomService(db).get_room(room_id)  # 校验存在并取机房可读名称
+    await RoomService(db).get_room(room_id)  # 校验存在
     payload.room_id = room_id  # 路径优先
     rack = await svc.create_rack(payload)
-    await log_audit(
-        request=request,
-        module="rack",
-        action="create",
-        object_type="机柜",
-        object_id=rack.id,
-        object_name=rack.name or rack.code,
-        detail=f"在机房「{room.name}」下新增机柜",
-    )
     return ok(RackOut.model_validate(rack))
 
 

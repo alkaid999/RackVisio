@@ -13,7 +13,6 @@ import time
 import traceback
 import uuid
 from contextlib import asynccontextmanager
-
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -25,12 +24,12 @@ logger = logging.getLogger("app")
 
 from app.api.v1 import (
     accounts,
-    audit,
     auth,
     consumables,
     devices,
     interfaces,
     links,
+    logs,
     meta,
     mount_records,
     racks,
@@ -40,6 +39,7 @@ from app.api.v1 import (
 from app.core.cache import cache
 from app.core.config import settings
 from app.core.database import async_session_factory, engine, init_models
+from app.core.log_middleware import OperationLogMiddleware
 from app.core.exceptions import AppError
 from app.core.security import TokenError, is_token_revoked, verify_token
 from app.db.init_db import migrate, seed_data
@@ -137,7 +137,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """应用生命周期：建表 → 迁移 → 种子数据。"""
+    """应用生命周期：建表 → 迁移 → 种子数据，并启动后台日志清理任务。"""
     # 缓存后端启动自检：真正 ping 一次 Redis，避免连不上时静默降级无人察觉。
     import logging
     _cache_log = logging.getLogger("cache")
@@ -257,6 +257,9 @@ class RequestTimingMiddleware(BaseHTTPMiddleware):
 _cors_origins = [o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()]
 # 中间件执行顺序（外层→内层）= 注册顺序的反序。将 CORS 注册为最后一项使其处于最外层，
 # 确保鉴权中间件提前返回 401/403 时响应仍经过 CORS 中间件、带上跨域头，避免开发期跨域 401 白屏。
+# 操作日志中间件注册为第一项 → 处于最内层（AuthMiddleware 之内），
+# 能拿到 request.state.user，对所有写请求自动落 operation_logs（原生请求级日志）。
+app.add_middleware(OperationLogMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(AuthMiddleware)
 app.add_middleware(
@@ -318,7 +321,9 @@ class GlobalRateLimitMiddleware(BaseHTTPMiddleware):
 app.add_middleware(GlobalRateLimitMiddleware)
 
 # 挂载全部 v1 路由（前缀统一为 /api/v1）。
-for module in (rooms, racks, devices, interfaces, links, stats, mount_records, auth, accounts, consumables, meta, audit):
+# 操作日志由 OperationLogMiddleware 请求级自动记录，端点零侵入；
+# 登录日志由认证端点写入 login_logs，两者在前端分别以二级菜单展示。
+for module in (rooms, racks, devices, interfaces, links, stats, mount_records, auth, accounts, consumables, meta, logs):
     app.include_router(module.router, prefix=settings.API_PREFIX)
 
 

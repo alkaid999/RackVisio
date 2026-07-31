@@ -14,12 +14,14 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
-from app.core.audit import log_audit
 from app.core.config import settings
 from app.core.exceptions import AppError
 from app.core.rbac import ROLE_LABELS, user_permission_map
+from app.core.database import async_session_factory
+from app.core.log_middleware import client_ip
 from app.core.security import TokenError, create_token, revoke_token, verify_password
 from app.core.deps import get_db
+from app.models.login_log import LoginLog
 from app.repositories.user_repo import UserRepository
 from app.schemas.common import ok
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -71,6 +73,31 @@ async def _clear_login_failures(key: str) -> None:
         pass
 
 
+async def _write_login_log(
+    request: Request,
+    *,
+    username: str,
+    action: str,
+    status: str,
+    user_id: str | None = None,
+) -> None:
+    """写一条登录日志（独立会话，失败静默——绝不影响认证流程）。"""
+    try:
+        async with async_session_factory() as session:
+            session.add(
+                LoginLog(
+                    user_id=user_id,
+                    username=username[:64],
+                    action=action,
+                    status=status,
+                    ip=client_ip(request),
+                )
+            )
+            await session.commit()
+    except Exception:
+        pass
+
+
 class LoginRequest(BaseModel):
     username: str
     password: str
@@ -113,13 +140,14 @@ async def login(body: LoginRequest, request: Request, session: AsyncSession = De
         verify_password, body.password, user.password_hash, user.salt
     ):
         await _record_login_failure(key)
+        await _write_login_log(request, username=body.username.strip(), action="login", status="failed")
         raise AppError(status_code=401, code=401, message="用户名或密码错误")
     if user.disabled:
         raise AppError(status_code=403, code=403, message="该账号已被禁用")
     # 登录成功：清空失败计数。
     await _clear_login_failures(key)
     token = create_token(sub=user.id, username=user.username, role=user.role)
-    await log_audit(request=request, module="system", action="login", object_type="账号", object_id=user.id, object_name=user.username, detail="登录成功")
+    await _write_login_log(request, username=user.username, action="login", status="success", user_id=user.id)
     return ok({"token": token, "user": _user_info(user)})
 
 
@@ -153,7 +181,7 @@ async def refresh(request: Request, session: AsyncSession = Depends(get_db)):
     # 吊销旧令牌（单次使用）。
     await revoke_token(old_payload)
     token = create_token(sub=db_user.id, username=db_user.username, role=db_user.role)
-    await log_audit(request=request, module="system", action="refresh", object_type="账号", object_id=db_user.id, object_name=db_user.username, detail="令牌刷新")
+    # 令牌轮换是登录态的派生事件（高频、无业务语义），不留审计，避免刷屏。
     return ok({"token": token, "user": _user_info(db_user)})
 
 
@@ -164,7 +192,13 @@ async def logout(request: Request):
     if not user:
         raise HTTPException(status_code=401, detail="未认证")
     await revoke_token(dict(user))
-    await log_audit(request=request, module="system", action="logout", object_type="账号", object_id=user.get("sub"), object_name=user.get("user_name"), detail="注销登录")
+    await _write_login_log(
+        request,
+        username=user.get("user_name") or "",
+        action="logout",
+        status="success",
+        user_id=user.get("sub"),
+    )
     return ok()
 
 

@@ -494,6 +494,68 @@ async def _migrate_hot_indexes(session: AsyncSession) -> None:
     await session.flush()
 
 
+async def _migrate_drop_audit_logs(session: AsyncSession) -> None:
+    """删除旧审计表（0008）：审计功能重构为原生请求级日志。
+
+    操作日志改由 HTTP 中间件写 ``operation_logs``、登录日志由认证端点写
+    ``login_logs``（两表均由 create_all 自动创建）。旧 ``audit_logs`` 表
+    及其 ORM 事件审计（audit_auto/audit_meta）已整体移除，历史数据一并清理。
+    ``DROP TABLE IF EXISTS`` 幂等，SQLite / PostgreSQL 通吃。
+    """
+    await session.execute(text("DROP TABLE IF EXISTS audit_logs"))
+    await session.flush()
+
+
+async def _migrate_operation_log_detail(session: AsyncSession) -> None:
+    """操作日志详情列（0009）：operation_logs 新增 detail（TEXT，可空）。
+
+    存储中间件抓取到的请求体 JSON 与已解析的外键可读名称，使操作日志能回答
+    「改了什么 / 上架到哪 / 链路两端 / 新增了什么耗材」等具体问题。方言无关
+    ALTER，SQLite / PostgreSQL 通吃；列可空，旧数据保持 NULL，幂等。
+    """
+    ocols = await _existing_columns(session, "operation_logs")
+    if "detail" not in ocols:
+        await session.execute(text("ALTER TABLE operation_logs ADD COLUMN detail TEXT"))
+    await session.flush()
+
+
+async def _migrate_operation_log_resource(session: AsyncSession) -> None:
+    """操作日志资源类型列（0010）：operation_logs 新增 resource（VARCHAR(32)，可空、索引）。
+
+    归一化资源类型键（room/rack/device/interface/link/account/consumable/
+    mount-record），由中间件落库，支撑「按资源类型筛选」操作日志。方言无关
+    ALTER，SQLite / PostgreSQL 通吃；列可空，旧数据保持 NULL（旧日志仍可经
+    「全部」查看，只是不参与具体资源类型过滤），幂等。
+    """
+    ocols = await _existing_columns(session, "operation_logs")
+    if "resource" not in ocols:
+        await session.execute(
+            text("ALTER TABLE operation_logs ADD COLUMN resource VARCHAR(32)")
+        )
+    await session.flush()
+
+
+async def _migrate_operation_log_action_target(session: AsyncSession) -> None:
+    """操作日志动作 / 对象列（0011）：operation_logs 新增 action 与 target。
+
+    - action（VARCHAR(16)，可空 + 索引）：操作动作归一化键 create/update/delete，
+      让前端「操作」列只展示新增 / 更新 / 删除三态（PUT/PATCH 合并为更新）。
+    - target（VARCHAR(255)，可空 + 索引）：操作对象可读名称（设备名 / 机柜名 /
+      链路两端等），支撑新增「操作对象」列与按名称关键字搜索。
+    方言无关 ALTER，SQLite / PostgreSQL 通吃；列可空，旧数据保持 NULL，幂等。
+    """
+    ocols = await _existing_columns(session, "operation_logs")
+    if "action" not in ocols:
+        await session.execute(
+            text("ALTER TABLE operation_logs ADD COLUMN action VARCHAR(16)")
+        )
+    if "target" not in ocols:
+        await session.execute(
+            text("ALTER TABLE operation_logs ADD COLUMN target VARCHAR(255)")
+        )
+    await session.flush()
+
+
 async def seed_data(session: AsyncSession) -> None:
     """初始化种子数据（幂等）。
 
@@ -587,4 +649,8 @@ MIGRATIONS: list = [
     ("0005_status_rename", _migrate_status_rename),
     ("0006_device_oob_ip", _migrate_device_oob_ip),
     ("0007_hot_indexes", _migrate_hot_indexes),
+    ("0008_drop_audit_logs", _migrate_drop_audit_logs),
+    ("0009_op_log_detail", _migrate_operation_log_detail),
+    ("0010_op_log_resource", _migrate_operation_log_resource),
+    ("0011_op_log_action_target", _migrate_operation_log_action_target),
 ]

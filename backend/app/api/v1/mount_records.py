@@ -8,10 +8,9 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.audit import log_audit
 from app.core.deps import get_db
 from app.core.rbac import require_permission
 from app.schemas.common import ok, paginated
@@ -47,8 +46,6 @@ async def list_mount_records(
         end_time=end_time,
     )
     total = len(events)
-    if export:
-        return ok(events)
     start = (page - 1) * size
     paged = events[start : start + size]
     return paginated(paged, total, page, size)
@@ -56,30 +53,17 @@ async def list_mount_records(
 
 @router.patch("/{record_id}", dependencies=[Depends(require_permission("device:edit"))])
 async def update_mount_record(
-    record_id: int, payload: MountRecordUpdate, request: Request, db: AsyncSession = Depends(get_db)
+    record_id: int, payload: MountRecordUpdate, db: AsyncSession = Depends(get_db)
 ):
     """编辑上架记录（上架人 / 下架人）。"""
     svc = DeviceService(db)
     info = await svc.update_mount_record(record_id, payload)
-    fields = []
-    if payload.mounted_by is not None:
-        fields.append("上架人")
-    if payload.unmounted_by is not None:
-        fields.append("下架人")
-    detail = (
-        f"编辑上架记录（设备「{info['device_name']}」、机柜「{info['rack_name']}」）的"
-        + "、".join(fields)
-        if fields
-        else f"编辑上架记录（设备「{info['device_name']}」、机柜「{info['rack_name']}」）"
-    )
-    await log_audit(request=request, module="device", action="update", object_type="上架记录", object_id=str(record_id), object_name=info["device_name"], detail=detail)
     return ok({"id": info["id"]})
 
 
 @router.delete("/{record_id}", dependencies=[Depends(require_permission("device:edit"))])
-async def delete_mount_record(record_id: int, request: Request, db: AsyncSession = Depends(get_db)):
+async def delete_mount_record(record_id: int, db: AsyncSession = Depends(get_db)):
     """删除一条上架记录（二次确认由前端完成）。"""
     svc = DeviceService(db)
-    info = await svc.delete_mount_record(record_id)
-    await log_audit(request=request, module="device", action="delete", object_type="上架记录", object_id=str(record_id), object_name=info["device_name"], detail=f"删除上架记录（设备「{info['device_name']}」、机柜「{info['rack_name']}」）")
+    await svc.delete_mount_record(record_id)
     return ok()

@@ -3,11 +3,13 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import tailwindcss from '@tailwindcss/vite'
 
-// Vite 配置：Vue 插件 + `@` 别名指向 src + 开发期 /api 代理到后端（:8000）。
+// Vite 配置：Vue 插件 + `@` 别名指向 src + 开发期 /api 代理到后端。
+// 默认代理到 8000；联调时可经环境变量 VITE_API_TARGET 覆盖（如本地另起新版本后端在 8001）。
+const apiTarget = process.env.VITE_API_TARGET || 'http://127.0.0.1:8000'
 const apiProxy = {
   // 将前端 /api 请求代理到后端 uvicorn 服务，便于联调。
   '/api': {
-    target: 'http://127.0.0.1:8000',
+    target: apiTarget,
     changeOrigin: true,
     // 保留 /api 前缀，后端路由挂在 /api/v1 下。
     rewrite: (path) => path,

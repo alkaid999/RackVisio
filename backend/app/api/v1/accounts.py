@@ -12,13 +12,10 @@
 from __future__ import annotations
 
 import asyncio
-from types import SimpleNamespace
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.audit import log_audit
-from app.core.audit_diff import build_update_detail
 from app.core.deps import get_db
 from app.core.exceptions import AppError
 from app.core.rbac import (
@@ -34,13 +31,6 @@ from app.schemas.account import AccountCreate, AccountOut, AccountUpdate
 from app.schemas.common import ok
 
 router = APIRouter(prefix="/accounts", tags=["accounts"])
-
-# 更新审计要记录的字段（中文标签）。密码绝不进审计；权限为嵌套结构，单独标注「已更新」。
-ACCOUNT_FIELD_LABELS = {
-    "display_name": "显示名",
-    "role": "角色",
-    "disabled": "已禁用",
-}
 
 
 def _to_out(user) -> dict:
@@ -77,7 +67,7 @@ async def list_accounts(
     "",
     dependencies=[Depends(require_permission("account:edit"))],
 )
-async def create_account(body: AccountCreate, request: Request, session: AsyncSession = Depends(get_db)):
+async def create_account(body: AccountCreate, session: AsyncSession = Depends(get_db)):
     repo = UserRepository(session)
     if await repo.get_by_username(body.username):
         raise AppError(status_code=409, code=409, message="用户名已存在")
@@ -100,7 +90,6 @@ async def create_account(body: AccountCreate, request: Request, session: AsyncSe
         permissions=permissions,
     )
     await session.commit()
-    await log_audit(request=request, module="account", action="create", object_type="账号", object_id=user.id, object_name=body.username, detail=f"创建账号（角色：{body.role}）")
     return ok(_to_out(user))
 
 
@@ -109,20 +98,12 @@ async def create_account(body: AccountCreate, request: Request, session: AsyncSe
     dependencies=[Depends(require_permission("account:edit"))],
 )
 async def update_account(
-    user_id: str, body: AccountUpdate, request: Request, session: AsyncSession = Depends(get_db)
+    user_id: str, body: AccountUpdate, session: AsyncSession = Depends(get_db)
 ):
     repo = UserRepository(session)
     user = await repo.get(user_id)
     if not user:
         raise AppError(status_code=404, code=404, message="账号不存在")
-
-    # 修改前快照（用于审计字段级 diff）。密码绝不以明文进入审计。
-    before_perm = user.permissions
-    before = SimpleNamespace(
-        display_name=user.display_name,
-        role=user.role,
-        disabled=bool(user.disabled),
-    )
 
     # 末管理员守卫：若目标为有效管理员，且本次会使其失去管理员/被禁用，且系统中无其他
     # 有效管理员，则拒绝，避免锁死。
@@ -157,19 +138,6 @@ async def update_account(
             user.permissions = default_permissions()
     await session.commit()
 
-    after = SimpleNamespace(
-        display_name=user.display_name,
-        role=user.role,
-        disabled=bool(user.disabled),
-    )
-    parts = [build_update_detail(before, after, ACCOUNT_FIELD_LABELS)]
-    if body.password:
-        parts.append("密码：已更新")
-    if user.permissions != before_perm:
-        parts.append("权限：已更新")
-    detail = "；".join(parts)
-
-    await log_audit(request=request, module="account", action="update", object_type="账号", object_id=user.id, object_name=user.username, detail=detail)
     return ok(_to_out(user))
 
 
@@ -198,8 +166,6 @@ async def delete_account(
                 message="至少需保留一名有效管理员，无法删除该账号",
             )
 
-    username = user.username
     await repo.delete(user)
     await session.commit()
-    await log_audit(request=request, module="account", action="delete", object_type="账号", object_id=user_id, object_name=username, detail=f"删除账号「{username}」")
     return ok(None)

@@ -49,6 +49,12 @@ class Settings(BaseSettings):
     # 系统初始化默认管理员密码（仅首次 seed 使用；可用环境变量覆盖）。
     INITIAL_ADMIN_PASSWORD: str = "admin123"
 
+    # —— 日志保留与清理 ——
+    # 操作日志 / 登录日志保留天数（到期硬删，审计只增不减）。默认 180 天，可用
+    # LOG_RETENTION_DAYS 覆盖。手动 /logs/cleanup 按此值计算 cutoff（自动清理已移除，
+    # 改由用户在界面手动触发，避免误删）。
+    LOG_RETENTION_DAYS: int = 180
+
 
 # 全局唯一配置实例（模块级单例）。
 settings = Settings()
