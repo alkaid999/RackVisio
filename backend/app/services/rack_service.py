@@ -23,6 +23,7 @@ from app.core.enums import DeviceStatus, MountRecordStatus, RackBizStatus
 from app.core.exceptions import ConflictError, NotFoundError
 from app.models.rack import Rack
 from app.repositories.device_repo import DeviceRepository
+from app.repositories.link_repo import LinkRepository
 from app.repositories.mount_record_repo import MountRecordRepository
 from app.repositories.rack_repo import RackRepository
 from app.repositories.room_repo import RoomRepository
@@ -577,6 +578,13 @@ class RackService:
         active = await self.mount_repo.get_active_by_device(device.id)
         if active is None or active.rack_id != rack.id:
             raise ConflictError("该设备并不在此机柜内")
+        # 链路存在性校验：设备仍参与任何链路时禁止下架，必须先断开链路。
+        link_count = await LinkRepository(self.session).count_by_device(device.id)
+        if link_count > 0:
+            raise ConflictError(
+                f"设备「{device.name}」仍存在 {link_count} 条链路，"
+                "请先在「链路管理」中断开相关链路后再下架"
+            )
         await self.mount_repo.set_unmounted(
             active, unmounted_at=utcnow(), unmounted_by=unmounted_by
         )

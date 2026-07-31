@@ -270,11 +270,12 @@ function sourceDeviceReason(d) {
   if ((d.interface_count || 0) <= 0) return '无可用接口'
   return ''
 }
-// 对端原因：在「已上架且含接口」基础上，叠加「不能选自身」与同机房约束。
+// 对端原因：在「已上架且含接口」基础上，叠加「不能选自身」、同机房约束、接口全占用禁用。
 function targetDeviceReason(d) {
   if (form.sourceDeviceId && d.id === form.sourceDeviceId) return '不能选择自身'
   if (!d.current_rack_id) return '未上架'
   if ((d.interface_count || 0) <= 0) return '无可用接口'
+  if ((occupiedCountByDevice.value[d.id] || 0) >= (d.interface_count || 0)) return '接口已全部占用'
   if (sourceRoomId.value && d.current_room_id !== sourceRoomId.value) return '不在同一机房'
   return ''
 }
@@ -285,6 +286,19 @@ const occupiedMap = computed(() => {
   for (const l of existingLinks.value) {
     if (l.source_interface_id) m[l.source_interface_id] = l
     if (l.target_interface_id) m[l.target_interface_id] = l
+  }
+  return m
+})
+// 每台设备被占用的接口数（用于判定「接口全部占用」禁用该设备）。
+const occupiedCountByDevice = computed(() => {
+  const m = {}
+  for (const l of existingLinks.value) {
+    if (l.source_interface_id && l.source_device_id) {
+      m[l.source_device_id] = (m[l.source_device_id] || 0) + 1
+    }
+    if (l.target_interface_id && l.target_device_id) {
+      m[l.target_device_id] = (m[l.target_device_id] || 0) + 1
+    }
   }
   return m
 })

@@ -307,6 +307,30 @@ class LinkRepository:
             "created_at": row.get("created_at"),
         }
 
+    async def count_by_device(self, device_id: str) -> int:
+        """计算某设备作为本端或对端参与的链路总数（用于下架前校验）。
+
+        只要设备的任一接口出现在链路的 source_interface_id 或 target_interface_id 中，
+        即计为一条关联链路。已删除的链路不存在于表中，自然不计入。
+        """
+        stmt = (
+            select(func.count())
+            .select_from(DeviceLink)
+            .join(DeviceInterface, DeviceLink.source_interface_id == DeviceInterface.id)
+            .where(
+                (DeviceInterface.device_id == device_id)
+                | (
+                    DeviceLink.target_interface_id.isnot(None)
+                    & DeviceLink.target_interface_id.in_(
+                        select(DeviceInterface.id).where(
+                            DeviceInterface.device_id == device_id
+                        )
+                    )
+                )
+            )
+        )
+        return int((await self.session.execute(stmt)).scalar() or 0)
+
     async def update(self, link: DeviceLink, data: LinkUpdate) -> DeviceLink:
         for field, value in data.model_dump(exclude_unset=True).items():
             if value is not None:
