@@ -60,7 +60,8 @@ _EXEMPT_PREFIX = f"{settings.API_PREFIX}/auth"
 # cleanup 是日志自清理，由服务器访问日志可追溯，不写入审计表避免递归。
 _SKIP_HINTS = ("/import", "/export", "/check-u", "/cleanup")
 # 请求体抓取上限（字节），超过不抓 detail（如超大 payload）。
-_BODY_SIZE_LIMIT = 4096
+# Q-03：收敛到 Settings.LOG_BODY_SIZE_LIMIT（可 .env 覆盖）。
+_BODY_SIZE_LIMIT = settings.LOG_BODY_SIZE_LIMIT
 
 # 敏感字段：请求体里出现即递归遮蔽为 "******"，绝不落库明文。
 _SENSITIVE = ("password", "password_hash", "salt")

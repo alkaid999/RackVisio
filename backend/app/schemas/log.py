@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field
 class OperationLogOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
+    # Q-05：id 与 OperationLog 模型主键（String(36) UUID）类型一致，非 Integer。
     id: str
     operator_id: str | None
     operator_name: str | None

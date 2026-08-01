@@ -13,13 +13,16 @@ import uuid
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 
+from app.core.config import settings
+
 logger = logging.getLogger("app")
 
 
 class RequestTimingMiddleware(BaseHTTPMiddleware):
-    """请求计时与慢请求日志：method/path/status/duration_ms/request_id。"""
+    """请求计时与慢请求日志：method/path/status/duration_ms/request_id。
 
-    _SLOW_MS = 1000.0
+    Q-03：慢请求阈值收敛到 Settings.SLOW_REQUEST_MS（可 .env 覆盖）。
+    """
 
     async def dispatch(self, request: Request, call_next):
         request_id = uuid.uuid4().hex[:12]
@@ -27,7 +30,7 @@ class RequestTimingMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
         duration_ms = (time.perf_counter() - start) * 1000
         response.headers["X-Request-ID"] = request_id
-        log_method = logger.warning if duration_ms > self._SLOW_MS else logger.info
+        log_method = logger.warning if duration_ms > settings.SLOW_REQUEST_MS else logger.info
         log_method(
             "request %s %s -> %d (%.1fms, rid=%s)",
             request.method,

@@ -114,14 +114,14 @@ async def _resolve_effective(request: Request, session: AsyncSession) -> set[str
 
     payload = getattr(request.state, "user", None)
     if not payload:
-        raise AppError(status_code=401, code=401, message="未认证")
+        raise AppError(status_code=401, message="未认证")
 
     if is_admin(payload.get("role", "user")):
         eff = set(ALL_PERMISSIONS)
     else:
         user = await UserRepository(session).get(payload.get("sub"))
         if user is None:
-            raise AppError(status_code=401, code=401, message="用户不存在或已被删除")
+            raise AppError(status_code=401, message="用户不存在或已被删除")
         eff = effective_permissions(user)
 
     request.state.effective_permissions = eff
@@ -137,7 +137,7 @@ async def get_current_user(request: Request) -> dict:
 
     payload = getattr(request.state, "user", None)
     if not payload:
-        raise AppError(status_code=401, code=401, message="未认证")
+        raise AppError(status_code=401, message="未认证")
     return payload
 
 
@@ -150,7 +150,7 @@ def require_permission(permission: str):
     async def _dep(request: Request, session: AsyncSession = Depends(get_db)) -> dict:
         eff = await _resolve_effective(request, session)
         if permission not in eff:
-            raise AppError(status_code=403, code=403, message=f"权限不足：需要「{permission}」权限")
+            raise AppError(status_code=403, message=f"权限不足：需要「{permission}」权限")
         return request.state.user
 
     return _dep
@@ -165,7 +165,7 @@ def require_any_permission(permissions: Iterable[str]):
         eff = await _resolve_effective(request, session)
         if not (required & eff):
             needed = "、".join(sorted(required))
-            raise AppError(status_code=403, code=403, message=f"权限不足：需要以下任一权限：{needed}")
+            raise AppError(status_code=403, message=f"权限不足：需要以下任一权限：{needed}")
         return request.state.user
 
     return _dep

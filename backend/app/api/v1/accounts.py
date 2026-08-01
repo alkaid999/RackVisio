@@ -71,7 +71,7 @@ async def list_accounts(
 async def create_account(body: AccountCreate, session: AsyncSession = Depends(get_db)):
     repo = UserRepository(session)
     if await repo.get_by_username(body.username):
-        raise AppError(status_code=409, code=409, message="用户名已存在")
+        raise AppError(status_code=409, message="用户名已存在")
     password_hash, salt = await asyncio.to_thread(hash_password, body.password)
     # 管理员忽略权限字段（恒全权限）；普通用户存储映射，缺省全模块只读。
     if body.role == "admin":
@@ -104,7 +104,7 @@ async def update_account(
     repo = UserRepository(session)
     user = await repo.get(user_id)
     if not user:
-        raise AppError(status_code=404, code=404, message="账号不存在")
+        raise AppError(status_code=404, message="账号不存在")
 
     # 末管理员守卫：若目标为有效管理员，且本次会使其失去管理员/被禁用，且系统中无其他
     # 有效管理员，则拒绝，避免锁死。
@@ -116,7 +116,6 @@ async def update_account(
         if others <= 1:
             raise AppError(
                 status_code=409,
-                code=409,
                 message="至少需保留一名有效管理员，无法降级或禁用该账号",
             )
 
@@ -151,19 +150,18 @@ async def delete_account(
 ):
     current = getattr(request.state, "user", None)
     if current and current.get("sub") == user_id:
-        raise AppError(status_code=409, code=409, message="不能删除当前登录的账号")
+        raise AppError(status_code=409, message="不能删除当前登录的账号")
 
     repo = UserRepository(session)
     user = await repo.get(user_id)
     if not user:
-        raise AppError(status_code=404, code=404, message="账号不存在")
+        raise AppError(status_code=404, message="账号不存在")
 
     if user.role == "admin" and not user.disabled:
         others = await repo.count_admins()
         if others <= 1:
             raise AppError(
                 status_code=409,
-                code=409,
                 message="至少需保留一名有效管理员，无法删除该账号",
             )
 

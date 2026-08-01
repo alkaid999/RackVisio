@@ -77,7 +77,7 @@ async def _record_login_failure(key: str) -> None:
     ]
     tries.append(time.time())
     try:
-        await cache.set(f"ratelimit:login:{key}", tries, ttl=_LOGIN_WINDOW)
+        await cache.set(f"ratelimit:login:{key}", tries, ttl=settings.LOGIN_RATE_WINDOW)
     except Exception:
         pass
 
@@ -157,7 +157,6 @@ async def login(body: LoginRequest, request: Request, session: AsyncSession = De
     if not await _login_allowed(key):
         raise AppError(
             status_code=429,
-            code=429,
             message="登录尝试过于频繁，请稍后再试",
         )
     user = await repo.get_by_username(body.username.strip())
@@ -167,9 +166,9 @@ async def login(body: LoginRequest, request: Request, session: AsyncSession = De
     ):
         await _record_login_failure(key)
         await _write_login_log(request, username=body.username.strip(), action="login", status="failed")
-        raise AppError(status_code=401, code=401, message="用户名或密码错误")
+        raise AppError(status_code=401, message="用户名或密码错误")
     if user.disabled:
-        raise AppError(status_code=403, code=403, message="该账号已被禁用")
+        raise AppError(status_code=403, message="该账号已被禁用")
     # 登录成功：清空失败计数。
     await _clear_login_failures(key)
     token = create_token(sub=user.id, username=user.username, role=user.role)
@@ -218,9 +217,9 @@ async def change_password(
             status="failed",
             user_id=db_user.id,
         )
-        raise AppError(status_code=400, code=400, message="原密码错误")
+        raise AppError(status_code=400, message="原密码错误")
     if body.old_password == body.new_password:
-        raise AppError(status_code=400, code=400, message="新密码不能与原密码相同")
+        raise AppError(status_code=400, message="新密码不能与原密码相同")
     db_user.password_hash, db_user.salt = await asyncio.to_thread(
         hash_password, body.new_password
     )
@@ -294,7 +293,6 @@ async def default_credentials_active(request: Request, session: AsyncSession = D
     if not await _login_allowed(key):
         raise AppError(
             status_code=429,
-            code=429,
             message="请求过于频繁，请稍后再试",
         )
     repo = UserRepository(session)

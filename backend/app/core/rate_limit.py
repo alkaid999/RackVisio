@@ -20,10 +20,10 @@ from app.core.config import settings
 
 
 class GlobalRateLimitMiddleware(BaseHTTPMiddleware):
-    """全站通用限流（按客户端 IP 固定窗口）。"""
+    """全站通用限流（按客户端 IP 固定窗口）。
 
-    _MAX_PER_MIN = 600
-    _WINDOW = 60
+    Q-03：上限/窗口收敛到 Settings（RATE_LIMIT_PER_MIN / RATE_LIMIT_WINDOW）。
+    """
 
     _EXEMPT_PATHS = (
         "/health",
@@ -39,18 +39,18 @@ class GlobalRateLimitMiddleware(BaseHTTPMiddleware):
         if request.method == "OPTIONS" or path in self._EXEMPT_PATHS:
             return await call_next(request)
         host = request.client.host if request.client else "unknown"
-        minute = int(time.time() // self._WINDOW)
+        minute = int(time.time() // settings.RATE_LIMIT_WINDOW)
         key = f"ratelimit:global:{host}:{minute}"
         try:
             count = await cache.get(key) or 0
             if isinstance(count, list):  # 防御：历史脏数据非 int 时重置
                 count = 0
-            if count >= self._MAX_PER_MIN:
+            if count >= settings.RATE_LIMIT_PER_MIN:
                 return JSONResponse(
                     status_code=429,
                     content={"code": 429, "message": "请求过于频繁，请稍后再试", "data": None},
                 )
-            await cache.set(key, count + 1, ttl=self._WINDOW)
+            await cache.set(key, count + 1, ttl=settings.RATE_LIMIT_WINDOW)
         except Exception:
             # 限流组件异常 fail-open：不阻塞业务。
             pass

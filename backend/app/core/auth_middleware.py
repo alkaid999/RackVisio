@@ -34,7 +34,7 @@ logger = logging.getLogger("app")
 # R-07：禁用态存共享缓存门面（Redis，多实例一致）而非模块级 dict——
 # 模块级可变字典在多 worker 下各自独立（A worker 禁用、B worker 仍放行），
 # 且「读-判-写」非原子；缓存门面天然线程安全、跨进程共享（Redis 不可达降级内存）。
-_DISABLED_CACHE_TTL = 60.0
+# Q-03：TTL 收敛到 Settings.USER_DISABLED_CACHE_TTL（可 .env 覆盖）。
 
 
 async def _is_user_disabled(sub: str) -> bool:
@@ -65,7 +65,9 @@ async def _is_user_disabled(sub: str) -> bool:
     if disabled:
         # 缓存写入为非关键操作：失败静默（下次请求实时查库兜底）。
         try:
-            await cache.set(f"user:disabled:{sub}", 1, ttl=_DISABLED_CACHE_TTL)
+            await cache.set(
+                f"user:disabled:{sub}", 1, ttl=settings.USER_DISABLED_CACHE_TTL
+            )
         except Exception:
             logger.warning("用户禁用态缓存写入失败（已忽略）", exc_info=True)
     return disabled

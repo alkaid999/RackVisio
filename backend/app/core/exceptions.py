@@ -13,13 +13,15 @@ class AppError(Exception):
     Attributes:
         status_code: HTTP 状态码（语义化，如 404/409/422）。
         code: 业务错误码，直接放入响应信封的 ``code`` 字段。
+            Q-04：默认与 ``status_code`` 相同（本系统业务码即 HTTP 码，无独立
+            业务码体系）；仅当未来需要区分「同一状态码下的不同业务分支」时显式传入。
         message: 可读的错误信息。
     """
 
-    def __init__(self, status_code: int, code: int, message: str) -> None:
+    def __init__(self, status_code: int, code: int | None = None, message: str = "") -> None:
         super().__init__(message)
         self.status_code = status_code
-        self.code = code
+        self.code = code if code is not None else status_code
         self.message = message
 
 
@@ -27,18 +29,18 @@ class NotFoundError(AppError):
     """资源不存在 (404)。"""
 
     def __init__(self, message: str = "资源不存在") -> None:
-        super().__init__(status_code=404, code=404, message=message)
+        super().__init__(status_code=404, message=message)
 
 
 class ConflictError(AppError):
     """资源冲突 (409)，如 U 位冲突、端口重复占用、编号重复等。"""
 
     def __init__(self, message: str = "资源冲突") -> None:
-        super().__init__(status_code=409, code=409, message=message)
+        super().__init__(status_code=409, message=message)
 
 
 class ValidationError(AppError):
     """业务校验失败 (422)。"""
 
     def __init__(self, message: str = "校验失败") -> None:
-        super().__init__(status_code=422, code=422, message=message)
+        super().__init__(status_code=422, message=message)
