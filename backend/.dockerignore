@@ -1,12 +1,38 @@
-# 不纳入后端镜像的内容
+# ============================================================
+# 不纳入后端镜像的内容（减小构建上下文、避免敏感文件入镜）
+# ============================================================
+
+# 虚拟环境与 Python 缓存
 .venv/
 __pycache__/
 *.pyc
 *.pyo
+
+# 本地数据库文件（业务数据不入镜）
 *.db
 *.db.bak*
-server.log
+*.sqlite
+*.sqlite3
+
+# 测试与质量工具（生产镜像不需要）
+tests/
 .pytest_cache/
+pytest.ini
+
+# 日志与运行产物
+*.log
+server.log
+coverage.xml
+htmlcov/
+
+# IDE / 编辑器
+.idea/
+.vscode/
+
+# 环境变量（含密钥，绝不入镜）
 .env
 .env.*
+
+# Git 元数据
 .git/
+.gitignore
