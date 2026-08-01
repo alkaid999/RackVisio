@@ -631,6 +631,7 @@ class OperationLogMiddleware(BaseHTTPMiddleware):
                     )
                     await session.commit()
         except Exception:
-            # 日志失败绝不影响业务响应。
-            logger.warning("操作日志写入失败", exc_info=True)
+            # 日志失败绝不影响业务响应；但审计完整性受损必须显式告警（S-08：
+            # 静默吞掉会掩盖「关键操作无留痕」——如 PostgreSQL 列宽截断等生产事故）。
+            logger.error("操作日志写入失败（审计完整性受影响）", exc_info=True)
         return response

@@ -25,8 +25,14 @@ export function usePersistentFilter(routeName, factory, onRestore) {
       const raw = sessionStorage.getItem(KEY)
       if (!raw) return
       const saved = JSON.parse(raw)
-      // 先铺默认值（保证后续新增筛选项有缺省），再覆盖已保存值。
-      Object.assign(filter, factory(), saved)
+      // 仅挑选 factory() 声明键集合内的字段进行覆盖（F-14：防止被篡改的
+      // sessionStorage 把任意键注入 reactive 对象，避免意外状态/类型污染）。
+      const defaults = factory()
+      const safe = {}
+      for (const k of Object.keys(defaults)) {
+        if (k in saved) safe[k] = saved[k]
+      }
+      Object.assign(filter, defaults, safe)
       if (typeof onRestore === 'function') onRestore(filter)
     } catch (e) {
       // 解析失败则忽略，使用默认值

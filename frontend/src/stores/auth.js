@@ -5,10 +5,11 @@ import { defaultPermissions, expandPermissions } from '@/utils/constants'
 import { clearAllPersistedFilters } from '@/composables/usePersistentFilter'
 
 // 认证状态：令牌、当前用户、权限映射。
-// - token 持久化在 localStorage（见 utils/auth-token.js），刷新页面后自动恢复登录态。
-// - user 字段结构：{ id, username, display_name, role, role_label, permissions }
+// - token 持久化在 sessionStorage（见 utils/auth-token.js），刷新页面后自动恢复登录态。
+// - user 字段结构：{ id, username, display_name, role, role_label, permissions, must_change_password }
 //   其中 permissions 为「权限映射」：{ module: { view: bool, edit: bool }, ... }
 //   （管理员恒全权限，后端返回全 true 映射；前端仅依赖映射，无需感知是否为管理员）。
+// - must_change_password：初始管理员首次登录为 true，路由守卫据此强制跳转改密页（S-02）。
 export const useAuthStore = defineStore('auth', {
   state: () => ({
     token: getToken() || '',
@@ -22,6 +23,8 @@ export const useAuthStore = defineStore('auth', {
     permissions: (s) => (s.user && s.user.permissions) || defaultPermissions(),
     isAdmin: (s) => !!(s.user && s.user.role === 'admin'),
     userName: (s) => (s.user && (s.user.display_name || s.user.username)) || '未登录',
+    // 强制改密：初始管理员首次登录后为 true，前端全局守卫强制跳转改密页。
+    mustChangePassword: (s) => !!(s.user && s.user.must_change_password),
     // 展开后的扁平权限键集合（如 ["room:view","device:edit"]），用于门控判断。
     effectivePermissions: (s) => {
       const user = s.user
@@ -36,6 +39,14 @@ export const useAuthStore = defineStore('auth', {
       this.token = data.token
       this.user = data.user
       this.initialized = true
+      return data.user
+    },
+    // 修改当前用户密码（S-02 强制改密）：成功后后端返回新令牌并清除标记。
+    async changePassword(oldPassword, newPassword) {
+      const data = await authApi.changePassword(oldPassword, newPassword)
+      setToken(data.token)
+      this.token = data.token
+      this.user = data.user
       return data.user
     },
     logout() {

@@ -14,4 +14,11 @@ export default {
   defaultCredentialsActive() {
     return http.get('/auth/default-credentials-active')
   },
+  // 当前登录用户修改自己的密码（S-02 强制改密落地）→ { token, user }
+  changePassword(oldPassword, newPassword) {
+    return http.post('/auth/change-password', {
+      old_password: oldPassword,
+      new_password: newPassword,
+    })
+  },
 }

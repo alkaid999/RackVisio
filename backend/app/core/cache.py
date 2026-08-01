@@ -38,6 +38,10 @@ class InMemoryCache:
         del self._store[key]
         return None
 
+    async def get_strict(self, key: str) -> tuple[Optional[Any], bool]:
+        """严格读取：返回 (value, ok)。进程内缓存恒可用，ok 恒为 True。"""
+        return await self.get(key), True
+
     async def set(self, key: str, value: Any, ttl: int) -> None:
         self._store[key] = (time.time() + ttl, value)
 
@@ -88,6 +92,25 @@ class RedisCache:
         except Exception:
             logger.warning("Redis get 失败（已降级回源）", exc_info=True)
             return None
+
+    async def get_strict(self, key: str) -> tuple[Optional[Any], bool]:
+        """严格读取：返回 (value, ok)。
+
+        与 ``get`` 的区别：get 在读取异常时降级为「未命中」（fail-open，适合业务
+        缓存回源 DB）；get_strict 把读取失败显式暴露给调用方（ok=False），供安全
+        关键判定（令牌黑名单、登录限流）做 fail-close 决策。
+        """
+        try:
+            raw = await self._client.get(key)
+            if raw is None:
+                return None, True
+            try:
+                return json.loads(raw), True
+            except (TypeError, ValueError):
+                return raw, True
+        except Exception:
+            logger.warning("Redis get_strict 读取失败（调用方应 fail-close）", exc_info=True)
+            return None, False
 
     async def set(self, key: str, value: Any, ttl: int) -> None:
         try:
@@ -172,6 +195,19 @@ class Cache:
         except Exception:
             logger.warning("cache get 失败（已降级回源）", exc_info=True)
             return None
+
+    async def get_strict(self, key: str) -> tuple[Optional[Any], bool]:
+        """严格读取：返回 (value, ok)；ok=False 表示后端读取异常（非未命中）。
+
+        普通 ``get`` 失败时降级为「未命中」（fail-open），适合业务缓存；
+        安全关键判定（令牌黑名单 / 登录限流）应使用本方法，在 ok=False 时
+        fail-close（视为命中敏感状态），宁可误拒不可放行。
+        """
+        try:
+            return await _get_backend().get_strict(key)
+        except Exception:
+            logger.error("cache get_strict 失败（调用方应 fail-close）", exc_info=True)
+            return None, False
 
     async def set(self, key: str, value: Any, ttl: Optional[int] = None) -> None:
         ttl = ttl if ttl is not None else settings.CACHE_TTL

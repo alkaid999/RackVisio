@@ -98,12 +98,23 @@ class TokenError(Exception):
     """令牌无效（格式/签名/过期）。"""
 
 
+_ALLOWED_ALG = "HS256"
+
+
 def verify_token(token: str) -> dict[str, Any]:
     """校验令牌并返回 payload；失败抛 ``TokenError``。"""
     parts = token.split(".")
     if len(parts) != 3:
         raise TokenError("令牌格式错误")
     header_b64, payload_b64, sig = parts
+    # 算法白名单（纵深防御）：签名重算已保证头部不可篡改，此处再显式拒绝
+    # 非白名单的算法标识，防止未来引入多算法时出现算法混淆（如 alg=none 旧依赖）。
+    try:
+        header = json.loads(_b64url_decode(header_b64))
+    except (ValueError, TypeError):
+        raise TokenError("令牌头部解析失败")
+    if not isinstance(header, dict) or header.get("alg") != _ALLOWED_ALG:
+        raise TokenError("令牌算法不受支持")
     expected = _sign(header_b64, payload_b64)
     # 恒定时间比对签名。
     if not hmac.compare_digest(sig, expected):
@@ -136,17 +147,20 @@ def token_remaining_ttl(payload: dict[str, Any]) -> int:
 async def is_token_revoked(payload: dict[str, Any]) -> bool:
     """判断令牌是否已被注销（黑名单）。
 
-    通过缓存门面（Redis / 内存）查询；查询异常时 fail-open（视为未吊销），
-    避免 Redis 抖动导致全站 401。仅当 payload 含 jti 时参与吊销判定。
+    通过缓存门面的 **严格读取**（``get_strict``）查询：读取失败（ok=False）时
+    **fail-close（视为已吊销）**——吊销是安全关键判定，缓存故障时宁可误拒请求，
+    也不能放行已注销令牌（fail-open 会削弱「注销即时生效」的语义，且多实例下
+    Redis 故障时黑名单查询会静默返回未命中）。同时记录错误日志便于运维定位。
+    仅当 payload 含 jti 时参与吊销判定。
     """
     jti = payload.get("jti")
     if not jti:
         return False
-    try:
-        return bool(await cache.get(f"token:blacklist:{jti}"))
-    except Exception:
-        logger.warning("令牌黑名单查询失败（视为未吊销）", exc_info=True)
-        return False
+    value, ok = await cache.get_strict(f"token:blacklist:{jti}")
+    if not ok:
+        logger.error("令牌黑名单查询失败（保守视为已吊销）", exc_info=True)
+        return True
+    return bool(value)
 
 
 async def revoke_token(payload: dict[str, Any]) -> None:

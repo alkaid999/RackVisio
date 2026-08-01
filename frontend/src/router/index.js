@@ -97,6 +97,13 @@ const routes = [
     meta: { title: '账号管理', requiresAuth: true, permission: 'account:view' },
   },
   {
+    path: '/change-password',
+    name: 'ChangePassword',
+    component: () => import('@/views/account/ChangePasswordView.vue'),
+    // 任何登录用户（含初始管理员首次登录强制改密）均可访问，无权限要求。
+    meta: { title: '修改密码', requiresAuth: true },
+  },
+  {
     path: '/logs/operations',
     name: 'OperationLog',
     component: () => import('@/views/log/OperationLog.vue'),
@@ -135,10 +142,12 @@ const router = createRouter({
   routes,
 })
 
-// 全局前置守卫：鉴权 + 权限门控。
+// 全局前置守卫：鉴权 + 权限门控 + 强制改密。
 // - 未登录访问受保护页 → 跳转登录（携带 redirect）。
 // - 已登录访问登录页 → 回首页。
 // - 已登录但无 meta.permission 所需权限 → 回首页（已登录用户至少能看仪表盘）。
+// - 已登录但 must_change_password=true（初始管理员首次登录）→ 强制跳转改密页，
+//   完成改密前无法进入任何业务页（S-02）。
 router.beforeEach(async (to) => {
   const auth = useAuthStore()
   // 确保应用启动期间已拉取过用户信息（main.js 已 await，这里兜底）。
@@ -154,6 +163,10 @@ router.beforeEach(async (to) => {
   }
   if (auth.isLoggedIn && to.meta.permission && !auth.hasPermission(to.meta.permission)) {
     return { path: '/' }
+  }
+  // 强制改密拦截：除改密页外一律重定向（改密页自身放行）。
+  if (auth.isLoggedIn && auth.mustChangePassword && to.name !== 'ChangePassword') {
+    return { path: '/change-password' }
   }
   return true
 })

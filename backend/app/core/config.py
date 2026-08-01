@@ -61,26 +61,35 @@ settings = Settings()
 
 
 def _enforce_production_security() -> None:
-    """安全基线提示：使用弱密钥/默认密码时打印告警，但**不阻断启动**。
+    """安全基线校验（S-01/S-03）：production 环境强制 fail-closed，弱密钥/默认密码**拒绝启动**。
 
-    内网 DCIM 场景不强制 crash——保留告警以提示运维上线前覆盖 SECRET_KEY 与
-    INITIAL_ADMIN_PASSWORD，安全基线详见 docs/DEPLOY.md。开发/生产均只告警、不退出。
+    - production：检测到默认 SECRET_KEY 或默认 INITIAL_ADMIN_PASSWORD → 抛
+      ``RuntimeError`` 阻断启动，逼运维在 .env 显式覆盖后才允许上线。
+    - development / test：仅打印告警不阻断（本地开发体验不受阻，默认值可直接跑通）。
+
+    S-02 的「首次登录强制改密」由 seed 的 must_change_password=True + 登录/改密
+    链路独立兜底：即便运维显式设置了强初始密码，初始管理员首次登录仍须改密。
     """
     import sys
 
     weak_keys = {"", "change-me-in-prod-rackvisio-secret-key"}
+    problems: list[str] = []
     if settings.SECRET_KEY in weak_keys:
-        print(
-            "[warn] SECRET_KEY 仍为默认/空值，生产环境存在 JWT 伪造风险；"
-            "请通过环境变量 SECRET_KEY 设置强随机密钥（如 openssl rand -hex 32）。",
-            file=sys.stderr,
+        problems.append(
+            "SECRET_KEY 仍为默认/空值，存在 JWT 伪造风险；"
+            "请通过环境变量 SECRET_KEY 设置强随机密钥（如 openssl rand -hex 32）"
         )
     if settings.INITIAL_ADMIN_PASSWORD == "admin123":
-        print(
-            "[warn] INITIAL_ADMIN_PASSWORD 仍为默认密码 admin123；"
-            "请通过环境变量 INITIAL_ADMIN_PASSWORD 修改为强密码后再上线。",
-            file=sys.stderr,
+        problems.append(
+            "INITIAL_ADMIN_PASSWORD 仍为默认密码 admin123；"
+            "请通过环境变量 INITIAL_ADMIN_PASSWORD 设置强密码（初始管理员首次登录仍会强制改密）"
         )
+    if settings.ENVIRONMENT == "production" and problems:
+        raise RuntimeError(
+            "生产环境安全校验失败，拒绝启动（fail-closed）：\n  - " + "\n  - ".join(problems)
+        )
+    for p in problems:
+        print(f"[warn] {p}", file=sys.stderr)
 
 
 _enforce_production_security()

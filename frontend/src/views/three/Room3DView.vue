@@ -1179,12 +1179,16 @@ function onDblClick(e) {
 
 function showRackTooltip(e, rack) {
   const dc = deviceCountCache.value[rack.id]
+  const powerPct =
+    rack.design_power && rack.used_power != null
+      ? Math.round((rack.used_power / rack.design_power) * 100)
+      : null
   tooltip.value.innerHTML = `
     <div style="font-weight:700;margin-bottom:2px">${escapeHtml(rack.name)}</div>
     <div style="color:#94a3b8">${escapeHtml(rack.column_code)} / ${escapeHtml(rack.code)}</div>
-    <div style="margin-top:4px">状态：${escapeHtml(RACK_STATUS_LABELS[rack.status] || rack.status)} · ${rack.used_u}/${rack.total_u} U</div>
-    <div>功率：${rack.design_power ? formatPower(rack.used_power) + ' / ' + formatPower(rack.design_power) + '（' + Math.round((rack.used_power / rack.design_power) * 100) + '%）' : '—'}</div>
-    <div>设备数：${dc != null ? dc : '…'}</div>`
+    <div style="margin-top:4px">状态：${escapeHtml(RACK_STATUS_LABELS[rack.status] || rack.status)} · ${escapeHtml(rack.used_u)}/${escapeHtml(rack.total_u)} U</div>
+    <div>功率：${rack.design_power ? escapeHtml(formatPower(rack.used_power)) + ' / ' + escapeHtml(formatPower(rack.design_power)) + '（' + escapeHtml(powerPct) + '%）' : '—'}</div>
+    <div>设备数：${dc != null ? escapeHtml(dc) : '…'}</div>`
   tooltipVisible.value = true
   tooltipStyle.value = { left: e.clientX + 14 + 'px', top: e.clientY + 14 + 'px' }
 }
@@ -1195,7 +1199,7 @@ function showDeviceTooltip(e, d) {
   tooltip.value.innerHTML = `
     <div style="font-weight:700;margin-bottom:2px">${escapeHtml(d.name)}</div>
     <div style="color:#94a3b8">${escapeHtml(DEVICE_TYPE_LABELS[d.device_type] || d.device_type)}${d.model ? ' · ' + escapeHtml(d.model) : ''}</div>
-    <div style="margin-top:4px">U 位：${d.current_start_u}U ~ ${uEnd}U</div>
+    <div style="margin-top:4px">U 位：${escapeHtml(d.current_start_u)}U ~ ${escapeHtml(uEnd)}U</div>
     ${isFac
       ? '<div style="color:#64748b;margin-top:4px">基础设施（非资产）<br>占 U 位，不计入资产统计 / 不建接口</div>'
       : `<div>状态：${escapeHtml(DEVICE_STATUS_LABELS[d.status] || d.status)}</div>

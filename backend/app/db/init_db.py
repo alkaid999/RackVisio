@@ -556,6 +556,27 @@ async def _migrate_operation_log_action_target(session: AsyncSession) -> None:
     await session.flush()
 
 
+async def _migrate_user_must_change_password(session: AsyncSession) -> None:
+    """强制改密标记（0012）：users 新增 must_change_password 列（方言无关）。
+
+    初始管理员（seed 创建）置 True，首次登录后强制修改密码（S-02）；
+    存量用户均为历史账号，统一回填 False，行为不变。
+    ALTER ADD BOOLEAN（可空）→ UPDATE 用绑定参数传 Python bool 回填：
+    SQLAlchemy 据值推断 Boolean 类型，PG 编译为 true / SQLite 编译为 1，
+    避免硬编码整数在 PostgreSQL 上触发 DatatypeMismatchError（同 _migrate_facility）。
+    """
+    ucols = await _existing_columns(session, "users")
+    if "must_change_password" not in ucols:
+        await session.execute(
+            text("ALTER TABLE users ADD COLUMN must_change_password BOOLEAN")
+        )
+    await session.execute(
+        text("UPDATE users SET must_change_password=:val WHERE must_change_password IS NULL"),
+        {"val": False},
+    )
+    await session.flush()
+
+
 async def seed_data(session: AsyncSession) -> None:
     """初始化种子数据（幂等）。
 
@@ -574,6 +595,9 @@ async def seed_data(session: AsyncSession) -> None:
             salt=salt,
             role="admin",
             display_name="系统管理员",
+            # 初始管理员首次登录必须改密（S-02）：无论 INITIAL_ADMIN_PASSWORD 强弱，
+            # 一律强制管理员登录后立即替换为本人掌握的密码。
+            must_change_password=True,
         )
         await session.flush()
         # lifespan 以 `async with session` 块退出即关闭会话，未提交事务会被回滚；
@@ -653,4 +677,5 @@ MIGRATIONS: list = [
     ("0009_op_log_detail", _migrate_operation_log_detail),
     ("0010_op_log_resource", _migrate_operation_log_resource),
     ("0011_op_log_action_target", _migrate_operation_log_action_target),
+    ("0012_user_must_change_password", _migrate_user_must_change_password),
 ]

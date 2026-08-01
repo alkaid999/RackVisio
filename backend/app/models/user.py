@@ -43,6 +43,12 @@ class User(Base):
     display_name: Mapped[str | None] = mapped_column(String(64), nullable=True)
     # 软禁用：禁用后无法登录且已有 token 校验失败。
     disabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # 强制改密标记（S-02）：初始管理员首次登录后必须修改密码才能正常使用。
+    # seed 创建初始管理员时置 True；登录/改密接口据此驱动前端强制跳转改密页，
+    # 改密成功后清除。存量用户回填 False（见 0012 迁移），不受影响。
+    must_change_password: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
     created_at: Mapped[str] = mapped_column(
         String(32), nullable=False, server_default=func.now()
     )

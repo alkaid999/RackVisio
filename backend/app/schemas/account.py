@@ -37,4 +37,6 @@ class AccountOut(BaseModel):
     role_label: str
     permissions: dict
     disabled: bool
+    # 强制改密标记：初始管理员首次登录后为 True，账号管理列表据此展示状态。
+    must_change_password: bool = False
     created_at: str

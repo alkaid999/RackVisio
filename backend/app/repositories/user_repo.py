@@ -51,6 +51,7 @@ class UserRepository:
         role: str,
         display_name: str | None,
         permissions: dict | None = None,
+        must_change_password: bool = False,
     ) -> User:
         user = User(
             username=username,
@@ -59,6 +60,7 @@ class UserRepository:
             role=role,
             display_name=display_name,
             permissions=permissions,
+            must_change_password=must_change_password,
         )
         self.session.add(user)
         await self.session.flush()

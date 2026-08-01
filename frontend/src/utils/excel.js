@@ -5,6 +5,17 @@ import { downloadBlob } from './download'
 
 // ============ 导出 ============
 
+// 公式注入防护：Excel/CSV 单元格若以 = + - @ 开头会被解析为公式（如
+// =HYPERLINK("http://evil","click")），用户可控字段（设备名/型号/IP/备注）
+// 导出后在受害者 Excel 中打开即触发。统一加单引号前缀强制按文本处理。
+// （Excel 打开时 ' 前缀不显示，仅标记「此单元格为文本」。）
+const FORMULA_MARKERS = /^[=+\-@]/
+
+function sanitizeCell(v) {
+  if (typeof v !== 'string') return v // 数字/布尔保持原类型，无公式风险
+  return FORMULA_MARKERS.test(v) ? `'${v}` : v
+}
+
 // 导出为 Excel / CSV。
 // @param rows     后端返回的行数组
 // @param columns  [{ key, label, render?(row)=>any }] —— render 处理派生/格式化字段（如楼宇/楼层合并）
@@ -29,7 +40,7 @@ export async function exportData({ rows = [], columns = [], filename = 'export',
     const obj = {}
     for (const c of columns) {
       const v = c.render ? c.render(row) : row?.[c.key]
-      obj[c.key] = formatCellValue(v)
+      obj[c.key] = sanitizeCell(formatCellValue(v))
     }
     ws.addRow(obj)
   }
@@ -47,7 +58,7 @@ export async function exportData({ rows = [], columns = [], filename = 'export',
 
 function toCsv(rows, columns) {
   const escape = (v) => {
-    const s = v == null ? '' : String(v)
+    const s = v == null ? '' : sanitizeCell(String(v))
     return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s
   }
   const lines = [columns.map((c) => escape(c.label)).join(',')]

@@ -61,19 +61,21 @@ async def _is_user_disabled(sub: str) -> bool:
 
     - 已禁用：缓存 60s（禁用态短期不变），避免重复查库。
     - 启用中：不缓存，每次实时查库，确保禁用操作即时生效。
-    - 查询异常 fail-open，避免 DB 抖动导致全站 401。
+    - 查询异常 **fail-close**（视为禁用、拒绝访问）：禁用校验是安全关键判定，
+      DB 抖动时宁可误拒请求，也不能放行已被禁用的账号令牌（fail-open 会削弱
+      「管理员禁用账号即时失效」的语义）。异常结果不缓存，避免瞬时故障被长期缓存。
     """
     cached = _user_disabled_cache.get(sub)
     if cached and cached[0] > time.time():
         return cached[1]
-    disabled = False
     try:
         async with async_session_factory() as session:
             user = await UserRepository(session).get(sub)
             disabled = bool(user and user.disabled)
     except Exception:
-        # 查询异常时 fail-open，避免 DB 抖动导致全站 401。
-        disabled = False
+        # 查询异常时 fail-close：保守视为禁用；不缓存，避免瞬时故障被长期缓存。
+        logger.error("用户禁用状态查询失败（保守视为禁用）", exc_info=True)
+        return True
     if disabled:
         _user_disabled_cache[sub] = (time.time() + _DISABLED_CACHE_TTL, True)
     return disabled

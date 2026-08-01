@@ -459,7 +459,7 @@ function showTooltip(e, d) {
   tooltip.value.innerHTML = `
     <div style="font-weight:700;margin-bottom:2px">${escapeHtml(d.name)}</div>
     <div style="opacity:0.75">${escapeHtml(DEVICE_TYPE_LABELS[d.device_type] || d.device_type)}${d.model ? ' · ' + escapeHtml(d.model) : ''}</div>
-    <div style="margin-top:4px">U 位：${d.current_start_u}U ~ ${uEnd}U</div>
+    <div style="margin-top:4px">U 位：${escapeHtml(d.current_start_u)}U ~ ${escapeHtml(uEnd)}U</div>
     <div>状态：${escapeHtml(DEVICE_STATUS_LABELS[d.status] || d.status)}</div>
     <div>IP：${escapeHtml(d.ip_address) || '—'}</div>`
   tooltipVisible.value = true

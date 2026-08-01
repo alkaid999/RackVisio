@@ -91,6 +91,10 @@
                   </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
+                <DropdownMenuItem @select="goChangePassword">
+                  <KeyRound class="h-4 w-4" />修改密码
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
                 <DropdownMenuItem
                   class="text-destructive focus:text-destructive"
                   @select="onLogout"
@@ -139,7 +143,7 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { TooltipProvider } from 'reka-ui'
-import { Menu, PanelLeftClose, PanelLeft, RefreshCw, LogOut, Search } from 'lucide-vue-next'
+import { Menu, PanelLeftClose, PanelLeft, RefreshCw, LogOut, Search, KeyRound } from 'lucide-vue-next'
 import { useAuthStore } from '@/stores/auth'
 import { useMetaStore } from '@/stores/meta'
 import SidebarNav from '@/components/layout/sidebar-nav.vue'
@@ -217,5 +221,9 @@ function reload() {
 async function onLogout() {
   auth.logout()
   router.replace('/login')
+}
+
+function goChangePassword() {
+  router.push('/change-password')
 }
 </script>

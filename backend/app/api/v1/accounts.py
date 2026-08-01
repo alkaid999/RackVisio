@@ -42,6 +42,7 @@ def _to_out(user) -> dict:
         "role_label": ROLE_LABELS.get(user.role, user.role),
         "permissions": user_permission_map(user),
         "disabled": bool(user.disabled),
+        "must_change_password": bool(user.must_change_password),
         "created_at": user.created_at,
     }
 
