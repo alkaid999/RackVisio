@@ -45,7 +45,7 @@
           <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
             <span class="w-3 h-3 rounded-full" :style="{ background: DEVICE_POWER_COLORS['开机'] }"></span>开机
           </span>
-          <span class="flex items-center gap-1.5 text-xs text-slate-500">
+          <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
             <span class="w-3 h-3 rounded-full" :style="{ background: DEVICE_POWER_COLORS['关机'] }"></span>关机
           </span>
         </div>
@@ -168,7 +168,7 @@
           <div><div class="text-xs text-muted-foreground">设备编码</div><div class="text-foreground">{{ detailDevice.device_code || '—' }}</div></div>
           <div><div class="text-xs text-muted-foreground">U 位</div><div class="text-foreground">{{ detailDevice.current_start_u }}U–{{ detailDevice.current_start_u + (detailDevice.u_height || 1) - 1 }}U（{{ detailDevice.u_height }}U）</div></div>
         </div>
-        <div v-if="allOverlapIds.has(detailDevice.id)" class="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-400">
+        <div v-if="allOverlapIds.has(detailDevice.id)" class="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
           ⚠ 该设备 U 位与其他设备重叠，请检查上架位置。
         </div>
       </div>
@@ -744,7 +744,7 @@ onMounted(loadRooms)
   align-self: flex-end;
   background: hsl(var(--card));
   border: 2px solid hsl(var(--foreground) / 0.28);
-  border-radius: 14px;
+  border-radius: 12px;
   padding: 12px 12px 14px;
   box-shadow: 0 1px 3px hsl(var(--foreground) / 0.06);
 }
@@ -753,7 +753,7 @@ onMounted(loadRooms)
 .rack-empty-slot {
   width: 170px;
   flex-shrink: 0;
-  border-radius: 14px;
+  border-radius: 12px;
   border: 1px dashed hsl(var(--border) / 0.3);
   box-sizing: border-box;
 }

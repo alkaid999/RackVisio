@@ -8,7 +8,7 @@
         <div>
           <h2 class="page-title">
             {{ rack.name }}
-            <small class="text-slate-400 font-normal">（{{ rack.column_code }} / {{ rack.code }}）</small>
+            <small class="text-muted-foreground font-normal">（{{ rack.column_code }} / {{ rack.code }}）</small>
           </h2>
           <p class="page-sub">
             坐标：{{ rack.column_code }} / {{ rack.code }} ·
@@ -72,7 +72,7 @@
               <Grid3x3 class="h-4 w-4" />U 位占用图
             </span>
           </template>
-          <p class="mb-2 text-xs text-slate-500">
+          <p class="mb-2 text-xs text-muted-foreground">
             <template v-if="canEdit">拖拽右侧设备至空闲位即可上架 · </template>点击空闲位批量上架 · 悬停设备查看详情 · 悬停已上架设备可下架 · 点击设备进入详情
           </p>
           <div class="u-map-scroll max-h-[640px] overflow-y-auto pr-1">
@@ -85,8 +85,8 @@
               @mount-device="onDropMount"
             />
           </div>
-          <div class="mt-3 flex flex-wrap items-center gap-3 border-t border-slate-100 pt-3">
-            <span v-for="t in DEVICE_TYPE_OPTIONS" :key="t.value" class="flex items-center gap-1.5 text-xs text-slate-500">
+          <div class="mt-3 flex flex-wrap items-center gap-3 border-t border-border pt-3">
+            <span v-for="t in DEVICE_TYPE_OPTIONS" :key="t.value" class="flex items-center gap-1.5 text-xs text-muted-foreground">
               <span class="h-3 w-3 rounded" :style="{ background: DEVICE_TYPE_COLORS[t.value] }"></span>
               {{ t.label }}
             </span>
@@ -119,13 +119,13 @@
                 <span class="h-2.5 w-2.5 rounded-full" :style="{ background: DEVICE_TYPE_COLORS[d.device_type] || '#909399' }"></span>
                 <span class="offrack-name truncate">{{ d.name }}</span>
               </div>
-              <div class="mt-1 flex items-center justify-between text-xs text-slate-500">
+              <div class="mt-1 flex items-center justify-between text-xs text-muted-foreground">
                 <DeviceTypeTag :type="d.device_type" />
                 <span>{{ d.u_height }}U</span>
               </div>
               <div class="mt-1 flex items-center justify-between">
                 <StatusBadge type="device" :value="d.status" />
-                <span v-if="canEdit" class="text-[11px] text-slate-400">拖拽上架</span>
+                <span v-if="canEdit" class="text-[11px] text-muted-foreground">拖拽上架</span>
               </div>
             </div>
             <EmptyState v-if="!candidates.length" title="暂无架下设备" class="py-8" />
@@ -153,7 +153,7 @@
               <TableCell><DeviceTypeTag :type="row.device_type" /></TableCell>
               <TableCell>
                 <template v-if="row.current_start_u != null">{{ row.current_start_u }}U ~ {{ row.current_start_u + row.u_height - 1 }}U</template>
-                <span v-else class="text-slate-400">未上架</span>
+                <span v-else class="text-muted-foreground">未上架</span>
               </TableCell>
               <TableCell>{{ row.ip_address }}</TableCell>
               <TableCell><StatusBadge type="device" :value="row.status" /></TableCell>
@@ -172,7 +172,7 @@
       <!-- 上架设备弹窗：从候选设备池（仓库 / 空闲 / 下架设备）中选择 -->
       <!-- M-01：dialog.vue 只 emit update:modelValue（v-model 已覆盖关闭），@update:visible 永不触发，已移除 -->
       <Dialog v-model="mountVisible" title="上架设备" class="max-w-lg">
-        <div v-if="!candidates.length" class="py-6 text-center text-sm text-slate-500">
+        <div v-if="!candidates.length" class="py-6 text-center text-sm text-muted-foreground">
           暂无可上架设备（仓库 / 空闲 / 下架设备池为空）。
         </div>
         <Form v-else :model="mountForm" :rules="mountRules">
@@ -182,7 +182,7 @@
             @update:model-value="onFilterChange"
             class="mb-3"
           />
-          <p v-if="!filteredCandidates.length" class="mb-3 text-center text-sm text-slate-500">
+          <p v-if="!filteredCandidates.length" class="mb-3 text-center text-sm text-muted-foreground">
             无匹配「{{ filter.keyword || '' }}」的设备，请调整筛选条件。
           </p>
           <FormItem label="选择设备" name="device_id">
@@ -197,7 +197,7 @@
           </FormItem>
           <FormItem label="起始 U 位" name="start_u">
             <Input type="number" :min="1" :max="rack.total_u" v-model="mountForm.start_u" />
-            <p class="text-xs text-slate-400 mt-1">机柜共 {{ rack.total_u }}U，自底向上计数。</p>
+            <p class="text-xs text-muted-foreground mt-1">机柜共 {{ rack.total_u }}U，自底向上计数。</p>
           </FormItem>
         </Form>
         <template #footer>
@@ -487,26 +487,29 @@ onMounted(async () => {
   font-size: 12px;
   color: hsl(var(--muted-foreground));
 }
+/* P2/P1：kpi-value 收敛到全局 @utility（text-3xl=30px），颜色走语义令牌 */
 .kpi-value {
-  font-size: 18px;
+  font-size: 30px;
   font-weight: 700;
   color: hsl(var(--foreground));
+  line-height: 1.2;
 }
 .offrack-scroll {
   /* 内部滚动，避免整页过长 */
 }
 .offrack-item {
-  border: 1px solid #eef0f4;
+  /* P1：Element-UI 残留色（#eef0f4/#fff/#409eff/#1f2937）→ 语义令牌 */
+  border: 1px solid hsl(var(--border));
   border-radius: 8px;
   padding: 8px 10px;
   margin-bottom: 8px;
-  background: #fff;
+  background: hsl(var(--card));
   cursor: grab;
   transition: box-shadow 0.15s, border-color 0.15s, transform 0.1s;
 }
 .offrack-item:hover {
-  border-color: #409eff;
-  box-shadow: 0 2px 10px rgba(64, 158, 255, 0.18);
+  border-color: hsl(var(--ring));
+  box-shadow: 0 2px 10px hsl(var(--ring) / 0.18);
 }
 .offrack-item:active {
   cursor: grabbing;
@@ -515,6 +518,6 @@ onMounted(async () => {
 .offrack-name {
   font-size: 13px;
   font-weight: 600;
-  color: #1f2937;
+  color: hsl(var(--foreground));
 }
 </style>

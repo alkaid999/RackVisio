@@ -49,9 +49,10 @@
       <!-- 新建模式：左右两栏分别展示本端 / 对端，清晰区分两端 -->
       <template v-else>
         <!-- 链路资格门控（详细引导统一在「链路总览」二级菜单）：此处仅简洁拦截 -->
+        <!-- P1：amber → warning 语义令牌色 -->
         <div
           v-if="linkBlocked"
-          class="mb-4 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-700"
+          class="mb-4 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-warning"
         >
           <p class="font-medium">无法创建链路</p>
           <p class="mt-1">本端设备当前不满足建链条件（需已上架机柜且含有接口）。请先在「设备管理」完成前置步骤。</p>
@@ -634,7 +635,8 @@ async function onSubmit() {
   align-items: center;
   gap: 10px;
   padding: 11px 14px;
-  border-radius: 14px;
+  /* P2：圆角归一 14px → 12px（rounded-xl） */
+  border-radius: 12px;
   border: 1px solid hsl(var(--border));
   background: linear-gradient(180deg, hsl(var(--card)), hsl(var(--muted) / 0.5));
   box-shadow: inset 0 1px 0 hsl(var(--foreground) / 0.03);

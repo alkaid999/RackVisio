@@ -282,30 +282,7 @@ onMounted(load)
 </script>
 
 <style scoped>
-.page-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 16px;
-}
-.page-title {
-  margin: 0 0 6px;
-  font-size: 22px;
-  font-weight: 600;
-}
-.page-sub {
-  margin: 0;
-  color: #606266;
-  font-size: 13px;
-}
-.toolbar {
-  background: oklch(var(--card) / 0.8);
-  border: 1px solid oklch(var(--border) / 0.6);
-  border-radius: 10px;
-  padding: 14px 16px;
-  margin-bottom: 16px;
-  backdrop-filter: blur(8px);
-}
+/* P0 风格统一：page-head/page-title/page-sub/toolbar 移交给全局 @utility（index.css）。 */
 .hist-dot {
   display: inline-block;
   width: 8px;
@@ -314,9 +291,11 @@ onMounted(load)
   flex: none;
 }
 .hist-dot--mount {
-  background-color: #67c23a;
+  /* P1：硬编码 hex → 语义令牌（上架=success） */
+  background-color: hsl(var(--success));
 }
 .hist-dot--unmount {
-  background-color: #e6a23c;
+  /* P1：硬编码 hex → 语义令牌（下架=warning） */
+  background-color: hsl(var(--warning));
 }
 </style>

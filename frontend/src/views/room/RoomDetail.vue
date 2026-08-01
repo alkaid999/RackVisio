@@ -9,7 +9,7 @@
         <div>
           <h2 class="page-title">
             {{ room.name }}
-            <small class="text-slate-400 font-normal">（{{ room.code }}）</small>
+            <small class="text-muted-foreground font-normal">（{{ room.code }}）</small>
           </h2>
           <p class="page-sub">
             编号：{{ room.code }} · 状态：

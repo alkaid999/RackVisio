@@ -11,10 +11,10 @@
         <span class="h-2 w-2 shrink-0 rounded-full" :style="{ backgroundColor: statusColorOf(selectedDevice) }"></span>
         <span class="truncate font-medium">{{ selectedDevice.name }}</span>
         <span class="shrink-0 text-xs text-muted-foreground">{{ typeLabel(selectedDevice.device_type) }}</span>
-        <span v-if="selectedDevice.current_rack_name" class="shrink-0 text-xs text-slate-400">· {{ selectedDevice.current_rack_name }}</span>
+        <span v-if="selectedDevice.current_rack_name" class="shrink-0 text-xs text-muted-foreground">· {{ selectedDevice.current_rack_name }}</span>
       </span>
       <span v-else class="text-muted-foreground">{{ placeholder }}</span>
-      <ChevronDown class="h-4 w-4 shrink-0 text-slate-400" :class="{ 'rotate-180': open }" />
+      <ChevronDown class="h-4 w-4 shrink-0 text-muted-foreground" :class="{ 'rotate-180': open }" />
     </button>
 
     <!-- 弹出层：Teleport 到 body，避免被弹窗 overflow 裁剪 -->
@@ -29,7 +29,7 @@
         <!-- 搜索 + 视图切换 -->
         <div class="flex items-center gap-2 border-b border-border p-2.5">
           <div class="relative flex-1">
-            <Search class="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <Search class="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <input
               v-model="keyword"
               type="text"
@@ -40,14 +40,14 @@
           <div class="flex overflow-hidden rounded-md border border-border">
             <button
               type="button"
-              class="px-2 py-1.5 text-slate-500 transition-colors"
+              class="px-2 py-1.5 text-muted-foreground transition-colors"
               :class="viewMode === 'grid' ? 'bg-primary/10 text-primary' : 'hover:bg-muted'"
               title="网格"
               @click="viewMode = 'grid'"
             ><LayoutGrid class="h-4 w-4" /></button>
             <button
               type="button"
-              class="px-2 py-1.5 text-slate-500 transition-colors"
+              class="px-2 py-1.5 text-muted-foreground transition-colors"
               :class="viewMode === 'list' ? 'bg-primary/10 text-primary' : 'hover:bg-muted'"
               title="列表"
               @click="viewMode = 'list'"
@@ -86,13 +86,13 @@
               <SelectItem v-for="r in racks" :key="r.id" :value="r.id">{{ r.name }}</SelectItem>
             </SelectContent>
           </Select>
-          <Button v-if="hasActiveFilter" variant="ghost" size="sm" class="h-8 px-2 text-xs text-slate-500" @click="resetFilters">
+          <Button v-if="hasActiveFilter" variant="ghost" size="sm" class="h-8 px-2 text-xs text-muted-foreground" @click="resetFilters">
             <RotateCcw class="h-3.5 w-3.5" />重置
           </Button>
         </div>
 
         <!-- 结果计数 -->
-        <div class="px-3 pt-2 text-xs text-slate-400">
+        <div class="px-3 pt-2 text-xs text-muted-foreground">
           共 {{ filtered.length }} 台设备
           <span v-if="reasonActive">（红字标注不可建链原因）</span>
         </div>
@@ -111,12 +111,12 @@
               class="device-card group relative flex flex-col gap-1.5 rounded-lg border p-3 text-left transition-all"
               :class="[
                 modelValue === d.id ? 'border-primary ring-2 ring-primary/40 bg-primary/5' : 'border-border hover:border-primary/40 hover:bg-muted/50',
-                isSelectable(d) ? '' : 'cursor-not-allowed border-red-200 bg-red-50/60 hover:border-red-300 hover:bg-red-50',
+                isSelectable(d) ? '' : 'cursor-not-allowed border-destructive/25 bg-destructive/5 hover:border-destructive/30 hover:bg-destructive/10',
               ]"
               @click="pick(d)"
             >
               <DeviceCardBody :device="d" :selected="modelValue === d.id" />
-              <span v-if="reasonOf(d)" class="mt-0.5 inline-flex items-center gap-1 text-xs font-medium text-red-500">
+              <span v-if="reasonOf(d)" class="mt-0.5 inline-flex items-center gap-1 text-xs font-medium text-destructive">
                 <Ban class="h-3 w-3" />{{ reasonOf(d) }}
               </span>
             </button>
@@ -130,18 +130,18 @@
               class="device-card relative flex items-center gap-3 rounded-lg border p-2.5 text-left transition-all"
               :class="[
                 modelValue === d.id ? 'border-primary ring-2 ring-primary/40 bg-primary/5' : 'border-border hover:border-primary/40 hover:bg-muted/50',
-                isSelectable(d) ? '' : 'cursor-not-allowed border-red-200 bg-red-50/60 hover:border-red-300 hover:bg-red-50',
+                isSelectable(d) ? '' : 'cursor-not-allowed border-destructive/25 bg-destructive/5 hover:border-destructive/30 hover:bg-destructive/10',
               ]"
               @click="pick(d)"
             >
               <DeviceCardBody :device="d" :selected="modelValue === d.id" :list="true" />
-              <span v-if="reasonOf(d)" class="ml-auto inline-flex shrink-0 items-center gap-1 text-xs font-medium text-red-500">
+              <span v-if="reasonOf(d)" class="ml-auto inline-flex shrink-0 items-center gap-1 text-xs font-medium text-destructive">
                 <Ban class="h-3 w-3" />{{ reasonOf(d) }}
               </span>
             </button>
           </div>
 
-          <div v-if="!filtered.length" class="py-10 text-center text-sm text-slate-400">
+          <div v-if="!filtered.length" class="py-10 text-center text-sm text-muted-foreground">
             无匹配设备，请调整搜索或筛选条件
           </div>
         </div>

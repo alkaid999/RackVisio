@@ -181,8 +181,10 @@ function utilColor(rack) {
   return meta.usageColor(u)
 }
 function tileBorder(rack) {
-  if (rack.status === '不可用') return 'border-red-400'
-  if (rack.status === '制冷机柜' || rack.status === '配电机柜') return 'border-sky-300'
+  // P1：硬编码 red-400/sky-300 → 语义令牌（destructive=不可用、info 系=制冷/配电）。
+  // 制冷/配电机柜用 brand 蓝（与机柜状态徽章 RACK_STATUS_COLORS 同源，避免任意色）。
+  if (rack.status === '不可用') return 'border-destructive/50'
+  if (rack.status === '制冷机柜' || rack.status === '配电机柜') return 'border-brand-400/60'
   return 'border-border'
 }
 

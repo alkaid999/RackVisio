@@ -296,12 +296,14 @@ onBeforeUnmount(clearHideTimer)
   position: fixed;
   width: 224px;
   padding: 8px;
-  border-radius: 14px;
+  /* P2：圆角归一 14px → 12px（rounded-xl） */
+  border-radius: 12px;
   background: hsl(var(--popover) / 0.82);
   backdrop-filter: blur(14px) saturate(150%);
   -webkit-backdrop-filter: blur(14px) saturate(150%);
   border: 1px solid hsl(var(--border));
-  box-shadow: 0 20px 50px -16px rgba(15, 23, 42, 0.38);
+  /* P2：硬编码阴影 → shadow-card 令牌 */
+  box-shadow: var(--shadow-card);
   z-index: 80;
   transform: translateY(-50%);
   animation: flyout-in 0.16s ease;
@@ -332,7 +334,8 @@ onBeforeUnmount(clearHideTimer)
   align-items: center;
   gap: 9px;
   padding: 8px 10px;
-  border-radius: 9px;
+  /* P2：圆角归一 9px → 8px（rounded-md） */
+  border-radius: 8px;
   font-size: 13px;
   color: hsl(var(--muted-foreground));
   transition: background 0.15s ease, color 0.15s ease;

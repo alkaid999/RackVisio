@@ -97,7 +97,8 @@
               >{{ item.type_name }}</span>
             </div>
             <div class="mb-3 flex items-baseline gap-1.5">
-              <span class="text-3xl font-bold leading-none" :style="{ color: item.current_quantity === 0 ? '#ef4444' : 'hsl(var(--foreground))' }">{{ item.current_quantity }}</span>
+              <!-- P1：#ef4444 → 语义令牌色（text-destructive） -->
+              <span class="text-3xl font-bold leading-none" :class="item.current_quantity === 0 ? 'text-destructive' : 'text-foreground'">{{ item.current_quantity }}</span>
               <span class="text-sm text-muted-foreground">{{ item.unit || '个' }}</span>
               <span class="ml-1 text-xs text-muted-foreground">当前结存</span>
             </div>
@@ -147,7 +148,8 @@
               <TableCell class="text-muted-foreground">{{ item.spec || '—' }}</TableCell>
               <TableCell class="text-muted-foreground">{{ item.unit || '—' }}</TableCell>
               <TableCell class="text-right">
-                <span class="font-semibold" :style="{ color: item.current_quantity === 0 ? '#ef4444' : 'hsl(var(--foreground))' }">{{ item.current_quantity }}</span>
+                <!-- P1：#ef4444 → 语义令牌色（text-destructive） -->
+                <span class="font-semibold" :class="item.current_quantity === 0 ? 'text-destructive' : 'text-foreground'">{{ item.current_quantity }}</span>
                 <span class="ml-1 text-xs text-muted-foreground">{{ item.unit || '' }}</span>
               </TableCell>
               <TableCell class="text-right">
@@ -349,14 +351,7 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.toolbar {
-  background: oklch(var(--card) / 0.8);
-  border: 1px solid oklch(var(--border) / 0.6);
-  border-radius: 10px;
-  padding: 14px 16px;
-  margin-bottom: 16px;
-  backdrop-filter: blur(8px);
-}
+/* P0 风格统一：toolbar 移交给全局 @utility（index.css）。 */
 .grid-cards {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));

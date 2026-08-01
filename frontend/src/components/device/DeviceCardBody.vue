@@ -15,7 +15,7 @@
       <span class="inline-flex items-center gap-1">
         <Globe class="h-3 w-3 text-muted-foreground" />{{ device.ip_address || '—' }}
       </span>
-      <span v-if="device.current_rack_name" class="inline-flex items-center gap-1 text-slate-400">
+      <span v-if="device.current_rack_name" class="inline-flex items-center gap-1 text-muted-foreground">
         <Server class="h-3 w-3" />{{ device.current_rack_name }}
         <template v-if="device.current_start_u != null">· {{ device.current_start_u }}U~{{ uEnd }}U</template>
       </span>

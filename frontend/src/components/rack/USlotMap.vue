@@ -413,13 +413,13 @@ function onDrop(e) {
   font-weight: 500;
 }
 .u-device {
-  font-size: 12.5px;
+  font-size: 12px;
   fill: #fff;
   font-weight: 600;
   pointer-events: none;
 }
 .u-range {
-  font-size: 10.5px;
+  font-size: 10px;
   fill: rgba(255, 255, 255, 0.92);
   pointer-events: none;
 }
@@ -448,13 +448,14 @@ function onDrop(e) {
   cursor: pointer;
 }
 .u-unmount-text {
-  font-size: 11.5px;
+  font-size: 11px;
   font-weight: 700;
   fill: #fff;
   pointer-events: none;
 }
 .u-overlap {
-  stroke: #ef4444 !important;
+  /* P1：#ef4444 → 语义令牌（重叠告警=destructive） */
+  stroke: hsl(var(--destructive)) !important;
   stroke-width: 2;
   stroke-dasharray: 4 2;
 }
@@ -463,7 +464,7 @@ function onDrop(e) {
 }
 .u-overlap-text {
   font-size: 11px;
-  font-weight: 800;
+  font-weight: 700;
   fill: #fff;
   pointer-events: none;
 }

@@ -29,7 +29,7 @@ const attemptedPath = computed(() => route.fullPath || '/')
       </div>
 
       <h1
-        class="bg-gradient-to-r from-sky-500 to-indigo-500 bg-clip-text text-6xl font-extrabold tracking-tight text-transparent"
+        class="bg-gradient-to-r from-brand-500 to-brand-700 bg-clip-text text-6xl font-extrabold tracking-tight text-transparent"
       >
         404
       </h1>

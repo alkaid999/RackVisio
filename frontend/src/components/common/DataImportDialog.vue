@@ -14,7 +14,7 @@
           <div class="space-y-2">
             <div class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">第 1 步 · 准备</div>
             <p class="text-sm leading-relaxed text-muted-foreground">
-              先下载模板，按表头填写后导入。表头标 <span class="font-semibold text-red-500">*</span> 为必填。
+              先下载模板，按表头填写后导入。表头标 <span class="font-semibold text-destructive">*</span> 为必填。
             </p>
             <Button variant="outline" size="sm" class="mt-1 w-full" @click="downloadTemplate">
               <Download class="h-4 w-4" />下载导入模板
@@ -32,8 +32,8 @@
             <CollapsibleContent class="mt-3 space-y-4">
               <!-- 必填字段：浅红 pill（恢复上一版红标，仅调浅色） -->
               <div>
-                <div class="mb-2 flex items-center gap-1.5 text-xs font-semibold text-red-500">
-                  <span class="h-1.5 w-1.5 rounded-full bg-red-500" />必填字段
+                <div class="mb-2 flex items-center gap-1.5 text-xs font-semibold text-destructive">
+                  <span class="h-1.5 w-1.5 rounded-full bg-destructive" />必填字段
                 </div>
                 <div class="flex flex-wrap gap-1.5">
                   <span
@@ -41,7 +41,7 @@
                     :key="f.key"
                     class="inline-flex items-center gap-0.5 rounded-full border border-destructive/30 bg-destructive/10 px-2 py-0.5 text-xs font-medium text-destructive"
                   >
-                    <span class="text-red-500">*</span>{{ f.label }}
+                    <span class="text-destructive">*</span>{{ f.label }}
                   </span>
                 </div>
               </div>
@@ -125,7 +125,7 @@
               </Button>
               <input ref="fileInput" type="file" accept=".xlsx,.xls,.csv" class="hidden" @change="onFileChange" />
               <p v-if="fileName" class="mt-3 max-w-full truncate text-sm text-muted-foreground">已选择：{{ fileName }}</p>
-              <p v-if="parseError" class="mt-2 text-sm text-red-500">{{ parseError }}</p>
+              <p v-if="parseError" class="mt-2 text-sm text-destructive">{{ parseError }}</p>
             </div>
 
             <!-- 步骤 2：校验与预览 -->

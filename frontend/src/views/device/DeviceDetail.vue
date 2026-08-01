@@ -714,10 +714,12 @@ onMounted(async () => {
   flex: none;
 }
 .hist-dot--mount {
-  background-color: #67c23a;
+  /* P1：硬编码 hex → 语义令牌（上架=success） */
+  background-color: hsl(var(--success));
 }
 .hist-dot--unmount {
-  background-color: #e6a23c;
+  /* P1：硬编码 hex → 语义令牌（下架=warning） */
+  background-color: hsl(var(--warning));
 }
 
 /* 单栏容器 */

@@ -363,20 +363,5 @@ onMounted(load)
 </script>
 
 <style scoped>
-.page-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 16px;
-}
-.page-title {
-  margin: 0 0 6px;
-  font-size: 22px;
-  font-weight: 600;
-}
-.page-sub {
-  margin: 0;
-  color: hsl(var(--muted-foreground));
-  font-size: 13px;
-}
+/* P0 风格统一：page-head/page-title/page-sub 移交给全局 @utility（index.css）。 */
 </style>

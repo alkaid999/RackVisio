@@ -109,9 +109,10 @@ function qtyText(r) {
   return `=${r.quantity}`
 }
 function qtyColor(r) {
-  if (r.operation_type === '入库') return '#22c55e'
-  if (r.operation_type === '领用' || r.operation_type === '报废') return '#ef4444'
-  return '#e6a23c'
+  // P1：硬编码 hex → 语义令牌（入库=success / 领用报废=destructive / 其他=warning）
+  if (r.operation_type === '入库') return 'hsl(var(--success))'
+  if (r.operation_type === '领用' || r.operation_type === '报废') return 'hsl(var(--destructive))'
+  return 'hsl(var(--warning))'
 }
 
 watch(

@@ -287,11 +287,8 @@ onMounted(load)
   border-radius: 12px;
   border: 1px solid hsl(var(--destructive) / 0.3);
   background: hsl(var(--destructive) / 0.08);
-  animation: batch-in 0.16s ease;
-}
-@keyframes batch-in {
-  from { opacity: 0; transform: translateY(-4px); }
-  to { opacity: 1; transform: translateY(0); }
+  /* P2：本地 batch-in keyframes 并入全局 --animate-slide-in-up */
+  animation: slide-in-up 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 .batch-count {
   font-size: 13px;

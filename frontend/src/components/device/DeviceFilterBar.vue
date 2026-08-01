@@ -41,11 +41,11 @@ const hasActive = computed(
 
 <template>
   <div class="device-filter-bar flex flex-wrap items-center gap-2 rounded-lg border border-border/70 bg-muted/30 px-2.5 py-2">
-    <span class="flex items-center gap-1 text-xs font-medium text-slate-500">
+    <span class="flex items-center gap-1 text-xs font-medium text-muted-foreground">
       <Filter class="h-3.5 w-3.5" />筛选
     </span>
     <div class="relative">
-      <Search class="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+      <Search class="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
       <Input v-model="kw" placeholder="设备名称" class="w-40 pl-8" />
     </div>
     <Select v-model="selType">
@@ -55,7 +55,7 @@ const hasActive = computed(
         <SelectItem v-for="t in typeOptions" :key="t.value" :value="t.value">{{ t.label }}</SelectItem>
       </SelectContent>
     </Select>
-    <Button v-if="hasActive" variant="ghost" size="sm" class="text-slate-500" @click="reset">
+    <Button v-if="hasActive" variant="ghost" size="sm" class="text-muted-foreground" @click="reset">
       <RotateCcw class="h-3.5 w-3.5" />重置
     </Button>
   </div>

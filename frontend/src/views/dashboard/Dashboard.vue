@@ -288,17 +288,20 @@ const kpis = computed(() => {
   const powerRated = o.power_rated ?? 0
   const powerUsed = o.power_used ?? 0
   const powerUtil = powerRated > 0 ? Math.round((powerUsed / powerRated) * 100) : 0
-  // M-15：KPI 色收敛到语义令牌色（CSS 变量），替代硬编码 hex——
-  // 令牌随明暗主题自适应，避免深色下对比度不足；取色统一走 getCssVar('--xxx')。
+  // M-15/P1：KPI 色收敛到设计令牌（CSS 变量），替代硬编码 hex——
+  // 令牌随明暗主题自适应，避免深色下对比度不足。
+  // cssColor 兼容两种变量值：本项目令牌是 HSL 通道（"217 91% 60%"→hsl(...)），
+  // Tailwind 默认色板是完整色值（oklch(...) 原样返回，如 --color-violet-500）。
   const cssColor = (name, fallback) => {
     if (typeof window === 'undefined') return fallback
     const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
-    return v ? `hsl(${v})` : fallback
+    if (!v) return fallback
+    return v.includes('(') ? v : `hsl(${v})`
   }
   return [
     { label: '机房数量', value: o.room_count ?? 0, icon: Building2, color: cssColor('--primary', '#3b82f6') },
-    { label: '机柜数量', value: o.rack_count ?? 0, icon: Server, color: cssColor('--info', '#13c2c2') },
-    { label: '设备总数', value: o.device_count ?? 0, icon: Cpu, color: cssColor('--violet-500', '#8b5cf6') },
+    { label: '机柜数量', value: o.rack_count ?? 0, icon: Server, color: cssColor('--color-cyan-500', '#06b6d4') },
+    { label: '设备总数', value: o.device_count ?? 0, icon: Cpu, color: cssColor('--color-violet-500', '#8b5cf6') },
     { label: '已上架设备', value: statusMap['已上架'] ?? 0, icon: CircleCheck, color: cssColor('--success', '#22c55e') },
     {
       label: '整体机柜使用率',
@@ -308,9 +311,9 @@ const kpis = computed(() => {
       color: meta.usageColor(util),
       hint: `已用 ${o.used_u ?? 0} / 共 ${o.total_u ?? 0} U`,
     },
-    { label: '链路总数', value: o.link_count ?? 0, icon: Link2, color: cssColor('--info', '#06b6d4') },
+    { label: '链路总数', value: o.link_count ?? 0, icon: Link2, color: cssColor('--color-cyan-500', '#06b6d4') },
     { label: '账号数', value: o.account_count ?? 0, icon: Users, color: cssColor('--warning', '#f59e0b') },
-    { label: '耗材条目', value: o.consumable_item_count ?? 0, icon: Package, color: cssColor('--pink-500', '#eb4895') },
+    { label: '耗材条目', value: o.consumable_item_count ?? 0, icon: Package, color: cssColor('--color-pink-500', '#ec4899') },
     {
       label: '功率预算',
       value: (powerUsed / 1000).toFixed(1),

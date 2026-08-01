@@ -443,11 +443,10 @@ function apply3DTheme(dark) {
     if (key) key.intensity = dark ? 1.15 : 1.35
     if (fill) fill.intensity = dark ? 0.4 : 0.55
   }
-  // CSS 画布背景渐变（与 Three.js 背景协调）
+  // CSS 画布背景渐变（与 Three.js 背景协调）——统一走 --bg-3d-canvas 变量（明暗双态，index.css 定义），
+  // 避免渐变字符串在此重复（风格统一：改一处即全站生效）。
   if (canvasWrap.value) {
-    canvasWrap.value.style.background = dark
-      ? 'radial-gradient(120% 120% at 50% 0%, #16203a 0%, #0b1220 55%, #070b14 100%)'
-      : 'radial-gradient(120% 120% at 50% 0%, #c5d1e6 0%, #a8b8d0 55%, #8e9db5 100%)'
+    canvasWrap.value.style.background = 'var(--bg-3d-canvas)'
   }
 }
 

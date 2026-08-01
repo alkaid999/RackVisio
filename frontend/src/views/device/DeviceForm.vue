@@ -44,11 +44,11 @@
           <div class="form-grid">
             <FormItem label="当前位置" name="current_pos" :icon="MapPin">
               <Input :model-value="currentPosLabel || '未上架（保存后可上架）'" disabled title="当前位置由机柜上架流程管理，不可直接编辑" />
-              <p v-if="isMounted" class="text-xs text-amber-600 mt-1 font-medium">已上架，位置不可直接修改（如需变更请通过「上架 / 下架」操作）。</p>
+              <p v-if="isMounted" class="text-xs text-warning mt-1 font-medium">已上架，位置不可直接修改（如需变更请通过「上架 / 下架」操作）。</p>
             </FormItem>
             <FormItem label="设备 U 数" name="u_height" :icon="Rows3">
               <Input type="number" :min="1" :max="60" v-model="form.u_height" :disabled="isMounted" />
-              <p v-if="isMounted" class="text-xs text-amber-600 mt-1 font-medium">已上架，U 数不可修改（防位置冲突）。</p>
+              <p v-if="isMounted" class="text-xs text-warning mt-1 font-medium">已上架，U 数不可修改（防位置冲突）。</p>
             </FormItem>
           </div>
         </div>

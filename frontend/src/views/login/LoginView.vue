@@ -167,10 +167,12 @@ async function onSubmit() {
   width: 100%;
   max-width: 400px;
   padding: 36px 32px 28px;
-  border-radius: 20px;
+  /* P2：圆角归一 —— 20px → rounded-2xl(16px)，与卡片体系（rounded-xl 12/16）对齐 */
+  border-radius: 16px;
   background: hsl(var(--card) / 0.7);
   border: 1px solid hsl(var(--border));
-  box-shadow: 0 30px 70px -30px rgb(15 23 42 / 0.45);
+  /* P2：硬编码阴影 → shadow-card 令牌 */
+  box-shadow: var(--shadow-card);
   animation: card-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 @keyframes card-in {
@@ -195,7 +197,7 @@ async function onSubmit() {
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 14px;
+  border-radius: 12px;
   background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary) / 0.7));
   color: #fff;
   font-weight: 700;

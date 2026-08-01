@@ -445,30 +445,8 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.page-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 16px;
-}
-.page-title {
-  margin: 0 0 6px;
-  font-size: 22px;
-  font-weight: 600;
-}
-.page-sub {
-  margin: 0;
-  color: #606266;
-  font-size: 13px;
-}
-.toolbar {
-  background: oklch(var(--card) / 0.8);
-  border: 1px solid oklch(var(--border) / 0.6);
-  border-radius: 10px;
-  padding: 14px 16px;
-  margin-bottom: 16px;
-  backdrop-filter: blur(8px);
-}
+/* P0 风格统一：page-head/page-title/page-sub/toolbar 移交给全局 @utility（index.css），
+   删除本地旧覆盖（22px 固定字号 / #606266 / 10px 圆角 / 无阴影），回归统一设计令牌。 */
 .grid-cards {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
@@ -486,11 +464,8 @@ onMounted(async () => {
   border-radius: 12px;
   border: 1px solid hsl(var(--destructive) / 0.3);
   background: hsl(var(--destructive) / 0.08);
-  animation: batch-in 0.16s ease;
-}
-@keyframes batch-in {
-  from { opacity: 0; transform: translateY(-4px); }
-  to { opacity: 1; transform: translateY(0); }
+  /* P2：本地 batch-in keyframes 并入全局 --animate-slide-in-up（消除三处重复定义） */
+  animation: slide-in-up 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 .batch-count {
   font-size: 13px;

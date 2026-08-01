@@ -105,7 +105,11 @@
                 <span class="truncate text-base font-semibold text-foreground">{{ room.name }}</span>
               </div>
               <span class="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap text-sm font-medium text-muted-foreground">
-                <span class="h-2 w-2 rounded-full" :style="{ backgroundColor: room.status === 'active' ? '#67C23A' : '#909399' }"></span>
+                <!-- P1：状态点收敛到语义令牌色（success=启用 / muted-foreground=停用） -->
+                <span
+                  class="h-2 w-2 rounded-full"
+                  :class="room.status === 'active' ? 'bg-success' : 'bg-muted-foreground/60'"
+                ></span>
                 {{ room.status === 'active' ? '启用' : '停用' }}
               </span>
             </div>
@@ -148,7 +152,11 @@
                 <template v-else-if="col.key === 'address'">{{ room.address || '—' }}</template>
                 <template v-else-if="col.key === 'status'">
                   <span class="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
-                    <span class="h-2 w-2 rounded-full" :style="{ backgroundColor: room.status === 'active' ? '#67C23A' : '#909399' }"></span>
+                    <!-- P1：状态点收敛到语义令牌色 -->
+                    <span
+                      class="h-2 w-2 rounded-full"
+                      :class="room.status === 'active' ? 'bg-success' : 'bg-muted-foreground/60'"
+                    ></span>
                     {{ room.status === 'active' ? '启用' : '停用' }}
                   </span>
                 </template>
@@ -364,14 +372,7 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.toolbar {
-  background: oklch(var(--card) / 0.8);
-  border: 1px solid oklch(var(--border) / 0.6);
-  border-radius: 10px;
-  padding: 14px 16px;
-  margin-bottom: 16px;
-  backdrop-filter: blur(8px);
-}
+/* P0 风格统一：toolbar 移交给全局 @utility（index.css）。 */
 .grid-cards {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));

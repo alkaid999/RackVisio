@@ -52,7 +52,7 @@
           <button
             type="button"
             aria-label="删除"
-            class="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-red-50 hover:text-red-500"
+            class="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
             @click="$emit('delete')"
           ><Trash2 class="h-3.5 w-3.5" /></button>
         </template>

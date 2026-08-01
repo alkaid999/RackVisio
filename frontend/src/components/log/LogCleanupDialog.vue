@@ -100,8 +100,9 @@ async function confirm() {
   flex-direction: column;
   background: hsl(var(--card));
   border: 1px solid hsl(var(--border));
-  border-radius: 20px;
-  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.4);
+  /* P2：圆角归一 20px → rounded-2xl(16px)，阴影走 shadow-card 令牌 */
+  border-radius: 16px;
+  box-shadow: var(--shadow-card);
   overflow: hidden;
 }
 .cleanup-head {

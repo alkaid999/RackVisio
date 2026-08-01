@@ -477,34 +477,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onEsc))
 </script>
 
 <style scoped>
-.page-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 20px;
-  gap: 16px;
-}
-.page-title {
-  margin: 0 0 8px;
-  font-size: 24px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-}
-.page-sub {
-  margin: 0;
-  color: hsl(var(--muted-foreground));
-  font-size: 13.5px;
-  line-height: 1.6;
-  max-width: 64ch;
-}
-.toolbar {
-  background: hsl(var(--card) / 0.7);
-  border: 1px solid hsl(var(--border) / 0.6);
-  border-radius: 16px;
-  padding: 18px 20px;
-  margin-bottom: 18px;
-  backdrop-filter: blur(8px);
-}
+/* P0 风格统一：page-head/page-title/page-sub/toolbar 移交给全局 @utility（index.css）。
+   toolbar 内部的 flex 间距特化保留（日志筛选控件多，需更大横向间距）。 */
 .toolbar :deep(.flex) { gap: 16px 20px; }
 
 /* 操作动词药丸：新增 / 更新 / 删除，按动作配色 */
@@ -513,7 +487,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onEsc))
   align-items: center;
   padding: 3px 12px;
   border-radius: 9999px;
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
   line-height: 1.4;
@@ -549,7 +523,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onEsc))
   max-width: 100%;
   padding: 2px 12px;
   border-radius: 8px;
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 500;
   background: hsl(var(--primary) / 0.08);
   color: hsl(var(--primary));
@@ -563,8 +537,9 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onEsc))
 /* 详情按钮 */
 .detail-btn {
   padding: 4px 14px;
-  border-radius: 9px;
-  font-size: 12.5px;
+  /* P2：圆角归一 9px → 8px（rounded-md） */
+  border-radius: 8px;
+  font-size: 12px;
   font-weight: 500;
   white-space: nowrap;
   border: 1px solid hsl(var(--border));
@@ -604,8 +579,10 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onEsc))
   flex-direction: column;
   background: hsl(var(--card));
   border: 1px solid hsl(var(--border));
-  border-radius: 20px;
-  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.4);
+  /* P2：圆角归一 20px → rounded-2xl(16px)，与 Dialog 弹窗体系一致 */
+  border-radius: 16px;
+  /* P2：硬编码阴影 → shadow-card 令牌 */
+  box-shadow: var(--shadow-card);
   overflow: hidden;
 }
 .modal-head {
@@ -616,14 +593,15 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onEsc))
   border-bottom: 1px solid hsl(var(--border) / 0.6);
 }
 .modal-title {
-  font-size: 15px;
+  /* P2：15px → 16px 规范档（text-base），与全局弹窗标题一致 */
+  font-size: 16px;
   font-weight: 700;
   letter-spacing: 0.01em;
 }
 .modal-close {
   border: none;
   background: transparent;
-  font-size: 16px;
+  font-size: 18px;
   line-height: 1;
   color: hsl(var(--muted-foreground));
   cursor: pointer;
@@ -648,7 +626,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onEsc))
   margin-bottom: 16px;
   background: hsl(var(--muted) / 0.4);
   border: 1px solid hsl(var(--border) / 0.6);
-  border-radius: 14px;
+  /* P2：圆角归一 14px → 12px（rounded-xl） */
+  border-radius: 12px;
 }
 .meta-item {
   display: flex;
@@ -667,7 +646,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onEsc))
 }
 .meta-v {
   min-width: 0;
-  font-size: 13.5px;
+  font-size: 13px;
   font-weight: 500;
   word-break: break-all;
   display: inline-flex;
@@ -691,7 +670,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onEsc))
 }
 .detail-value {
   margin: 0;
-  font-size: 13.5px;
+  font-size: 13px;
   word-break: break-all;
 }
 

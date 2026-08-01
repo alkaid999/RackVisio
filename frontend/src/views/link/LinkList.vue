@@ -530,22 +530,7 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.page-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 16px;
-}
-.page-title {
-  margin: 0 0 6px;
-  font-size: 22px;
-  font-weight: 600;
-}
-.page-sub {
-  margin: 0;
-  color: oklch(var(--muted-foreground));
-  font-size: 13px;
-}
+/* P0 风格统一：page-head/page-title/page-sub/toolbar 移交给全局 @utility（index.css）。 */
 .link-device {
   cursor: pointer;
   color: hsl(var(--primary));
@@ -553,14 +538,6 @@ onMounted(async () => {
 .link-device:hover {
   opacity: 0.85;
   text-decoration: underline;
-}
-.toolbar {
-  background: oklch(var(--card) / 0.8);
-  border: 1px solid oklch(var(--border) / 0.6);
-  border-radius: 10px;
-  padding: 14px 16px;
-  margin-bottom: 16px;
-  backdrop-filter: blur(8px);
 }
 /* 孤儿口行：弱化呈现，与已连接链路区分 */
 .row--orphan {

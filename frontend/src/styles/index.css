@@ -291,11 +291,15 @@
   height: 100%;
   overflow: hidden;
   border-radius: 16px;
-  /* 默认暗色渐变；亮色模式由 JS apply3DTheme 覆盖 */
-  background: radial-gradient(120% 120% at 50% 0%, #16203a 0%, #0b1220 55%, #070b14 100%);
+  /* 3D 画布背景：由 --bg-3d-canvas 变量控制（明暗双态），
+     Room3DView / Rack3DView 的 JS 主题切换只需切变量，避免三处渐变重复定义（风格统一）。 */
+  background: var(--bg-3d-canvas);
 }
-.dark .three-canvas-wrap {
-  background: radial-gradient(120% 120% at 50% 0%, #16203a 0%, #0b1220 55%, #070b14 100%);
+:root {
+  --bg-3d-canvas: radial-gradient(120% 120% at 50% 0%, #16203a 0%, #0b1220 55%, #070b14 100%);
+}
+:root:not(.dark) {
+  --bg-3d-canvas: radial-gradient(120% 120% at 50% 0%, #c5d1e6 0%, #a8b8d0 55%, #8e9db5 100%);
 }
 .three-loading {
   position: absolute;

@@ -70,8 +70,9 @@
       <div v-if="tip.ip_address" class="tip-row"><span>IP 地址</span><b class="font-mono text-[11px]">{{ tip.ip_address }}</b></div>
       <div class="tip-row">
         <span>状态</span>
-        <b :style="{ color: tip.status === 'up' ? '#67C23A' : '#909399' }">
-          <i class="tip-dot" :style="{ background: tip.status === 'up' ? '#67C23A' : '#909399' }" />
+        <!-- P1：状态点 → 语义令牌（已连线=success / 未连线=muted） -->
+        <b :class="tip.status === 'up' ? 'text-success' : 'text-muted-foreground'">
+          <i class="tip-dot" :class="tip.status === 'up' ? 'bg-success' : 'bg-muted-foreground/60'" />
           {{ tip.status === 'up' ? '已连线' : '未连线' }}
         </b>
       </div>
@@ -136,11 +137,12 @@ function iconComp(itf) {
   return Cable
 }
 function iconColor(itf) {
+  // P1：接口类型徽标色 → 语义令牌（保持与接口类型徽章一致，避免任意 hex）。
   const t = typeOf(itf)
-  if (t === 'console') return '#8b5cf6'
-  if (t === 'sfp') return '#f59e0b'
-  if (t === 'qsfp') return '#10b981'
-  return '#3b82f6'
+  if (t === 'console') return 'hsl(var(--color-violet-500, 262 83% 58%))'
+  if (t === 'sfp') return 'hsl(var(--warning))'
+  if (t === 'qsfp') return 'hsl(var(--success))'
+  return 'hsl(var(--primary))'
 }
 function kindHint(itf) {
   if (itf.role === 'mgmt') return '管理口'
@@ -172,7 +174,8 @@ function onClick(itf) {
 }
 .iface-chassis {
   position: relative;
-  border-radius: 18px;
+  /* P2：圆角归一 18px → 16px（rounded-2xl，与卡片体系对齐） */
+  border-radius: 16px;
   padding: 16px 18px 18px;
   background: linear-gradient(180deg, hsl(var(--card)), color-mix(in srgb, hsl(var(--muted)) 55%, hsl(var(--card))));
   border: 1px solid hsl(var(--border));
@@ -404,8 +407,9 @@ function onClick(itf) {
   line-height: 1;
   padding: 2px 4px;
   border-radius: 6px;
-  color: #8b5cf6;
-  background: color-mix(in srgb, #8b5cf6 16%, transparent);
+  /* P1：#8b5cf6 → 与 iconColor console 同源（violet 令牌） */
+  color: hsl(var(--color-violet-500, 262 83% 58%));
+  background: color-mix(in srgb, hsl(var(--color-violet-500, 262 83% 58%)) 16%, transparent);
 }
 .cell-ip {
   max-width: 100%;
