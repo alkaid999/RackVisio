@@ -217,14 +217,22 @@ class MountRecordRepository:
         *,
         device_name: Optional[str] = None,
         device_code: Optional[str] = None,
+        op_type: Optional[str] = None,
         start_time: Optional[datetime] = None,
         end_time: Optional[datetime] = None,
+        page: Optional[int] = None,
+        size: Optional[int] = None,
     ) -> list[tuple[MountRecord, str, str, str, str]]:
         """全局上下架记录（跨设备），附带机柜名 / 机房名 / 设备编号 / 设备名称。
 
         用于「上下架记录」集中管理页：支持按设备名称（模糊）、设备编号（模糊）、
-        上架时间范围过滤。下架时间范围过滤在服务层展开事件后处理（因一条记录可能
-        产生上架 / 下架两个事件，时间字段不同）。按上架时间倒序。
+        操作类型、上架时间范围过滤。下架时间范围过滤在服务层展开事件后处理（因一条
+        记录可能产生上架 / 下架两个事件，时间字段不同）。按上架时间倒序。
+
+        P-02：page/size 下推 SQL（offset/limit），避免先全量加载再内存切片；
+        op_type 下推 SQL——「上架」= 全部记录（每条记录必有上架事件）、
+        「下架」= 仅已下架记录（record_status=unmounted）。page/size 为 None 时
+        返回全量（供 export 等一次性消费场景）。
         """
         # 前端 datetime-local 提交的是上海本地时间（naive）。约定按上海时区解释，
         # 转成 UTC naive 再与库内 UTC 时间比较，避免「选今天 00:00」被当成 UTC 00:00
@@ -250,10 +258,58 @@ class MountRecordRepository:
             stmt = stmt.where(Device.name.ilike(f"%{device_name}%"))
         if device_code:
             stmt = stmt.where(Device.device_code.ilike(f"%{device_code}%"))
+        if op_type == "下架":
+            stmt = stmt.where(MountRecord.record_status == MountRecordStatus.UNMOUNTED.value)
         if start_time:
             stmt = stmt.where(MountRecord.mounted_at >= start_time)
         if end_time:
             stmt = stmt.where(MountRecord.mounted_at <= end_time)
         stmt = stmt.order_by(MountRecord.mounted_at.desc())
+        if page is not None and size is not None:
+            stmt = stmt.offset((page - 1) * size).limit(size)
         rows = (await self.session.execute(stmt)).all()
         return [(r[0], r[1], r[2], r[3], r[4]) for r in rows]
+
+    async def count_all_with_device(
+        self,
+        *,
+        device_name: Optional[str] = None,
+        device_code: Optional[str] = None,
+        op_type: Optional[str] = None,
+        start_time: Optional[datetime] = None,
+        end_time: Optional[datetime] = None,
+    ) -> int:
+        """全局上下架记录计数（P-02：与 list_all_with_device 同筛选，SQL COUNT）。
+
+        total 语义 = 匹配筛选的**记录数**（上架=全部记录；下架=已下架记录），
+        与分页查询的行数一一对应，避免全量展开事件后 len() 统计。
+        """
+        _shanghai = timezone(timedelta(hours=8))
+        _utc = timezone.utc
+        if start_time is not None:
+            if start_time.tzinfo is None:
+                start_time = start_time.replace(tzinfo=_shanghai)
+            start_time = start_time.astimezone(_utc).replace(tzinfo=None)
+        if end_time is not None:
+            if end_time.tzinfo is None:
+                end_time = end_time.replace(tzinfo=_shanghai)
+            end_time = end_time.astimezone(_utc).replace(tzinfo=None)
+
+        stmt = (
+            select(func.count())
+            .select_from(MountRecord)
+            .join(Rack, MountRecord.rack_id == Rack.id)
+            .join(Room, MountRecord.room_id == Room.id)
+            .join(Device, MountRecord.device_id == Device.id)
+        )
+        if device_name:
+            stmt = stmt.where(Device.name.ilike(f"%{device_name}%"))
+        if device_code:
+            stmt = stmt.where(Device.device_code.ilike(f"%{device_code}%"))
+        if op_type == "下架":
+            stmt = stmt.where(MountRecord.record_status == MountRecordStatus.UNMOUNTED.value)
+        if start_time:
+            stmt = stmt.where(MountRecord.mounted_at >= start_time)
+        if end_time:
+            stmt = stmt.where(MountRecord.mounted_at <= end_time)
+        return int(await self.session.scalar(stmt) or 0)

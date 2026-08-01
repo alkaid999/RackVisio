@@ -37,18 +37,21 @@ async def list_mount_records(
     筛选：设备名称 / 设备编号（模糊）、操作类型（上架 / 下架）、操作时间范围。
     export=true 时忽略分页，返回全部匹配记录（用于前端 Excel 导出）。
     数据来源与设备详情页完全一致（同一 MountRecord 表 + 同一事件展开逻辑）。
+    P-02：分页下推 SQL（COUNT + offset/limit），不再先全量加载再内存切片。
     """
-    events = await DeviceService(db).list_mount_events(
+    # export=true → 全量（page=None 保持一次性展开）；否则按 page/size 分页。
+    page_arg = None if export else page
+    size_arg = None if export else size
+    events, total = await DeviceService(db).list_mount_events(
         device_name=device_name,
         device_code=device_code,
         op_type=op_type,
         start_time=start_time,
         end_time=end_time,
+        page=page_arg,
+        size=size_arg,
     )
-    total = len(events)
-    start = (page - 1) * size
-    paged = events[start : start + size]
-    return paginated(paged, total, page, size)
+    return paginated(events, total, page, size)
 
 
 @router.patch("/{record_id}", dependencies=[Depends(require_permission("device:edit"))])

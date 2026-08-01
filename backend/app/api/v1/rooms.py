@@ -16,6 +16,7 @@ from app.services.dashboard_service import DashboardService
 from app.services.device_service import DeviceService
 from app.services.rack_service import RackService
 from app.services.room_service import RoomService
+from app.api.v1.streaming import _batched, export_json_stream
 
 router = APIRouter(prefix="/rooms", tags=["rooms"])
 
@@ -44,12 +45,20 @@ async def export_rooms(
     status: Optional[str] = None,
     keyword: Optional[str] = None,
 ):
-    """按当前筛选条件导出全部机房（不分页）。返回行数组，由前端用 ExcelJS 落地为文件。"""
+    """按当前筛选条件导出全部机房（不分页）。返回行数组，由前端用 ExcelJS 落地为文件。
+
+    P-01：分批查询 + 流式 JSON 传输（响应体格式与 ok() 一致，前端零改动），
+    峰值内存 = 一批（500 行）而非全量。
+    """
     svc = RoomService(db)
-    items, _ = await svc.list_rooms(
-        page=1, size=100000, area=area, status=status, keyword=keyword
-    )
-    return ok([RoomOut.model_validate(r).model_dump() for r in items])
+
+    async def fetch(page: int, size: int):
+        items, total = await svc.list_rooms(
+            page=page, size=size, area=area, status=status, keyword=keyword
+        )
+        return [RoomOut.model_validate(r).model_dump() for r in items], total
+
+    return export_json_stream(_batched(fetch))
 
 
 @router.post("/import", dependencies=[Depends(require_permission("room:edit"))])

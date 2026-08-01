@@ -85,6 +85,32 @@ class ConsumableTypeRepository:
             )
         ).scalar() or 0
 
+    async def count_categories_by_types(self, type_ids: list[str]) -> dict[str, int]:
+        """按类型批量统计分类数（P-05：一次 GROUP BY 取代逐类型 N+1）。"""
+        if not type_ids:
+            return {}
+        rows = (
+            await self.session.execute(
+                select(ConsumableCategory.type_id, func.count())
+                .where(ConsumableCategory.type_id.in_(type_ids))
+                .group_by(ConsumableCategory.type_id)
+            )
+        ).all()
+        return {t: c for t, c in rows}
+
+    async def count_items_by_types(self, type_ids: list[str]) -> dict[str, int]:
+        """按类型批量统计耗材条目数（P-05）。"""
+        if not type_ids:
+            return {}
+        rows = (
+            await self.session.execute(
+                select(ConsumableItem.type_id, func.count())
+                .where(ConsumableItem.type_id.in_(type_ids))
+                .group_by(ConsumableItem.type_id)
+            )
+        ).all()
+        return {t: c for t, c in rows}
+
 
 # ============ 分类 ============
 class ConsumableCategoryRepository:
@@ -137,6 +163,19 @@ class ConsumableCategoryRepository:
                 .where(ConsumableItem.category_id == category_id)
             )
         ).scalar() or 0
+
+    async def count_items_by_categories(self, category_ids: list[str]) -> dict[str, int]:
+        """按分类批量统计耗材条目数（P-05：一次 GROUP BY 取代逐分类 N+1）。"""
+        if not category_ids:
+            return {}
+        rows = (
+            await self.session.execute(
+                select(ConsumableItem.category_id, func.count())
+                .where(ConsumableItem.category_id.in_(category_ids))
+                .group_by(ConsumableItem.category_id)
+            )
+        ).all()
+        return {c: n for c, n in rows}
 
 
 # ============ 耗材 ============

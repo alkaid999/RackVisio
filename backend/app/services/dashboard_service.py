@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Optional
 
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.cache import Cache
@@ -12,7 +13,9 @@ from app.core.exceptions import NotFoundError
 from app.repositories.device_repo import DeviceRepository
 from app.repositories.rack_repo import RackRepository
 from app.repositories.room_repo import RoomRepository
-from app.core.enums import DeviceStatus, RackStatus, calculate_rack_status
+from app.core.enums import DeviceStatus, MountRecordStatus, RackStatus, calculate_rack_status
+from app.models.device import Device
+from app.models.mount_record import MountRecord
 from app.schemas.room import (
     DashboardKPI,
     DeviceStatusDistribution,
@@ -47,7 +50,24 @@ class DashboardService:
             raise NotFoundError("机房不存在")
 
         racks = await self.rack_repo.list_by_room(room_id)
-        devices = await self.device_repo.list_by_room(room_id)
+        # P-06：设备状态分布改 DB 端 GROUP BY——经有效上架记录关联该机房设备，
+        # 一次聚合替代「全量加载设备到内存逐条统计」（设备密集机房内存占用显著下降）。
+        status_rows = (
+            await self.session.execute(
+                select(Device.status, func.count())
+                .select_from(MountRecord)
+                .join(Device, Device.id == MountRecord.device_id)
+                .where(
+                    MountRecord.room_id == room_id,
+                    MountRecord.record_status == MountRecordStatus.ACTIVE.value,
+                )
+                .group_by(Device.status)
+            )
+        ).all()
+        status_counts: dict[str, int] = {s.value: 0 for s in DeviceStatus}
+        for st, c in status_rows:
+            if st in status_counts:
+                status_counts[st] = c
 
         rack_count = len(racks)
         total_u = sum(r.total_u for r in racks)
@@ -64,28 +84,21 @@ class DashboardService:
             elif cap == RackStatus.FULL:
                 rack_status_dist.full += 1
 
-        device_status_dist = DeviceStatusDistribution()
-        for d in devices:
-            # 按真实 DeviceStatus 枚举统计；旧代码的 running/offline/fault/maintenance
-            # 与真实枚举无对应，曾被恒置 0。已下架为历史遗留状态，仅作分类统计。
-            st = d.status
-            if st == DeviceStatus.IN_STOCK.value:
-                device_status_dist.in_stock += 1
-            elif st == DeviceStatus.MOUNTED.value:
-                device_status_dist.mounted += 1
-            elif st == DeviceStatus.UNMOUNTED.value:
-                device_status_dist.unmounted += 1
-            elif st == DeviceStatus.SCRAPPED.value:
-                device_status_dist.scrapped += 1
-            elif st == DeviceStatus.LENT.value:
-                device_status_dist.lent += 1
+        device_status_dist = DeviceStatusDistribution(
+            in_stock=status_counts.get(DeviceStatus.IN_STOCK.value, 0),
+            mounted=status_counts.get(DeviceStatus.MOUNTED.value, 0),
+            unmounted=status_counts.get(DeviceStatus.UNMOUNTED.value, 0),
+            scrapped=status_counts.get(DeviceStatus.SCRAPPED.value, 0),
+            lent=status_counts.get(DeviceStatus.LENT.value, 0),
+        )
+        device_count = sum(status_counts.values())
 
         dashboard = RoomDashboard(
             room_id=room.id,
             room_name=room.name,
             kpi=DashboardKPI(
                 rack_count=rack_count,
-                device_count=len(devices),
+                device_count=device_count,
                 utilization=utilization,
             ),
             rack_status_distribution=rack_status_dist,

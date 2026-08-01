@@ -13,6 +13,7 @@ from app.core.rbac import require_permission
 from app.schemas.common import ImportResult, ok, paginated
 from app.schemas.device import DeviceCreate, DeviceImportRowsRequest, DeviceOut, DeviceUpdate
 from app.services.device_service import DeviceService
+from app.api.v1.streaming import _batched, export_json_stream
 
 router = APIRouter(prefix="/devices", tags=["devices"])
 
@@ -64,19 +65,27 @@ async def export_devices(
     keyword: Optional[str] = Query(None, alias="keyword"),
     is_asset: Optional[bool] = Query(None, alias="is_asset"),
 ):
-    """按当前筛选条件导出全部设备（不分页）。返回行数组，由前端落地为文件。"""
+    """按当前筛选条件导出全部设备（不分页）。返回行数组，由前端落地为文件。
+
+    P-01：分批查询 + 流式 JSON 传输（响应体格式与 ok() 一致，前端零改动）；
+    每批内部仍走批量预取（N+1 降为常量级），峰值内存 = 一批。
+    """
     svc = DeviceService(db)
-    items, _ = await svc.list_devices(
-        page=1,
-        size=100000,
-        room_id=room_id,
-        rack_id=rack_id,
-        device_type=device_type.value if device_type else None,
-        status=status_filter.value if status_filter else None,
-        keyword=keyword,
-        is_asset=is_asset,
-    )
-    return ok([d.model_dump() for d in items])
+
+    async def fetch(page: int, size: int):
+        items, total = await svc.list_devices(
+            page=page,
+            size=size,
+            room_id=room_id,
+            rack_id=rack_id,
+            device_type=device_type.value if device_type else None,
+            status=status_filter.value if status_filter else None,
+            keyword=keyword,
+            is_asset=is_asset,
+        )
+        return [d.model_dump() for d in items], total
+
+    return export_json_stream(_batched(fetch))
 
 
 @router.post("/import", dependencies=[Depends(require_permission("device:edit"))])

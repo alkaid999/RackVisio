@@ -40,6 +40,17 @@ class RackRepository:
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
+    async def get_room_ids(self, ids: list[str]) -> dict[str, str | None]:
+        """批量取机柜 → 所属机房映射（只查 id/room_id 两列，避免整行加载）。
+
+        供批量坐标更新等场景一次取回全部涉及机柜的 room_id（P-04：消除 N+1）。
+        """
+        if not ids:
+            return {}
+        stmt = select(Rack.id, Rack.room_id).where(Rack.id.in_(ids))
+        rows = await self.session.execute(stmt)
+        return {rid: room_id for rid, room_id in rows.all()}
+
     async def list_by_room(self, room_id: str) -> list[Rack]:
         """某机房下全部机柜，按「列编号 → 机柜编号」自然排序。"""
         stmt = (

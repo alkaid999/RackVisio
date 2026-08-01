@@ -59,10 +59,16 @@ class ConsumableService:
 
     async def list_types(self) -> list[ConsumableTypeOut]:
         objs = await self.type_repo.list()
-        out = []
-        for o in objs:
-            out.append(await self._type_out(o))
-        return out
+        if not objs:
+            return []
+        # P-05：两次 GROUP BY 批量预统计全量类型的分类数/条目数，替代逐类型 2N+1。
+        type_ids = [o.id for o in objs]
+        cat_counts = await self.type_repo.count_categories_by_types(type_ids)
+        item_counts = await self.type_repo.count_items_by_types(type_ids)
+        return [
+            await self._type_out(o, cat_counts=cat_counts, item_counts=item_counts)
+            for o in objs
+        ]
 
     async def update_type(self, type_id: str, data: ConsumableTypeUpdate) -> ConsumableTypeOut:
         obj = await self._require_type(type_id)
@@ -96,7 +102,12 @@ class ConsumableService:
         # 校验类型存在（不存在则直接 404，避免误把空列表当成正常）。
         await self._require_type(type_id)
         objs = await self.category_repo.list_by_type(type_id)
-        return [await self._category_out(o) for o in objs]
+        if not objs:
+            return []
+        # P-05：一次 GROUP BY 批量预统计分类下条目数，替代逐分类 N+1。
+        cat_ids = [o.id for o in objs]
+        item_counts = await self.category_repo.count_items_by_categories(cat_ids)
+        return [await self._category_out(o, counts=item_counts) for o in objs]
 
     async def update_category(self, category_id: str, data: ConsumableCategoryUpdate) -> ConsumableCategoryOut:
         obj = await self._require_category(category_id)
@@ -230,16 +241,32 @@ class ConsumableService:
             raise NotFoundError("耗材不存在")
         return obj
 
-    async def _type_out(self, obj) -> ConsumableTypeOut:
+    async def _type_out(
+        self, obj, cat_counts: Optional[dict] = None, item_counts: Optional[dict] = None
+    ) -> ConsumableTypeOut:
+        """类型出参。cat_counts/item_counts 为批量预统计（{type_id: count}）时
+        直接取值，避免列表页逐类型 N+1（P-05）；单对象路径不传则逐查。"""
         out = ConsumableTypeOut.model_validate(obj)
-        out.category_count = await self.type_repo.count_categories(obj.id)
-        out.item_count = await self.type_repo.count_items(obj.id)
+        if cat_counts is not None:
+            out.category_count = cat_counts.get(obj.id, 0)
+        else:
+            out.category_count = await self.type_repo.count_categories(obj.id)
+        if item_counts is not None:
+            out.item_count = item_counts.get(obj.id, 0)
+        else:
+            out.item_count = await self.type_repo.count_items(obj.id)
         return out
 
-    async def _category_out(self, obj) -> ConsumableCategoryOut:
+    async def _category_out(
+        self, obj, counts: Optional[dict] = None
+    ) -> ConsumableCategoryOut:
+        """分类出参。counts 为批量预统计（{category_id: count}）时直接取值（P-05）。"""
         out = ConsumableCategoryOut.model_validate(obj)
         out.type_name = obj.type.name if obj.type else None
-        out.item_count = await self.category_repo.count_items(obj.id)
+        if counts is not None:
+            out.item_count = counts.get(obj.id, 0)
+        else:
+            out.item_count = await self.category_repo.count_items(obj.id)
         return out
 
     async def _item_out(self, obj: ConsumableItem) -> ConsumableItemOut:

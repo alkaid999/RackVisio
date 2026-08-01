@@ -28,6 +28,7 @@ from app.schemas.rack import (
 )
 from app.services.device_service import DeviceService
 from app.services.rack_service import RackService
+from app.api.v1.streaming import _batched, export_json_stream
 
 router = APIRouter(prefix="/racks", tags=["racks"])
 
@@ -85,12 +86,19 @@ async def export_racks(
     keyword: Optional[str] = None,
     status: Optional[str] = None,
 ):
-    """按当前筛选条件导出全部机柜（不分页）。返回行数组，由前端落地为文件。"""
+    """按当前筛选条件导出全部机柜（不分页）。返回行数组，由前端落地为文件。
+
+    P-01：分批查询 + 流式 JSON 传输（响应体格式与 ok() 一致，前端零改动）。
+    """
     svc = RackService(db)
-    items, _ = await svc.list_filtered(
-        page=1, size=100000, room_id=room_id, keyword=keyword, status=status
-    )
-    return ok([r.model_dump() for r in items])
+
+    async def fetch(page: int, size: int):
+        items, total = await svc.list_filtered(
+            room_id=room_id, keyword=keyword, status=status, page=page, size=size
+        )
+        return [r.model_dump() for r in items], total
+
+    return export_json_stream(_batched(fetch))
 
 
 @router.post("/import", dependencies=[Depends(require_permission("rack:edit"))])

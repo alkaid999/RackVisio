@@ -372,9 +372,12 @@ class DeviceService:
         # 设备主列表高频只读、半静态；短 TTL 缓存（``devices:list:`` 前缀，key 含过滤/分页
         # 参数），30s 内重复翻页/过滤命中缓存省去多表联查与 N+1 预取。设备增删改经
         # ``_invalidate_device_lists`` 失效；上架/下架经 rack_service 的缓存失效连带清理。
+        # P-07：is_asset 显式归一化为 1/0/all——None/True/False 与 1/0 混传会生成
+        # 不同 key（"None"/"True"/"1"），造成缓存冗余或命中不一致。
+        is_asset_key = "1" if is_asset is True else "0" if is_asset is False else "all"
         cache_key = (
             f"devices:list:{page}:{size}:{rack_id or 'all'}:{device_type or 'all'}"
-            f":{status or 'all'}:{room_id or 'all'}:{keyword or 'all'}:{is_asset}"
+            f":{status or 'all'}:{room_id or 'all'}:{keyword or 'all'}:{is_asset_key}"
         )
         cached = await self.cache.get(cache_key)
         if cached is not None:
@@ -594,7 +597,9 @@ class DeviceService:
         op_type: Optional[str] = None,
         start_time: Optional[datetime] = None,
         end_time: Optional[datetime] = None,
-    ) -> list[dict]:
+        page: Optional[int] = None,
+        size: Optional[int] = None,
+    ) -> tuple[list[dict], int]:
         """全局上下架操作流水（跨设备），供「上下架记录」集中管理页展示与导出。
 
         复用与设备详情页完全一致的事件展开逻辑：每条 MountRecord 展开为「上架」事件
@@ -603,14 +608,33 @@ class DeviceService:
 
         筛选：
         - device_name / device_code：按设备名称 / 编号模糊匹配（下推到 SQL）。
-        - op_type：上架 / 下架（事件级，展开后过滤）。
-        - start_time / end_time：按事件操作时间范围过滤（上架或下架时间落入区间即命中）。
+        - op_type：上架 / 下架（下推到 SQL：下架=仅已下架记录）。
+        - start_time / end_time：按上架时间范围过滤（下推到 SQL）；已下架记录的
+          下架时间范围在展开后过滤（同页内近似）。
+        - page / size：P-02 分页下推 SQL——先 COUNT 记录数、再取当前页记录展开，
+          替代「全量加载再内存切片」。返回 (events, total)，total = 匹配记录数。
+
+        导出场景（export=true）传 page=None 保持全量（一次性展开全部事件）。
         """
         rows = await self.mount_repo.list_all_with_device(
             device_name=device_name,
             device_code=device_code,
+            op_type=op_type,
             start_time=start_time,
             end_time=end_time,
+            page=page,
+            size=size,
+        )
+        total = (
+            await self.mount_repo.count_all_with_device(
+                device_name=device_name,
+                device_code=device_code,
+                op_type=op_type,
+                start_time=start_time,
+                end_time=end_time,
+            )
+            if page is not None and size is not None
+            else 0
         )
         events: list[dict] = []
         for record, rack_name, room_name, device_code_val, device_name_val in rows:
@@ -646,10 +670,11 @@ class DeviceService:
             for ev in (mount_event, unmount_event):
                 if ev is None:
                     continue
-                # 操作类型筛选。
+                # 操作类型筛选（op_type 已下推 SQL 主筛选；此处兜底事件级过滤）。
                 if op_type and ev["event_type"] != op_type:
                     continue
-                # 时间范围筛选（基于事件自身操作时间）。
+                # 时间范围筛选（基于事件自身操作时间；上架时间已下推 SQL，
+                # 此处兜底已下架记录的下架时间）。
                 op_at = ev["operated_at"]
                 if start_time and (op_at is None or op_at < start_time):
                     continue
@@ -661,7 +686,7 @@ class DeviceService:
             key=lambda e: e["operated_at"].timestamp() if e["operated_at"] else 0,
             reverse=True,
         )
-        return events
+        return events, total
 
     # --------------------------------------------------- 上架记录编辑 / 删除
     async def update_mount_record(self, record_id: int, data: MountRecordUpdate) -> dict:

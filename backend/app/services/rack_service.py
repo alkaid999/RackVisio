@@ -460,17 +460,10 @@ class RackService:
         await self.rack_repo.update_positions(positions)
         await self.session.commit()
         # 2D 平面图拖拽改变机柜网格坐标，布局缓存必须失效。
-        room_ids: set[str] = set()
-        for p in positions:
-            rid = p.get("id")
-            if not rid:
-                continue
-            try:
-                rack = await self.get_rack(rid)
-                room_ids.add(rack.room_id)
-            except Exception:
-                continue
-        for rid_room in room_ids:
+        # P-04：一次批量查询全部涉及机柜的 room_id（原实现逐机柜 get_rack → N+1）。
+        ids = [p.get("id") for p in positions if p.get("id")]
+        room_map = await self.rack_repo.get_room_ids(ids)
+        for rid_room in set(v for v in room_map.values() if v):
             await self._invalidate_room_cache(rid_room)
 
     async def delete_rack(self, rack_id: str) -> None:
