@@ -6,7 +6,6 @@
 - ``OPTIONS`` 预检（CORS）
 - ``/health``、``/docs``、``/redoc``、``/openapi.json``
 - ``/api/v1/auth/login``（登录签发令牌本身）
-- ``/api/v1/auth/default-credentials-active``（登录页公开探针：默认管理员是否仍用初始密码）
 其余 ``/api/v1`` 请求必须携带有效令牌，否则返回 401 信封。
 
 安全语义（S-04/S-05）：令牌吊销查询与用户禁用校验均 **fail-close**——缓存/DB
@@ -79,7 +78,6 @@ class AuthMiddleware(BaseHTTPMiddleware):
     _PUBLIC_PREFIXES = ("/health", "/docs", "/redoc", "/openapi.json")
     _PUBLIC_AUTH_PATHS = (
         f"{settings.API_PREFIX}/auth/login",
-        f"{settings.API_PREFIX}/auth/default-credentials-active",
     )
 
     async def dispatch(self, request: Request, call_next):

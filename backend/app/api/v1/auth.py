@@ -275,32 +275,3 @@ async def logout(request: Request):
         user_id=user.get("sub"),
     )
     return ok()
-
-
-@router.get("/default-credentials-active")
-async def default_credentials_active(request: Request, session: AsyncSession = Depends(get_db)):
-    """公开探针：默认管理员(admin)是否仍使用初始密码。
-
-    供登录页智能隐藏「默认账号 admin / admin123」提示——一旦修改密码即不再展示。
-    仅返回一个布尔，不泄露任何账号明细。
-
-    安全加固（S-07）：探针与 admin 的登录限流联动——若该来源 IP 对 admin 的
-    登录尝试已被限流锁定（5 次失败 / 300s），探针同样返回 429。防止探针成为
-    绕过登录限流的「默认凭据预言机」（攻击者可无限探测 admin 是否仍用初始密码，
-    而正常登录路径受滑动窗口保护）。
-    """
-    key = _login_rate_key("admin", request)
-    if not await _login_allowed(key):
-        raise AppError(
-            status_code=429,
-            message="请求过于频繁，请稍后再试",
-        )
-    repo = UserRepository(session)
-    admin = await repo.get_by_username("admin")
-    active = bool(admin) and await asyncio.to_thread(
-        verify_password,
-        settings.INITIAL_ADMIN_PASSWORD,
-        admin.password_hash,
-        admin.salt,
-    )
-    return ok({"active": active})

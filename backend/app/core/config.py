@@ -47,6 +47,9 @@ class Settings(BaseSettings):
     # 令牌有效期（小时）。
     TOKEN_EXPIRE_HOURS: int = 12
     # 系统初始化默认管理员密码（仅首次 seed 使用；可用环境变量覆盖）。
+    # 安全兜底（S-02 决策）：初始管理员首次登录**强制改密**（must_change_password），
+    # 故默认 admin123 可直接使用、无需在 .env 预置强密码——首次登录后立即被替换，
+    # 默认值不会长期生效。运维如需自定义初始密码仍可覆盖。
     INITIAL_ADMIN_PASSWORD: str = "admin123"
 
     # —— 日志保留与清理 ——
@@ -75,14 +78,15 @@ settings = Settings()
 
 
 def _enforce_production_security() -> None:
-    """安全基线校验（S-01/S-03）：production 环境强制 fail-closed，弱密钥/默认密码**拒绝启动**。
+    """安全基线校验（S-01）：production 环境强制 fail-closed，弱签名密钥**拒绝启动**。
 
-    - production：检测到默认 SECRET_KEY 或默认 INITIAL_ADMIN_PASSWORD → 抛
-      ``RuntimeError`` 阻断启动，逼运维在 .env 显式覆盖后才允许上线。
+    - production：检测到默认/空 SECRET_KEY → 抛 ``RuntimeError`` 阻断启动，
+      逼运维在 .env 显式覆盖后才允许上线（JWT 伪造风险无其他兜底）。
     - development / test：仅打印告警不阻断（本地开发体验不受阻，默认值可直接跑通）。
 
-    S-02 的「首次登录强制改密」由 seed 的 must_change_password=True + 登录/改密
-    链路独立兜底：即便运维显式设置了强初始密码，初始管理员首次登录仍须改密。
+    ``INITIAL_ADMIN_PASSWORD`` 默认值不在此拦截（S-02 决策）：初始管理员首次登录
+    强制改密（must_change_password）已兜底，默认密码不会长期生效，无需在 env 预置强密码；
+    运维自定义初始密码仍可通过环境变量覆盖。
     """
     import sys
 
@@ -92,11 +96,6 @@ def _enforce_production_security() -> None:
         problems.append(
             "SECRET_KEY 仍为默认/空值，存在 JWT 伪造风险；"
             "请通过环境变量 SECRET_KEY 设置强随机密钥（如 openssl rand -hex 32）"
-        )
-    if settings.INITIAL_ADMIN_PASSWORD == "admin123":
-        problems.append(
-            "INITIAL_ADMIN_PASSWORD 仍为默认密码 admin123；"
-            "请通过环境变量 INITIAL_ADMIN_PASSWORD 设置强密码（初始管理员首次登录仍会强制改密）"
         )
     if settings.ENVIRONMENT == "production" and problems:
         raise RuntimeError(

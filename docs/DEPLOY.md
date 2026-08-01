@@ -183,19 +183,19 @@ cd RackVisio
 cp .env.example .env
 # 编辑 .env，至少修改：
 #   POSTGRES_PASSWORD  —— 数据库密码（强密码）
-#   SECRET_KEY         —— JWT 签名密钥（openssl rand -hex 32）
-#   INITIAL_ADMIN_PASSWORD —— 管理员初始密码
+#   SECRET_KEY         —— JWT 签名密钥（openssl rand -hex 32，production 下为默认值会拒绝启动）
+#   INITIAL_ADMIN_PASSWORD —— 管理员初始密码（可选，S-02 强制改密兜底，默认 admin123 可直接用）
 ```
 
 > ⚠️ **安全基线建议（production 环境）**：Docker 部署默认 `ENVIRONMENT=production`，后端启动时会
-> 检查 `SECRET_KEY` 与 `INITIAL_ADMIN_PASSWORD`，若仍为默认值
-> （`change-me-in-prod-rackvisio-secret-key` / `admin123`）会**打印安全告警，但不再拒绝启动**（便于内网快速拉起）。
-> 强烈建议生产部署前用强随机值覆盖这两项再 `up`：
+> **强制校验 `SECRET_KEY`**——仍为默认值（`change-me-in-prod-rackvisio-secret-key`）会**拒绝启动**，
+> 必须在 `.env` 用强随机值覆盖后再 `up`：
 > ```bash
 > SECRET_KEY=$(openssl rand -hex 32)            # 写入 .env 的 SECRET_KEY
-> INITIAL_ADMIN_PASSWORD=$(openssl rand -base64 18)  # 写入 .env 的 INITIAL_ADMIN_PASSWORD
 > ```
-> 覆盖后告警消失；不覆盖也能正常启动，仅日志提示风险。
+> `INITIAL_ADMIN_PASSWORD` 不拦截：初始管理员首次登录被**强制修改密码**（S-02 must_change_password），
+> 默认值 `admin123` 不会长期生效；如需自定义初始密码可在 `.env` 覆盖。
+> 仅本地开发可设 `ENVIRONMENT=development` 使用默认值（SECRET_KEY 仅打印告警不拦截）。
 
 ### 3. 构建并启动
 ```bash
@@ -207,7 +207,7 @@ docker compose up -d --build
 ### 4. 访问与登录
 - 浏览器打开 `http://<服务器IP>:8080`（端口由 `.env` 的 `HTTP_PORT` 控制，默认 8080）。
 - 登录账号：`admin` / 你在 `.env` 中设置的 `INITIAL_ADMIN_PASSWORD`（默认 `admin123`）。
-- **首次登录后请立即修改管理员密码**（系统设置 → 账号）。
+- **初始管理员首次登录后系统会强制要求修改密码**（改密完成前无法进入其他页面）。
 
 ### 5. 更新已部署的项目（重新拉取并重启）
 
@@ -271,10 +271,10 @@ docker compose up -d --build
 ### 后端
 | 变量                    | 默认                              | 说明                                              |
 | ----------------------- | --------------------------------- | ------------------------------------------------- |
-| `ENVIRONMENT`           | `production`（Docker）           | 运行环境。`production` 下后端启动时会**检查** `SECRET_KEY` 与 `INITIAL_ADMIN_PASSWORD`，仍为默认值仅**打印安全告警、不拦截启动**（见下方安全基线）。本地开发可改为 `development`（无实质差异）。 |
-| `SECRET_KEY`            | `change-me-in-prod-...`          | JWT HMAC 签名密钥。**生产建议改为强随机值**（如 `openssl rand -hex 32`）。保持默认值时启动会打印安全告警，但不影响运行。 |
+| `ENVIRONMENT`           | `production`（Docker）           | 运行环境。`production` 下后端启动时**强制校验** `SECRET_KEY`，仍为默认值**拒绝启动**（fail-closed）；`INITIAL_ADMIN_PASSWORD` 不校验（S-02 强制改密兜底）。本地开发可改为 `development`（SECRET_KEY 仅告警不拦截）。 |
+| `SECRET_KEY`            | `change-me-in-prod-...`          | JWT HMAC 签名密钥。**生产必须改为强随机值**（如 `openssl rand -hex 32`）；保持默认值时 production 启动将失败并提示覆盖。 |
 | `TOKEN_EXPIRE_HOURS`    | `12`                              | 登录令牌有效期（小时）                            |
-| `INITIAL_ADMIN_PASSWORD`| `admin123`                        | 首次 seed 的默认管理员密码（用户名固定 `admin`）。**生产建议修改**，保持 `admin123` 时启动会打印安全告警，但不影响运行。 |
+| `INITIAL_ADMIN_PASSWORD`| `admin123`                        | 首次 seed 的默认管理员密码（用户名固定 `admin`）。初始管理员首次登录**强制改密**（S-02），默认值可直接使用；如需自定义初始密码可覆盖本项。 |
 | `CACHE_TTL`             | `30`                              | 机房统计/看板缓存 TTL（秒）                       |
 | `REDIS_ENABLED`         | `true`（Docker）/ `false`（本地） | 是否启用 Redis 缓存层；Docker 部署已开启          |
 | `REDIS_URL`             | `redis://redis:6379/0`            | Redis 连接串（`REDIS_ENABLED=true` 时生效）       |

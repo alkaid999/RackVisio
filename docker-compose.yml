@@ -44,10 +44,10 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     environment:
-      # 运行环境：production 下若 SECRET_KEY / INITIAL_ADMIN_PASSWORD 仍为默认值，
-      # 后端启动时抛异常**拒绝启动**（fail-closed，S-01/S-02/S-03）；必须先在 .env
-      # 显式覆盖为强随机值（SECRET_KEY 建议 openssl rand -hex 32）。仅本地开发可设
-      # ENVIRONMENT=development 使用默认值（后端仅打印告警不拦截）。
+      # 运行环境：production 下若 SECRET_KEY 仍为默认值，后端启动时抛异常**拒绝启动**
+      # （fail-closed，S-01）；必须先在 .env 显式覆盖为强随机值
+      # （SECRET_KEY 建议 openssl rand -hex 32）。INITIAL_ADMIN_PASSWORD 不拦截
+      # （S-02：首次登录强制改密兜底，默认值可直接使用）。
       ENVIRONMENT: "${ENVIRONMENT:-production}"
       # 连接 PostgreSQL（asyncpg 异步驱动）；服务名 db 即 compose 内网主机名
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-rackvisio}:${POSTGRES_PASSWORD:-rackvisio_pass}@db:5432/${POSTGRES_DB:-rackvisio}

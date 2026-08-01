@@ -31,7 +31,6 @@ class GlobalRateLimitMiddleware(BaseHTTPMiddleware):
         "/redoc",
         "/openapi.json",
         f"{settings.API_PREFIX}/auth/login",
-        f"{settings.API_PREFIX}/auth/default-credentials-active",
     )
 
     async def dispatch(self, request: Request, call_next):
