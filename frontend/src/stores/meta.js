@@ -55,39 +55,46 @@ export const useMetaStore = defineStore('meta', {
   },
   actions: {
     async load() {
-      const data = await metaApi.get()
-      // 1) 写入 store 数组（getter 直接取色）。
-      this.deviceStatus = data.device_status || []
-      this.deviceType = data.device_type || []
-      this.rackStatus = data.rack_status || []
-      this.facilityTypes = data.facility_types || []
-      this.usageThresholds = data.usage_thresholds || { warn: 30, crit: 80 }
-      this.usageColors = data.usage_colors || {
-        ok: '#67C23A',
-        warn: '#E6A23C',
-        crit: '#F56C6C',
+      try {
+        const data = await metaApi.get()
+        // 1) 写入 store 数组（getter 直接取色）。
+        this.deviceStatus = data.device_status || []
+        this.deviceType = data.device_type || []
+        this.rackStatus = data.rack_status || []
+        this.facilityTypes = data.facility_types || []
+        this.usageThresholds = data.usage_thresholds || { warn: 30, crit: 80 }
+        this.usageColors = data.usage_colors || {
+          ok: '#67C23A',
+          warn: '#E6A23C',
+          crit: '#F56C6C',
+        }
+        // 设施类型集合写回常量：保证 isFacilityType / isAssetDevice 与后端权威源一致。
+        FACILITY_TYPES.clear()
+        for (const t of this.facilityTypes) FACILITY_TYPES.add(t)
+        // 2) 同步写回 reactive 常量映射：覆盖全站既有 import 这些映射的组件，无需逐文件改。
+        //    仅覆盖后端返回的值，未返回的 key 保留常量默认值（离线兜底）。
+        for (const it of this.deviceStatus) {
+          if (!it || it.value == null) continue
+          DEVICE_STATUS_COLORS[it.value] = it.color || DEVICE_STATUS_COLORS[it.value]
+          DEVICE_STATUS_LABELS[it.value] = it.label || DEVICE_STATUS_LABELS[it.value]
+        }
+        for (const it of this.deviceType) {
+          if (!it || it.value == null) continue
+          DEVICE_TYPE_COLORS[it.value] = it.color || DEVICE_TYPE_COLORS[it.value]
+          DEVICE_TYPE_LABELS[it.value] = it.label || DEVICE_TYPE_LABELS[it.value]
+        }
+        for (const it of this.rackStatus) {
+          if (!it || it.value == null) continue
+          RACK_STATUS_COLORS[it.value] = it.color || RACK_STATUS_COLORS[it.value]
+          RACK_STATUS_LABELS[it.value] = it.label || RACK_STATUS_LABELS[it.value]
+        }
+      } catch (e) {
+        // H-05：元数据拉取失败不冒泡（App.vue 调用处不 await 不 catch，避免 unhandled rejection）。
+        // 常量默认值即离线兜底，渲染仍正确；loaded 置位避免登录态变化时反复重试。
+        console.warn('[meta] 元数据拉取失败，使用本地默认值', e)
+      } finally {
+        this.loaded = true
       }
-      // 设施类型集合写回常量：保证 isFacilityType / isAssetDevice 与后端权威源一致。
-      FACILITY_TYPES.clear()
-      for (const t of this.facilityTypes) FACILITY_TYPES.add(t)
-      // 2) 同步写回 reactive 常量映射：覆盖全站既有 import 这些映射的组件，无需逐文件改。
-      //    仅覆盖后端返回的值，未返回的 key 保留常量默认值（离线兜底）。
-      for (const it of this.deviceStatus) {
-        if (!it || it.value == null) continue
-        DEVICE_STATUS_COLORS[it.value] = it.color || DEVICE_STATUS_COLORS[it.value]
-        DEVICE_STATUS_LABELS[it.value] = it.label || DEVICE_STATUS_LABELS[it.value]
-      }
-      for (const it of this.deviceType) {
-        if (!it || it.value == null) continue
-        DEVICE_TYPE_COLORS[it.value] = it.color || DEVICE_TYPE_COLORS[it.value]
-        DEVICE_TYPE_LABELS[it.value] = it.label || DEVICE_TYPE_LABELS[it.value]
-      }
-      for (const it of this.rackStatus) {
-        if (!it || it.value == null) continue
-        RACK_STATUS_COLORS[it.value] = it.color || RACK_STATUS_COLORS[it.value]
-        RACK_STATUS_LABELS[it.value] = it.label || RACK_STATUS_LABELS[it.value]
-      }
-      this.loaded = true
     },
   },
 })

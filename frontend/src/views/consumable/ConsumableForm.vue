@@ -141,6 +141,8 @@ watch(
 )
 
 async function onSubmit() {
+  // 防重（C-02）：请求进行中忽略重复触发。
+  if (submitting.value) return
   formRef.value.validate(async (valid) => {
     if (!valid) return
     submitting.value = true

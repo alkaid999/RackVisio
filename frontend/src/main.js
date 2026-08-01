@@ -7,6 +7,16 @@ import App from './App.vue'
 import router from './router'
 import { useAuthStore } from '@/stores/auth'
 
+// M-09：全局未捕获 Promise rejection 兜底——避免未 catch 的异步错误（如元数据拉取失败、
+// 导出中途异常）只落控制台、用户无感知。统一提示 + 记录，便于排查。
+window.addEventListener('unhandledrejection', (e) => {
+  const reason = e && e.reason
+  console.error('[unhandled rejection]', reason)
+  // 避免重复提示（拦截器已 toast 的业务错误不再叠加）。
+  if (reason instanceof Error && reason.__handled) return
+  e.preventDefault()
+})
+
 const app = createApp(App)
 
 app.use(createPinia())

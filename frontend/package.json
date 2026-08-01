@@ -1,7 +1,7 @@
 {
   "name": "rackvisio-frontend",
   "version": "1.1.0",
-  "description": "RackVisio 机柜 3D 可视化平台前端（Vue 3 + Vite + Tailwind + shadcn-vue 风格组件 + Three.js + ECharts + AntV G6 + ExcelJS）",
+  "description": "RackVisio 机柜 3D 可视化平台前端（Vue 3 + Vite + Tailwind + shadcn-vue 风格组件 + Three.js + ECharts + ExcelJS）",
   "private": true,
   "type": "module",
   "scripts": {
@@ -11,9 +11,7 @@
     "test": "vitest"
   },
   "dependencies": {
-    "@antv/g6": "^5.0.0",
     "@tanstack/vue-virtual": "^3.13.0",
-    "@vueuse/core": "^14.3.0",
     "axios": "^1.6.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

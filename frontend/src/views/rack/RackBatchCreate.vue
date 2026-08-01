@@ -158,6 +158,8 @@ watch(
 )
 
 async function onSubmit() {
+  // 防重（C-02）：请求进行中忽略重复触发，避免并发重复创建机柜。
+  if (submitting.value) return
   errors.room_id = common.room_id ? '' : '请选择所属机房'
   if (!common.room_id) return
   const items = buildItems()

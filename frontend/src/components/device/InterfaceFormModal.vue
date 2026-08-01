@@ -198,6 +198,8 @@ function close() {
 }
 
 async function onSave() {
+  // 防重（C-02）：请求进行中忽略重复触发，避免并发重复创建。
+  if (saving.value) return
   errors.name = ''
   errors.count = ''
   if (formMode.value === 'batch' && !isEdit.value) {

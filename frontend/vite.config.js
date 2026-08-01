@@ -23,10 +23,6 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
-      // @antv/algorithm@0.1.26 发布的 es 构建缺少 es/index.js（module 字段指向的文件），
-      // 导致 Vite 预打包时 esbuild 报 "Failed to resolve entry"。
-      // 该包 lib（CJS）入口完好，别名到 lib/index.js 即可，esbuild 仍可正确做具名导入互操作。
-      '@antv/algorithm': fileURLToPath(new URL('./node_modules/@antv/algorithm/lib/index.js', import.meta.url)),
     },
   },
   optimizeDeps: {
@@ -55,8 +51,24 @@ export default defineConfig({
     proxy: apiProxy,
   },
   build: {
-    // 提高 chunk 警告阈值，避免大依赖（echarts / g6）触发告警。
-    chunkSizeWarningLimit: 1500,
+    // H-08：不再抬阈值掩盖问题——exceljs vendor 最大（约 930KB），阈值设为 950，
+    // 业务 chunk 超 600KB 仍会告警，而「有意拆分的独立 vendor」不产生噪音。
+    chunkSizeWarningLimit: 950,
     outDir: 'dist',
+    rollupOptions: {
+      output: {
+        // 注意：本项目 Vite 8（rolldown 驱动）的 manualChunks 仅接受函数形式，
+        // 不接受对象形式（经典 rollup 的 `{ vendor: ['x'] }` 写法会报
+        // "manualChunks is not a function"）。
+        manualChunks(id) {
+          // echarts：按需引入后仍约 400KB（含 zrender 依赖），独立 chunk 便于缓存与告警。
+          if (id.includes('node_modules/echarts') || id.includes('node_modules/zrender')) return 'echarts'
+          // three：Room3DView / Rack3DView / BigScreenView 三处共享，独立缓存。
+          if (id.includes('node_modules/three')) return 'three'
+          // exceljs：仅机柜 2D 导出使用（约 900KB），独立 chunk 避免污染业务包。
+          if (id.includes('node_modules/exceljs')) return 'exceljs'
+        },
+      },
+    },
   },
 })

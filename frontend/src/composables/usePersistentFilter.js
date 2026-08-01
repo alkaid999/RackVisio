@@ -50,7 +50,16 @@ export function usePersistentFilter(routeName, factory, onRestore) {
 
   onMounted(restore)
   // 任意筛选字段变化即落盘（deep 监听嵌套对象）。
-  watch(filter, persist, { deep: true })
+  // L-05：300ms 防抖——关键字逐键击打时避免每次都序列化写 sessionStorage。
+  let persistTimer = null
+  watch(
+    filter,
+    () => {
+      clearTimeout(persistTimer)
+      persistTimer = setTimeout(persist, 300)
+    },
+    { deep: true }
+  )
 
   return { filter, persist, restore, clear }
 }

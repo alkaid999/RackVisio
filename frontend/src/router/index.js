@@ -2,7 +2,8 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 
 // 路由表：登录页为全屏独立页（meta.fullscreen），其余业务页统一包在 App 布局内。
-// 业务路由统一 requiresAuth；带 meta.permission 的路由在进入前校验当前用户权限，
+// 业务路由统一 requiresAuth（M-10 约定：新增业务路由必须显式 requiresAuth: true，
+// 否则守卫不拦截即公开）；带 meta.permission 的路由在进入前校验当前用户权限，
 // 无权限则回退至首页并提示（后端同样有依赖级 RBAC 兜底）。
 const routes = [
   {

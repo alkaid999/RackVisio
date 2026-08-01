@@ -30,7 +30,7 @@
       <div class="flex flex-wrap items-end gap-4">
         <div class="flex flex-col gap-1">
           <Label>关键字</Label>
-          <Input v-model="filter.keyword" placeholder="设备名 / 接口名" class="w-48" @keyup.enter="loadAll" />
+          <Input v-model="filter.keyword" placeholder="设备名 / 接口名" class="w-48" @keyup.enter="loadAll" @update:model-value="onKeywordInput" />
         </div>
         <div class="flex flex-col gap-1">
           <Label>连接介质</Label>
@@ -188,10 +188,11 @@
 </template>
 
 <script setup>
-import { reactive, ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useToast } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
+import { usePersistentFilter } from '@/composables/usePersistentFilter'
 import linkApi from '@/api/link'
 import interfaceApi from '@/api/interface'
 import deviceApi from '@/api/device'
@@ -242,11 +243,29 @@ const connectorOptions = computed(() => [
 const allLinks = ref([])
 const loading = ref(false)
 
+// 关键字输入防抖（H-11）：全量拉取开销大，逐键触发会造成请求风暴；
+// 停止输入 400ms 后才查询。回车（keyup.enter）仍即时查询。
+let keywordTimer = null
+function onKeywordInput() {
+  clearTimeout(keywordTimer)
+  keywordTimer = setTimeout(() => {
+    loadAll()
+  }, 400)
+}
+
+// 竞态保护（M-06）：记录请求序号，旧请求晚返回时不覆盖新结果。
+let loadSeq = 0
+
 // 孤儿口（未连线接口）。
 const orphans = ref([])
 
-// 筛选条件。
-const filter = reactive({ keyword: '', medium: SELECT_ALL, connector: SELECT_ALL, showOrphans: false })
+// 筛选条件（H-03：持久化到 sessionStorage，刷新/返回后恢复）。
+const { filter, clear: clearPersisted } = usePersistentFilter('LinkList', () => ({
+  keyword: '',
+  medium: SELECT_ALL,
+  connector: SELECT_ALL,
+  showOrphans: false,
+}))
 
 // 扁平表行：链路 +（可选）孤儿口，统一形状便于渲染。
 const rows = computed(() => {
@@ -400,27 +419,38 @@ const dialogViewMode = ref(false)
 const editLinkId = ref('')
 const editLink = ref(null)
 
-// 拉取「全部」符合条件的链路（循环翻页直到取完），再客户端归一直表。
+// 拉取「全部」符合条件的链路（并发翻页），再客户端归一直表。
+// H-11：原实现串行循环翻页（每页 200 条），链路量大时 N 次串行请求耗时长；
+// 改为「第一页拿 total → 并发拉取剩余页」后合并，总耗时接近单次请求。
 async function loadAll() {
+  const seq = ++loadSeq
   loading.value = true
   try {
-    const collected = []
-    let p = 1
     const size = 200
-    while (true) {
-      const data = await linkApi.list({
-        page: p,
-        size,
-        keyword: filter.keyword || undefined,
-        medium: filter.medium === SELECT_ALL ? undefined : filter.medium,
-        connector_type: filter.connector === SELECT_ALL ? undefined : filter.connector,
-      })
-      const items = (data && data.items) || []
-      collected.push(...items)
-      if (items.length < size) break
-      p += 1
+    const params = {
+      page: 1,
+      size,
+      keyword: filter.keyword || undefined,
+      medium: filter.medium === SELECT_ALL ? undefined : filter.medium,
+      connector_type: filter.connector === SELECT_ALL ? undefined : filter.connector,
     }
-    allLinks.value = collected
+    // 第一页：既取数据也拿 total（后端分页信封含 total）。
+    const first = await linkApi.list(params)
+    const items = (first && first.items) || []
+    const total = (first && first.total) || 0
+    const pages = Math.ceil(total / size)
+    // 剩余页并发拉取（后端有全局限流但远低于此量级）。
+    if (pages > 1) {
+      const rest = await Promise.all(
+        Array.from({ length: pages - 1 }, (_, i) =>
+          linkApi.list({ ...params, page: i + 2 }).then((d) => (d && d.items) || [])
+        )
+      )
+      for (const r of rest) items.push(...r)
+    }
+    // 旧请求（已被更新的触发取代）结果丢弃。
+    if (seq !== loadSeq) return
+    allLinks.value = items
     // 孤儿口：仅在开关开启且未做介质/连接器筛选时拉取。
     if (filter.showOrphans && filter.medium === SELECT_ALL && filter.connector === SELECT_ALL) {
       try {
@@ -439,10 +469,8 @@ async function loadAll() {
   }
 }
 function resetFilter() {
-  filter.keyword = ''
-  filter.medium = SELECT_ALL
-  filter.connector = SELECT_ALL
-  filter.showOrphans = false
+  // 重置并清掉持久化（H-03），否则下次进入仍会恢复旧筛选。
+  clearPersisted()
   orphans.value = []
   loadAll()
 }

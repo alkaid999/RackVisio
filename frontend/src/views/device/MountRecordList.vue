@@ -110,6 +110,7 @@
 import { reactive, ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { usePersistentFilter } from '@/composables/usePersistentFilter'
+import { backToValidPage } from '@/composables/useListReload'
 import mountRecordApi from '@/api/mountRecord'
 import { SELECT_ALL, toFilterParam } from '@/utils/constants'
 import { Search, Filter, Undo2, Download, Hash } from 'lucide-vue-next'
@@ -189,7 +190,8 @@ async function load() {
     items.value = data.items || []
     total.value = data.total || 0
     if (items.value.length === 0 && page.value > 1 && total.value > 0) {
-      page.value = Math.max(1, Math.ceil(total.value / pageSize.value))
+      // M-04：末页被删空则回退到有效页（统一 backToValidPage 计算）。
+      page.value = backToValidPage(page.value, total.value, pageSize.value)
       await load()
     }
   } catch (e) {
@@ -221,6 +223,8 @@ function goDevice(id) {
 
 // 导出：拉取全量匹配记录 → ExcelJS 生成 .xlsx。
 async function onExport() {
+  // ���重（M-03）：导出期间忽略重复点击（配合 Button :loading 禁用）。
+  if (exporting.value) return
   exporting.value = true
   try {
     const params = buildParams()

@@ -87,11 +87,12 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import { LogIn, RefreshCw, Search, Filter, Undo2 } from 'lucide-vue-next'
 import { formatDateTime } from '@/utils/datetime'
 import loginLogApi from '@/api/login_log'
 import { SELECT_ALL } from '@/utils/constants'
+import { usePersistentFilter } from '@/composables/usePersistentFilter'
 import Button from '@/components/ui/button.vue'
 import Input from '@/components/ui/input.vue'
 import Label from '@/components/ui/label.vue'
@@ -128,13 +129,14 @@ const total = ref(0)
 const page = ref(1)
 const pageSize = ref(20)
 const loading = ref(false)
-const filter = reactive({
+// H-03：筛选状态持久化（sessionStorage，刷新/返回后恢复）。
+const { filter, clear: clearPersisted } = usePersistentFilter('LoginLog', () => ({
   keyword: '',
   action: SELECT_ALL,
   status: SELECT_ALL,
   start_date: '',
   end_date: '',
-})
+}))
 
 function actionLabel(a) {
   return a === 'login' ? '登录' : a === 'logout' ? '注销' : a || '—'
@@ -180,11 +182,8 @@ function goPage(p) {
   load()
 }
 function resetFilter() {
-  filter.keyword = ''
-  filter.action = SELECT_ALL
-  filter.status = SELECT_ALL
-  filter.start_date = ''
-  filter.end_date = ''
+  // 重置并清掉持久化（H-03），否则下次进入仍会恢复旧筛选。
+  clearPersisted()
   reload()
 }
 

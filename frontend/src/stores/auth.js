@@ -18,7 +18,10 @@ export const useAuthStore = defineStore('auth', {
     initialized: false,
   }),
   getters: {
-    isLoggedIn: (s) => !!s.token,
+    // isLoggedIn 双保险（C-01）：同时校验 store state 与持久化存储——
+    // 若 401 处理仅清了 sessionStorage（历史实现），store.token 会残留导致守卫
+    // 「已登录访问登录页→回首页」死循环；以存储实际值为准可兜底消除循环。
+    isLoggedIn: (s) => !!s.token && !!getToken(),
     // 权限映射（缺省回退全模块只读，避免渲染空值）。
     permissions: (s) => (s.user && s.user.permissions) || defaultPermissions(),
     isAdmin: (s) => !!(s.user && s.user.role === 'admin'),
@@ -56,6 +59,14 @@ export const useAuthStore = defineStore('auth', {
       this.initialized = true
       // 退出登录时清空全部持久化列表筛选（需求：筛选保留至重置或退出登录）。
       clearAllPersistedFilters()
+      // H-04：重置全部业务 store，避免换账号登录后旧账号数据残留
+      // （device/room/rack/consumable 的 currentXxx/stats/records 等瞬时可见）。
+      // 动态 import 避免 auth store 与业务 store 循环依赖。
+      import('@/stores/device').then((m) => m.useDeviceStore().$reset()).catch(() => {})
+      import('@/stores/room').then((m) => m.useRoomStore().$reset()).catch(() => {})
+      import('@/stores/rack').then((m) => m.useRackStore().$reset()).catch(() => {})
+      import('@/stores/consumable').then((m) => m.useConsumableStore().$reset()).catch(() => {})
+      import('@/stores/meta').then((m) => m.useMetaStore().$reset()).catch(() => {})
     },
     // 应用启动时调用：若本地有 token 则拉取最新用户信息，否则标记未登录。
     async loadMe() {

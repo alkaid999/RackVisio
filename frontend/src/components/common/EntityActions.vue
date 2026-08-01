@@ -29,6 +29,7 @@
         <template #trigger>
           <button
             type="button"
+            aria-label="查看"
             class="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             @click="$emit('view')"
           ><Eye class="h-3.5 w-3.5" /></button>
@@ -39,6 +40,7 @@
         <template #trigger>
           <button
             type="button"
+            aria-label="编辑"
             class="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             @click="$emit('edit')"
           ><Pencil class="h-3.5 w-3.5" /></button>
@@ -49,6 +51,7 @@
         <template #trigger>
           <button
             type="button"
+            aria-label="删除"
             class="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-red-50 hover:text-red-500"
             @click="$emit('delete')"
           ><Trash2 class="h-3.5 w-3.5" /></button>
@@ -60,6 +63,7 @@
         <template #trigger>
           <button
             type="button"
+            :aria-label="act.label"
             class="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             @click="act.onClick"
           ><component :is="act.icon" class="h-3.5 w-3.5" /></button>

@@ -48,7 +48,8 @@
               v-if="row.disabled"
               class="inline-flex items-center gap-1 text-xs text-destructive"
             ><CircleSlash class="h-3.5 w-3.5" />已禁用</span>
-            <span v-else class="inline-flex items-center gap-1 text-xs text-emerald-600"><CircleCheck class="h-3.5 w-3.5" />正常</span>
+            <!-- M-15：text-emerald-600 → text-success（语义令牌色，随主题自适应） -->
+            <span v-else class="inline-flex items-center gap-1 text-xs text-success"><CircleCheck class="h-3.5 w-3.5" />正常</span>
           </TableCell>
           <TableCell class="text-muted-foreground">{{ formatDateTime(row.created_at) }}</TableCell>
           <TableCell class="text-right">
@@ -108,9 +109,11 @@
             >
               <span class="text-sm">{{ PERMISSION_MODULE_LABELS[m] }}</span>
               <div class="flex w-16 justify-center">
+                <!-- H-10：补可访问名称，读屏可辨识「模块+查看」开关 -->
                 <Switch
                   :model-value="form.permissions[m].view"
                   :disabled="viewMode || saving"
+                  :aria-label="`${PERMISSION_MODULE_LABELS[m]} 查看权限`"
                   @update:model-value="(v) => setPerm(m, 'view', v)"
                 />
               </div>
@@ -118,6 +121,7 @@
                 <Switch
                   :model-value="form.permissions[m].edit"
                   :disabled="viewMode || saving"
+                  :aria-label="`${PERMISSION_MODULE_LABELS[m]} 编辑权限`"
                   @update:model-value="(v) => setPerm(m, 'edit', v)"
                 />
               </div>

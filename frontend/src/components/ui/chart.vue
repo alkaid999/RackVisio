@@ -1,6 +1,7 @@
 <script setup>
 import { ref, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
-import * as echarts from 'echarts'
+// H-07：echarts 按需引入（仅 pie/treemap/bar），避免全量 1.1MB 进包。
+import echarts from '@/utils/echarts-core'
 import { useTheme } from '@/composables/useTheme'
 import { chartTheme } from '@/utils/echarts-theme'
 import { cn } from '@/lib/utils'

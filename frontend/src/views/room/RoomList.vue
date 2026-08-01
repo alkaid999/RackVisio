@@ -191,6 +191,7 @@ import roomApi from '@/api/room'
 import { useToast } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
 import { usePersistentFilter } from '@/composables/usePersistentFilter'
+import { backToValidPage } from '@/composables/useListReload'
 import { ROOM_STATUS_OPTIONS, SELECT_ALL, toFilterParam } from '@/utils/constants'
 import { exportData } from '@/utils/excel'
 import { roomImportConfig } from '@/utils/importConfig'
@@ -265,6 +266,8 @@ const formRoomId = ref('')
 const exporting = ref(false)
 const importVisible = ref(false)
 async function onExport(type) {
+  // 防重（M-03）：导出期间忽略重复点击（配合 Button :loading 禁用）。
+  if (exporting.value) return
   exporting.value = true
   try {
     const rows = await roomApi.exportAll(buildParams())
@@ -301,9 +304,9 @@ function buildParams() {
 }
 async function load() {
   await store.fetchList(buildParams())
-  // 末页被删空则回退到有效页
+  // M-04：末页被删空则回退到有效页（统一 backToValidPage 计算）。
   if (store.rooms.length === 0 && page.value > 1 && store.total > 0) {
-    page.value = Math.max(1, totalPages.value)
+    page.value = backToValidPage(page.value, store.total, pageSize.value)
     await store.fetchList(buildParams())
   }
 }

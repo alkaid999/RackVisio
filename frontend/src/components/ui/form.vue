@@ -14,7 +14,9 @@ const emit = defineEmits(['submit'])
 const errors = reactive({})
 const formRef = ref(null)
 
-function validateField(name) {
+// M-02：validateField 支持 async——规则对象可携带 `validator: async (value) => string|true`，
+// 返回错误文案字符串或 true。async 校验（如远程唯一性检查）不再只能等后端 422。
+async function validateField(name) {
   const rule = props.rules[name]
   if (!rule) return true
   const rulesArr = Array.isArray(rule) ? rule : [rule]
@@ -50,18 +52,37 @@ function validateField(name) {
         break
       }
     }
+    // 自定义 validator：返回值 false / 非空字符串视为校验失败（async 兼容）。
+    if (r.validator) {
+      try {
+        const res = await r.validator(value, props.model)
+        if (res === false || (typeof res === 'string' && res.length > 0)) {
+          err = typeof res === 'string' ? res : r.message
+          break
+        }
+      } catch (e) {
+        err = r.message
+        break
+      }
+    }
   }
   errors[name] = err
   return !err
 }
 
-function validate(callback) {
+// validate 兼容两种调用风格：
+// 1) 同步回调：formRef.value.validate((valid) => {...})
+// 2) await：await formRef.value.validate(async (valid) => {...}) 或 await formRef.value.validate()
+// M-02：内部 async 化——含 validator 的字段校验完成后再回调，避免回调早于异步校验结束。
+async function validate(callback) {
   let valid = true
-  for (const key in props.rules) {
-    if (!validateField(key)) valid = false
+  const keys = Object.keys(props.rules)
+  for (const key of keys) {
+    const ok = await validateField(key)
+    if (!ok) valid = false
   }
   if (typeof callback === 'function') callback(valid)
-  return Promise.resolve(valid)
+  return valid
 }
 
 function clearValidate() {

@@ -136,7 +136,13 @@
               <span class="truncate text-foreground/80">{{ p.name }}</span>
               <span class="flex shrink-0 items-center gap-1.5">
                 <span class="text-muted-foreground">{{ INTERFACE_TYPE_LABELS[p.interface_type] || p.interface_type }}/{{ p.speed }}</span>
-                <span class="h-1.5 w-1.5 rounded-full" :style="{ backgroundColor: INTERFACE_STATUS_COLORS[p.status] || '#909399' }"></span>
+                <!-- M-14：状态点补文本兜底（title + aria-label），不依赖颜色传达状态 -->
+                <span
+                  class="h-1.5 w-1.5 rounded-full"
+                  :title="ifaceStatusLabel(p.status)"
+                  :aria-label="ifaceStatusLabel(p.status)"
+                  :style="{ backgroundColor: INTERFACE_STATUS_COLORS[p.status] || '#909399' }"
+                ></span>
               </span>
             </div>
             <div v-if="!selectedDeviceDetail.interfaces.length" class="py-3 text-center text-muted-foreground/70">无接口</div>
@@ -176,15 +182,21 @@
     <div class="absolute top-20 right-3 w-60 pointer-events-auto">
       <div class="glass-panel p-3">
         <!-- 标签切换：设备（默认，点选查看详情与链路）/ 机柜（跳转三维详情） -->
-        <div class="flex mb-2 rounded-lg bg-accent/50 p-0.5 text-[11px]">
+        <div class="flex mb-2 rounded-lg bg-accent/50 p-0.5 text-[11px]" role="tablist" aria-label="右侧面板切换">
           <button
             type="button"
+            role="tab"
+            :aria-selected="panelTab === 'device'"
+            :aria-pressed="panelTab === 'device'"
             class="flex-1 rounded-md py-1 font-medium transition-colors"
             :class="panelTab === 'device' ? 'bg-brand-500 text-white shadow' : 'text-muted-foreground hover:text-foreground'"
             @click="panelTab = 'device'"
           >设备</button>
           <button
             type="button"
+            role="tab"
+            :aria-selected="panelTab === 'rack'"
+            :aria-pressed="panelTab === 'rack'"
             class="flex-1 rounded-md py-1 font-medium transition-colors"
             :class="panelTab === 'rack' ? 'bg-brand-500 text-white shadow' : 'text-muted-foreground hover:text-foreground'"
             @click="panelTab = 'rack'"
@@ -353,6 +365,7 @@ import {
   DEVICE_TYPE_COLORS,
   INTERFACE_TYPE_LABELS,
   INTERFACE_STATUS_COLORS,
+  INTERFACE_STATUS_OPTIONS,
   LINK_MEDIUM_LABELS,
   LINK_MEDIUM_COLORS,
   isAssetDevice,
@@ -378,6 +391,11 @@ const router = useRouter()
 
 const viewMode = ref('room') // 固定机房总览模式（已移除机柜总览/设备总览切换）
 const panelTab = ref('device') // 右侧面板标签：'device' 设备列表（默认，可点选查看链路）/ 'rack' 机柜列表（跳转详情）
+
+// M-14：接口状态中文标签（title/aria 用，避免状态仅靠颜色传达）。
+function ifaceStatusLabel(v) {
+  return (INTERFACE_STATUS_OPTIONS.find((o) => o.value === v) || {}).label || v || '未知'
+}
 const rooms = ref([])
 const roomId = ref(route.query.room || '')
 const room = ref(null)
@@ -918,79 +936,7 @@ function buildRoomScene(onComplete) {
   requestAnimationFrame(step)
 }
 
-// —— 设备总览场景：设备按所属机柜的实际位置摆放在对应坐标（不构建机柜模型、不显示机柜名称标签） ——
-function buildDevicesScene() {
-  const ra = racks.value
-  if (!ra.length) return
-
-  const { map: layout, cols: colN, rows: rowN, aisleZs } = computeRackLayout(ra)
-
-  const spanX = colN * RACK_W
-  const spanZ = rowN * (RACK_D + AISLE) - AISLE
-  const floorW = spanX + 10
-  const floorD = spanZ + 10
-
-  const ground = new THREE.Mesh(
-    new THREE.PlaneGeometry(floorW, floorD),
-    new THREE.MeshStandardMaterial({ color: 0x0c1422, roughness: 0.85, metalness: 0.2 })
-  )
-  ground.rotation.x = -Math.PI / 2
-  ground.receiveShadow = true
-  worldGroup.add(ground)
-
-  // 走廊/过道指引（设备总览模式下同样可见）
-  addCorridorGuides({ aisleZs }, floorW)
-
-  // 设备 -> 所属机柜 id
-  const devRackMap = {}
-  ra.forEach((r) => (rackDevices.value[r.id] || []).forEach((d) => { devRackMap[d.id] = r.id }))
-
-  const devs = flattenDevices()
-  devs.forEach((d) => {
-    // 仅渲染已上架（存在有效上架记录）的设备；在库设备无 U 位，跳过。
-    if (d.current_start_u == null || d.u_height == null) return
-    const rid = devRackMap[d.id]
-    const pos = rid && layout[rid] ? layout[rid] : { x: 0, z: 0, rot: 0 }
-    const h = (d.u_height || 1) * U_H * 0.92
-    const dg = buildDevice(d, {
-      uHeight: U_H,
-      width: RACK_W * 0.9,
-      depth: RACK_D * 0.82,
-      height: h,
-    })
-    // 按 U 位计算高度，再落到所属机柜的世界坐标并应用相同旋转
-    setDevicePosition(dg, d.current_start_u, d.u_height, { uH: U_H, plinthH: PLINTH_H })
-    dg.position.x = pos.x
-    dg.position.z = pos.z
-    dg.rotation.y = pos.rot
-    worldGroup.add(dg)
-    deviceMeshes.push(dg)
-
-    // 书签式 U 位标签（设备上方，显示 U 位 + 名称 + 类型色条）
-    const uEnd = d.u_height ? d.current_start_u + d.u_height - 1 : d.current_start_u
-    const typeColor = DEVICE_TYPE_COLORS[d.device_type] || '#38bdf8'
-    const bookmark = makeBookmarkLabel(d.current_start_u, d.name, { typeColor, uEnd })
-    bookmark.position.set(0, h / 2 + 0.2, 0)
-    dg.add(bookmark)
-    dg.userData.bookmark = bookmark
-  })
-
-  // 在每个机柜位置放置半透明底座，标示设备所属机柜位置（不显示机柜模型与名称）
-  ra.forEach((rack) => {
-    const { x, z, rot } = layout[rack.id]
-    const pad = new THREE.Mesh(
-      new THREE.BoxGeometry(RACK_W, 0.04, RACK_D),
-      new THREE.MeshStandardMaterial({ color: 0x2563eb, transparent: true, opacity: 0.12, metalness: 0.2, roughness: 0.8 })
-    )
-    pad.position.set(x, 0.02, z)
-    pad.rotation.y = rot
-    worldGroup.add(pad)
-  })
-
-  frameRoomView()
-}
-
-// 相机取景：基于场景包围球拟合所需距离，并以固定「抬高的前上方」视角方向放置相机，
+// —— 相机取景：基于场景包围球拟合所需距离，并以固定「抬高的前上方」视角方向放置相机，
 // 确保整个机房（含最高机柜）完整显示在单屏内，且俯角合理（约 30°），避免前排机柜遮挡后排。
 function frameRoomView() {
   if (!engine || !room.value) return

@@ -1,4 +1,5 @@
 <script setup>
+import { computed, inject } from 'vue'
 import { cn } from '@/lib/utils'
 
 const props = defineProps({
@@ -12,12 +13,22 @@ const model = defineModel({
     return v
   },
 })
+
+// M-12：消费 form-item 提供的上下文，实现 label for / aria-invalid / aria-describedby 关联
+// （无障碍：读屏可辨识「该输入属于哪个表单项」及校验错误）。
+const formItem = inject('formItemContext', null)
+const inputId = computed(() => (formItem ? formItem.inputId : undefined))
+const ariaInvalid = computed(() => (formItem && formItem.hasError.value ? 'true' : undefined))
+const ariaDescribedby = computed(() => (formItem && formItem.hasError.value ? formItem.errorId : undefined))
 </script>
 
 <template>
   <input
     v-model="model"
+    :id="inputId"
     :type="type"
+    :aria-invalid="ariaInvalid"
+    :aria-describedby="ariaDescribedby"
     :class="
       cn(
         'flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50',

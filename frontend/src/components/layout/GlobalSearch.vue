@@ -217,6 +217,7 @@ onUnmounted(() => {
       class="fixed inset-0 z-[70] flex items-start justify-center px-4 pt-[12vh]"
       role="dialog"
       aria-modal="true"
+      aria-label="全局搜索"
     >
       <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" @click="close" />
 
@@ -230,6 +231,7 @@ onUnmounted(() => {
             ref="inputEl"
             v-model="query"
             type="text"
+            aria-label="搜索设备、接口、IP、机柜或链路"
             placeholder="搜索设备、接口、IP、机柜或链路…"
             class="h-12 w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
             @input="onInput"

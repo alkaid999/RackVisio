@@ -58,7 +58,8 @@
           <Card title="各机房机柜使用率" description="矩形树图：面积=总 U，颜色=使用率">
             <div class="h-72">
               <BaseChart v-if="overview" :option="capacityOption" />
-              <div v-else class="flex h-full items-center justify-center text-sm text-muted-foreground">加载中…</div>
+              <!-- L-01：加载态用 Skeleton 骨架屏替代纯文本 -->
+              <div v-else class="flex h-full items-center justify-center"><Skeleton class="h-full w-full" /></div>
             </div>
           </Card>
 
@@ -98,14 +99,16 @@
           <Card title="设备状态分布" description="资产生命周期状态占比">
             <div class="h-72">
               <BaseChart v-if="overview" :option="statusOption" />
-              <div v-else class="flex h-full items-center justify-center text-sm text-muted-foreground">加载中…</div>
+              <!-- L-01：加载态用 Skeleton 骨架屏替代纯文本 -->
+              <div v-else class="flex h-full items-center justify-center"><Skeleton class="h-full w-full" /></div>
             </div>
           </Card>
 
           <Card title="设备类型分布" description="按设备类型统计数量">
             <div class="h-72">
               <BaseChart v-if="overview" :option="typeOption" />
-              <div v-else class="flex h-full items-center justify-center text-sm text-muted-foreground">加载中…</div>
+              <!-- L-01：加载态用 Skeleton 骨架屏替代纯文本 -->
+              <div v-else class="flex h-full items-center justify-center"><Skeleton class="h-full w-full" /></div>
             </div>
           </Card>
         </div>
@@ -174,11 +177,12 @@
           <Card title="链路与账号" description="连接与系统账号规模">
             <div class="space-y-4">
               <div class="flex items-center justify-between">
-                <span class="flex items-center gap-2 text-sm text-muted-foreground"><Link2 class="h-4 w-4 text-[#06b6d4]" />链路总数</span>
+                <!-- M-15：arbitrary hex class → 语义令牌色（随主题自适应） -->
+                <span class="flex items-center gap-2 text-sm text-muted-foreground"><Link2 class="h-4 w-4 text-info" />链路总数</span>
                 <span class="text-2xl font-bold tabular-nums">{{ overview?.link_count ?? 0 }}</span>
               </div>
               <div class="flex items-center justify-between">
-                <span class="flex items-center gap-2 text-sm text-muted-foreground"><Users class="h-4 w-4 text-[#f59e0b]" />账号数</span>
+                <span class="flex items-center gap-2 text-sm text-muted-foreground"><Users class="h-4 w-4 text-warning" />账号数</span>
                 <span class="text-2xl font-bold tabular-nums">{{ overview?.account_count ?? 0 }}</span>
               </div>
             </div>
@@ -187,11 +191,12 @@
           <Card title="耗材库存" description="耗材类型、条目与结存总量">
             <div class="space-y-4">
               <div class="flex items-center justify-between">
-                <span class="flex items-center gap-2 text-sm text-muted-foreground"><Layers class="h-4 w-4 text-[#8b5cf6]" />耗材类型</span>
+                <!-- M-15：arbitrary hex class → 语义令牌色 -->
+                <span class="flex items-center gap-2 text-sm text-muted-foreground"><Layers class="h-4 w-4 text-violet-500" />耗材类型</span>
                 <span class="text-2xl font-bold tabular-nums">{{ overview?.consumable_type_count ?? 0 }}</span>
               </div>
               <div class="flex items-center justify-between">
-                <span class="flex items-center gap-2 text-sm text-muted-foreground"><Package class="h-4 w-4 text-[#eb4895]" />耗材条目</span>
+                <span class="flex items-center gap-2 text-sm text-muted-foreground"><Package class="h-4 w-4 text-pink-500" />耗材条目</span>
                 <span class="text-2xl font-bold tabular-nums">{{ overview?.consumable_item_count ?? 0 }}</span>
               </div>
               <div class="flex items-center justify-between border-t border-border pt-3">
@@ -242,9 +247,11 @@ import {
 import statsApi from '@/api/stats'
 import { useTheme } from '@/composables/useTheme'
 import { chartTheme } from '@/utils/echarts-theme'
+import { DEVICE_STATUS_BADGE } from '@/utils/constants'
 import { useMetaStore } from '@/stores/meta'
 import Button from '@/components/ui/button.vue'
 import BaseChart from '@/components/ui/chart.vue'
+import Skeleton from '@/components/ui/skeleton.vue'
 import Card from '@/components/ui/card.vue'
 import Badge from '@/components/ui/badge.vue'
 import Tabs from '@/components/ui/tabs.vue'
@@ -281,11 +288,18 @@ const kpis = computed(() => {
   const powerRated = o.power_rated ?? 0
   const powerUsed = o.power_used ?? 0
   const powerUtil = powerRated > 0 ? Math.round((powerUsed / powerRated) * 100) : 0
+  // M-15：KPI 色收敛到语义令牌色（CSS 变量），替代硬编码 hex——
+  // 令牌随明暗主题自适应，避免深色下对比度不足；取色统一走 getCssVar('--xxx')。
+  const cssColor = (name, fallback) => {
+    if (typeof window === 'undefined') return fallback
+    const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
+    return v ? `hsl(${v})` : fallback
+  }
   return [
-    { label: '机房数量', value: o.room_count ?? 0, icon: Building2, color: '#3b82f6' },
-    { label: '机柜数量', value: o.rack_count ?? 0, icon: Server, color: '#13c2c2' },
-    { label: '设备总数', value: o.device_count ?? 0, icon: Cpu, color: '#8b5cf6' },
-    { label: '已上架设备', value: statusMap['已上架'] ?? 0, icon: CircleCheck, color: '#22c55e' },
+    { label: '机房数量', value: o.room_count ?? 0, icon: Building2, color: cssColor('--primary', '#3b82f6') },
+    { label: '机柜数量', value: o.rack_count ?? 0, icon: Server, color: cssColor('--info', '#13c2c2') },
+    { label: '设备总数', value: o.device_count ?? 0, icon: Cpu, color: cssColor('--violet-500', '#8b5cf6') },
+    { label: '已上架设备', value: statusMap['已上架'] ?? 0, icon: CircleCheck, color: cssColor('--success', '#22c55e') },
     {
       label: '整体机柜使用率',
       value: util,
@@ -294,9 +308,9 @@ const kpis = computed(() => {
       color: meta.usageColor(util),
       hint: `已用 ${o.used_u ?? 0} / 共 ${o.total_u ?? 0} U`,
     },
-    { label: '链路总数', value: o.link_count ?? 0, icon: Link2, color: '#06b6d4' },
-    { label: '账号数', value: o.account_count ?? 0, icon: Users, color: '#f59e0b' },
-    { label: '耗材条目', value: o.consumable_item_count ?? 0, icon: Package, color: '#eb4895' },
+    { label: '链路总数', value: o.link_count ?? 0, icon: Link2, color: cssColor('--info', '#06b6d4') },
+    { label: '账号数', value: o.account_count ?? 0, icon: Users, color: cssColor('--warning', '#f59e0b') },
+    { label: '耗材条目', value: o.consumable_item_count ?? 0, icon: Package, color: cssColor('--pink-500', '#eb4895') },
     {
       label: '功率预算',
       value: (powerUsed / 1000).toFixed(1),
@@ -319,16 +333,14 @@ function utilBadge(v) {
   if (v >= meta.usageWarn) return 'warning'
   return 'success'
 }
-// 设备状态 Badge 变体。
-const STATUS_BADGE = {
-  已上架: 'success',
-  在库: 'secondary',
-  待报废: 'destructive',
-  借出: 'default',
-  已下架: 'warning',
-}
+// 设备状态 Badge 变体（L-09：收敛到 constants.DEVICE_STATUS_BADGE，同源维护）。
 function statusBadge(s) {
-  return STATUS_BADGE[s] || 'secondary'
+  // 未知状态告警提示，避免后端新增状态静默回退 secondary。
+  if (!(s in DEVICE_STATUS_BADGE)) {
+    console.warn(`[dashboard] 未知设备状态：${s}`)
+    return 'secondary'
+  }
+  return DEVICE_STATUS_BADGE[s]
 }
 function statusPercent(c) {
   const total = statusDetail.value.reduce((a, b) => a + b.count, 0)

@@ -1,11 +1,13 @@
 <template>
-  <div class="virtual-table flex flex-col overflow-hidden rounded-xl border border-border/60 bg-card/40">
+  <div class="virtual-table flex flex-col overflow-hidden rounded-xl border border-border/60 bg-card/40" role="table" :aria-rowcount="rows.length">
     <!-- 表头：与行共享 grid-template-columns，纵向不滚动、列宽始终对齐 -->
+    <!-- L-06：虚拟表格非语义化的最小补救——表头给 columnheader 角色、行给 row -->
     <div
       class="vt-header grid shrink-0 border-b border-border/70 bg-muted/50 text-xs font-medium text-muted-foreground"
       :style="{ gridTemplateColumns }"
+      role="row"
     >
-      <div v-if="selectable" class="vt-cell flex items-center justify-center px-2 py-2.5">
+      <div v-if="selectable" class="vt-cell flex items-center justify-center px-2 py-2.5" role="columnheader">
         <Checkbox
           :model-value="allSelected"
           :indeterminate="indeterminate"
@@ -18,6 +20,7 @@
         :key="col.key"
         class="vt-cell px-3 py-2.5"
         :class="col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : ''"
+        role="columnheader"
       >
         {{ col.label }}
       </div>
@@ -42,6 +45,7 @@
           :ref="props.virtual ? (el) => setRowRef(el, item.index) : undefined"
           class="vt-row group grid items-center border-b border-border/50 transition-colors hover:bg-accent/40"
           :class="rowClass ? rowClass(item.row, item.index) : ''"
+          role="row"
           :style="props.virtual ? {
             position: 'absolute',
             top: 0,

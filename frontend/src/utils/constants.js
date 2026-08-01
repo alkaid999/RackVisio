@@ -142,6 +142,15 @@ export const DEVICE_STATUS_COLORS = reactive({
   待报废: '#F56C6C',
   借出: '#8b5cf6',
 })
+// 设备状态 → Badge 变体（L-09：Dashboard 等处的徽章配色集中于此，避免各处重复维护）。
+// 与 DEVICE_STATUS_* 同源维护；未知状态由调用方回退 'secondary'。
+export const DEVICE_STATUS_BADGE = {
+  已上架: 'success',
+  在库: 'secondary',
+  待报废: 'destructive',
+  借出: 'default',
+  已下架: 'warning',
+}
 
 // ============ 设备开关机状态（仅「在架」设备有意义；在库设备不涉及）============
 // 语义：红色专用于「关机」告警，不得用于常规状态色。
@@ -493,4 +502,86 @@ export function consumableTypeBadgeStyle(typeId) {
     color: c,
     borderColor: `hsla(${hue.toFixed(1)}, 72%, 45%, 0.45)`,
   }
+}
+
+// 操作日志「变更字段」中文标签（H-01：自 OperationLog.vue 移入，集中管理）。
+// 覆盖 DCIM 常用字段；未命中的 key 由调用方退化为可读原文。
+export const LOG_FIELD_LABELS = {
+  name: '名称',
+  device_code: '设备编码',
+  code: '编号',
+  ip_address: '业务IP',
+  oob_ip: '带外管理IP',
+  sn: 'SN',
+  model: '型号',
+  device_type: '设备类型',
+  brand: '品牌',
+  status: '状态',
+  power_status: '开关机',
+  u_start: '起始U位',
+  u_end: '结束U位',
+  u_position: 'U位',
+  rack_id: '机柜',
+  room_id: '机房',
+  device_id: '设备',
+  source_device_id: '源设备',
+  target_device_id: '目标设备',
+  owner_device_id: '所属设备',
+  interface_id: '接口',
+  // 链路实体的真实外键是接口而非设备（模型只有 source/target_interface_id），
+  // 缺这两条会导致改链路时「变更字段」显示英文原文 source interface id。
+  source_interface_id: '源接口',
+  target_interface_id: '目标接口',
+  source_port: '源端口',
+  target_port: '目标端口',
+  link_type: '链路类型',
+  bandwidth: '带宽',
+  length: '长度',
+  label: '标签',
+  operation_type: '操作类型',
+  is_facility: '是否设施',
+  facility_type: '设施类型',
+  description: '描述',
+  manager: '负责人',
+  phone: '联系电话',
+  capacity: '容量',
+  power: '功率',
+  height_u: 'U高',
+  serial_no: '序列号',
+  purchase_date: '采购日期',
+  warranty_date: '保修到期',
+  threshold: '预警阈值',
+  role: '角色',
+  display_name: '显示名',
+  is_active: '是否启用',
+  consumable_id: '耗材',
+  consumable_type_id: '耗材类型',
+  category_id: '分类',
+  quantity: '数量',
+  unit: '单位',
+  medium: '介质',
+  connector_type: '连接器',
+  interface_type: '接口类型',
+  interface_no: '端口号',
+  remark: '备注',
+  type_id: '类型',
+  location: '位置',
+  department: '部门',
+  spec: '规格',
+  is_asset: '是否资产',
+  // 上下架记录字段
+  start_u: '起始U位',
+  occupied_u: '占用U数',
+  mounted_at: '上架时间',
+  mounted_by: '上架人',
+  unmounted_at: '下架时间',
+  unmounted_by: '下架人',
+  record_status: '记录状态',
+  // 账号字段
+  username: '用户名',
+  password: '密码',
+  password_hash: '密码',
+  permissions: '权限',
+  disabled: '已禁用',
+  current_quantity: '当前库存',
 }

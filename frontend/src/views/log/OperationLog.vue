@@ -182,11 +182,12 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, onBeforeUnmount } from 'vue'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { FileText, RefreshCw, Search, Filter, Undo2 } from 'lucide-vue-next'
 import { formatDateTime } from '@/utils/datetime'
 import operationLogApi from '@/api/operation_log'
-import { SELECT_ALL } from '@/utils/constants'
+import { SELECT_ALL, LOG_FIELD_LABELS } from '@/utils/constants'
+import { usePersistentFilter } from '@/composables/usePersistentFilter'
 import Button from '@/components/ui/button.vue'
 import Input from '@/components/ui/input.vue'
 import Label from '@/components/ui/label.vue'
@@ -237,13 +238,16 @@ const total = ref(0)
 const page = ref(1)
 const pageSize = ref(20)
 const loading = ref(false)
-const filter = reactive({
+// H-03：筛选状态持久化（sessionStorage，刷新/返回后恢复）。
+// 恢复发生在 usePersistentFilter 内部的 onMounted(restore)，先于页面 onMounted(load)，
+// 故无需 onRestore 回调重复触发加载。
+const { filter, clear: clearPersisted } = usePersistentFilter('OperationLog', () => ({
   keyword: '',
   action: SELECT_ALL,
   resource: SELECT_ALL,
   start_date: '',
   end_date: '',
-})
+}))
 const detailOpen = ref(false)
 const activeDetail = ref(null)
 const activeRow = ref(null)
@@ -284,11 +288,8 @@ function goPage(p) {
   load()
 }
 function resetFilter() {
-  filter.keyword = ''
-  filter.action = SELECT_ALL
-  filter.resource = SELECT_ALL
-  filter.start_date = ''
-  filter.end_date = ''
+  // 重置并清掉持久化（H-03），否则下次进入仍会恢复旧筛选。
+  clearPersisted()
   reload()
 }
 
@@ -335,86 +336,8 @@ const STATUS_LABELS = {
   500: '服务器错误', 502: '网关错误', 503: '服务不可用',
 }
 
-// 字段中文标签（覆盖 DCIM 常用字段；未命中的 key 退化为可读原文）。
-const FIELD_LABELS = {
-  name: '名称',
-  device_code: '设备编码',
-  code: '编号',
-  ip_address: '业务IP',
-  oob_ip: '带外管理IP',
-  sn: 'SN',
-  model: '型号',
-  device_type: '设备类型',
-  brand: '品牌',
-  status: '状态',
-  power_status: '开关机',
-  u_start: '起始U位',
-  u_end: '结束U位',
-  u_position: 'U位',
-  rack_id: '机柜',
-  room_id: '机房',
-  device_id: '设备',
-  source_device_id: '源设备',
-  target_device_id: '目标设备',
-  owner_device_id: '所属设备',
-  interface_id: '接口',
-  // 链路实体的真实外键是接口而非设备（模型只有 source/target_interface_id），
-  // 缺这两条会导致改链路时「变更字段」显示英文原文 source interface id。
-  source_interface_id: '源接口',
-  target_interface_id: '目标接口',
-  source_port: '源端口',
-  target_port: '目标端口',
-  link_type: '链路类型',
-  bandwidth: '带宽',
-  length: '长度',
-  label: '标签',
-  operation_type: '操作类型',
-  is_facility: '是否设施',
-  facility_type: '设施类型',
-  description: '描述',
-  manager: '负责人',
-  phone: '联系电话',
-  capacity: '容量',
-  power: '功率',
-  height_u: 'U高',
-  serial_no: '序列号',
-  purchase_date: '采购日期',
-  warranty_date: '保修到期',
-  threshold: '预警阈值',
-  role: '角色',
-  display_name: '显示名',
-  is_active: '是否启用',
-  consumable_id: '耗材',
-  consumable_type_id: '耗材类型',
-  category_id: '分类',
-  quantity: '数量',
-  unit: '单位',
-  medium: '介质',
-  connector_type: '连接器',
-  interface_type: '接口类型',
-  interface_no: '端口号',
-  remark: '备注',
-  type_id: '类型',
-  location: '位置',
-  department: '部门',
-  spec: '规格',
-  is_asset: '是否资产',
-  // 上下架记录字段
-  start_u: '起始U位',
-  occupied_u: '占用U数',
-  mounted_at: '上架时间',
-  mounted_by: '上架人',
-  unmounted_at: '下架时间',
-  unmounted_by: '下架人',
-  record_status: '记录状态',
-  // 账号字段
-  username: '用户名',
-  password: '密码',
-  password_hash: '密码',
-  permissions: '权限',
-  disabled: '已禁用',
-  current_quantity: '当前库存',
-}
+// 字段中文标签（H-01：已移入 utils/constants.js 的 LOG_FIELD_LABELS，此处复用；
+// 未命中的 key 由 prettyKey 退化为可读原文）。
 
 function cap(s) {
   return s ? s.charAt(0).toUpperCase() + s.slice(1) : s
@@ -475,7 +398,7 @@ function inlineSummary(detail) {
 function diffItems(detail) {
   const diff = detail?.diff || []
   return diff.map((e) => ({
-    label: FIELD_LABELS[e.field] || prettyKey(e.field),
+    label: LOG_FIELD_LABELS[e.field] || prettyKey(e.field),
     old: e.old == null ? '—' : String(e.old),
     new: e.new == null ? '—' : String(e.new),
   }))
@@ -490,7 +413,7 @@ function dataItems(detail) {
     return data == null ? [] : [{ label: '内容', value: String(data) }]
   }
   return Object.entries(data).map(([k, v]) => {
-    const label = FIELD_LABELS[k] || prettyKey(k)
+    const label = LOG_FIELD_LABELS[k] || prettyKey(k)
     let value
     if (names[k]) value = `${names[k]}（${v}）`
     else if (v == null) value = '—'
@@ -515,7 +438,7 @@ function oldItems(detail) {
   return Object.entries(old)
     .filter(([k, v]) => v != null && v !== '' && !skip.has(k))
     .map(([k, v]) => {
-      const label = FIELD_LABELS[k] || prettyKey(k)
+      const label = LOG_FIELD_LABELS[k] || prettyKey(k)
       let value
       if (oldNames[k]) value = `${oldNames[k]}`
       else if (typeof v === 'object') value = JSON.stringify(v)

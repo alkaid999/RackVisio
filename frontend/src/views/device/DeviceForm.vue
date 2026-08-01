@@ -276,6 +276,8 @@ function closeForm() {
 }
 
 async function onSubmit() {
+  // 防重（C-02）：请求进行中忽略重复触发，避免并发重复创建设备。
+  if (submitting.value) return
   const res = formRef.value.validate()
   const valid = res && typeof res.then === 'function' ? await res : !!res
   if (!valid) return

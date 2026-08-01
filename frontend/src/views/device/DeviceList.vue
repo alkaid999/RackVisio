@@ -203,6 +203,7 @@ import { useDeviceStore } from '@/stores/device'
 import { useRoomStore } from '@/stores/room'
 import { useAuthStore } from '@/stores/auth'
 import { usePersistentFilter } from '@/composables/usePersistentFilter'
+import { backToValidPage } from '@/composables/useListReload'
 import roomApi from '@/api/room'
 import deviceApi from '@/api/device'
 import DeviceCard from '@/components/device/DeviceCard.vue'
@@ -244,6 +245,8 @@ const canEdit = computed(() => auth.hasPermission('device:edit'))
 const exporting = ref(false)
 const importVisible = ref(false)
 async function onExport(type) {
+  // 防重（M-03）：导出期间忽略重复点击（配合 Button :loading 禁用）。
+  if (exporting.value) return
   exporting.value = true
   try {
     const rows = await deviceApi.exportAll(buildParams())
@@ -322,9 +325,9 @@ function buildParams() {
 }
 async function load() {
   await store.fetchList(buildParams())
-  // 末页被删空则回退到有效页，避免停留在空页
+  // M-04：末页被删空则回退到有效页（统一 backToValidPage 计算）。
   if (store.devices.length === 0 && page.value > 1 && store.total > 0) {
-    page.value = Math.max(1, totalPages.value)
+    page.value = backToValidPage(page.value, store.total, pageSize.value)
     await store.fetchList(buildParams())
   }
 }

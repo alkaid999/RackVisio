@@ -292,7 +292,8 @@
       <DeviceForm @saved="onDeviceSaved" />
 
       <!-- 编辑上架记录弹窗 -->
-      <Dialog v-model="editRecordVisible" title="编辑上架记录" class="max-w-sm" @update:visible="(v) => (editRecordVisible = v)">
+      <!-- M-01：dialog.vue 只 emit update:modelValue（v-model 已覆盖关闭），@update:visible 永不触发，已移除 -->
+      <Dialog v-model="editRecordVisible" title="编辑上架记录" class="max-w-sm">
         <Form v-if="editRecordTarget" :model="editRecordForm" :rules="{}">
           <FormItem v-if="editRecordTarget.event_type === '上架'" label="上架人" name="mounted_by">
             <Input v-model="editRecordForm.mounted_by" placeholder="上架操作人" />

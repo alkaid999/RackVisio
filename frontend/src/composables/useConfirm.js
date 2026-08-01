@@ -15,6 +15,9 @@ const state = reactive({
 
 export function useConfirm() {
   function confirm(opts = {}) {
+    // M-08：若上一个对话框尚未响应（如双击触发新 confirm），先以 false 释放旧 Promise，
+    // 避免调用方永久 await（悬挂）。
+    state._resolve?.(false)
     return new Promise((resolve) => {
       state.title = opts.title || '提示'
       state.description = opts.description || ''
@@ -27,16 +30,21 @@ export function useConfirm() {
     })
   }
 
+  function settle(result) {
+    const r = state._resolve
+    state._resolve = null // resolve 后清引用，避免重复 settle
+    if (r) r(result)
+    state.open = false
+  }
+
   function onConfirm() {
     if (state.loading) return
-    state._resolve?.(true)
-    state.open = false
+    settle(true)
   }
 
   function onCancel() {
     if (state.loading) return
-    state._resolve?.(false)
-    state.open = false
+    settle(false)
   }
 
   return { state, confirm, onConfirm, onCancel }

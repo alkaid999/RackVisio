@@ -170,7 +170,8 @@
       </Card>
 
       <!-- 上架设备弹窗：从候选设备池（仓库 / 空闲 / 下架设备）中选择 -->
-      <Dialog v-model="mountVisible" title="上架设备" class="max-w-lg" @update:visible="(v) => (mountVisible = v)">
+      <!-- M-01：dialog.vue 只 emit update:modelValue（v-model 已覆盖关闭），@update:visible 永不触发，已移除 -->
+      <Dialog v-model="mountVisible" title="上架设备" class="max-w-lg">
         <div v-if="!candidates.length" class="py-6 text-center text-sm text-slate-500">
           暂无可上架设备（仓库 / 空闲 / 下架设备池为空）。
         </div>

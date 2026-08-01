@@ -195,6 +195,7 @@ import consumableApi from '@/api/consumable'
 import { useToast } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
 import { usePersistentFilter } from '@/composables/usePersistentFilter'
+import { backToValidPage } from '@/composables/useListReload'
 import { SELECT_ALL, toFilterParam, consumableTypeBadgeStyle as typeBadgeStyle, setConsumableTypeOrder } from '@/utils/constants'
 import Button from '@/components/ui/button.vue'
 import Input from '@/components/ui/input.vue'
@@ -261,8 +262,9 @@ function buildParams() {
 }
 async function load() {
   await store.fetchItems(buildParams())
+  // M-04：末页被删空则回退到有效页（统一 backToValidPage 计算）。
   if (store.items.length === 0 && page.value > 1 && store.total > 0) {
-    page.value = Math.max(1, totalPages.value)
+    page.value = backToValidPage(page.value, store.total, pageSize.value)
     await store.fetchItems(buildParams())
   }
 }

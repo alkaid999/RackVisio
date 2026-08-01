@@ -155,6 +155,7 @@ import { ref, computed, watch, nextTick, onBeforeUnmount } from 'vue'
 import { ChevronDown, Search, LayoutGrid, List, RotateCcw, Ban } from 'lucide-vue-next'
 import { DEVICE_TYPE_OPTIONS, DEVICE_TYPE_LABELS, DEVICE_TYPE_COLORS, DEVICE_STATUS_COLORS, SELECT_ALL, toFilterParam } from '@/utils/constants'
 import roomApi from '@/api/room'
+import { useRoomStore } from '@/stores/room'
 import Select from '@/components/ui/select.vue'
 import SelectTrigger from '@/components/ui/select-trigger.vue'
 import SelectContent from '@/components/ui/select-content.vue'
@@ -186,6 +187,7 @@ const fRack = ref(SELECT_ALL)
 const viewMode = ref('grid')
 const rooms = ref([])
 const racks = ref([])
+const roomStore = useRoomStore()
 
 const ONLINE_ALL = '__all_online__'
 const ONLINE_ON = 'online'
@@ -248,7 +250,8 @@ async function onRoomChange() {
   const room = toFilterParam(fRoom.value)
   if (room) {
     try {
-      racks.value = await roomApi.racks(room)
+      // M-07：机柜下拉收敛到 roomStore 共享缓存（多页面复用同一机房→机柜联动数据）。
+      racks.value = await roomStore.fetchRacks(room)
     } catch (e) {
       racks.value = []
     }

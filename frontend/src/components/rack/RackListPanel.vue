@@ -200,6 +200,7 @@ import { SELECT_ALL, RACK_STATUS_OPTIONS, toFilterParam } from '@/utils/constant
 import { useConfirm } from '@/composables/useConfirm'
 import { useToast } from '@/composables/useToast'
 import { usePersistentFilter } from '@/composables/usePersistentFilter'
+import { backToValidPage } from '@/composables/useListReload'
 import { exportData } from '@/utils/excel'
 import { rackImportConfig } from '@/utils/importConfig'
 import Button from '@/components/ui/button.vue'
@@ -421,9 +422,9 @@ async function load() {
     })
     racks.value = data.items || []
     total.value = data.total || 0
-    // 末页被删空则回退到有效页
+    // M-04：末页被删空则回退到有效页（统一 backToValidPage 计算）。
     if (racks.value.length === 0 && page.value > 1 && total.value > 0) {
-      page.value = Math.max(1, totalPages.value)
+      page.value = backToValidPage(page.value, total.value, pageSize.value)
       await load()
     }
   } finally {
