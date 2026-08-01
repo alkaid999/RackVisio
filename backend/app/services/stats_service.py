@@ -10,20 +10,17 @@ import asyncio
 from sqlalchemy import func, select
 from app.core.cache import cache
 from app.core.database import async_session_factory
-from app.core.enums import MountRecordStatus, RoomStatus
+from app.core.enums import RoomStatus
 from app.core.meta import DEVICE_STATUS_META, DEVICE_TYPE_META
-from app.models.consumable import ConsumableType
 from app.models.device import Device
-from app.models.link import DeviceLink
-from app.models.mount_record import MountRecord
 from app.models.rack import Rack
 from app.models.room import Room
-from app.models.user import User
 from app.repositories.device_repo import DeviceRepository
 from app.repositories.rack_repo import RackRepository
 from app.repositories.room_repo import RoomRepository
 from app.repositories.link_repo import LinkRepository
 from app.repositories.user_repo import UserRepository
+from app.repositories.mount_record_repo import MountRecordRepository
 from app.repositories.consumable_repo import (
     ConsumableTypeRepository,
     ConsumableItemRepository,
@@ -95,103 +92,42 @@ class StatsService:
         room_count, rack_count, device_count, facility_count = (int(c or 0) for c in counts)
 
         # —— 并行组：无依赖的分布 / 聚合各自开独立会话执行 ——
+        # A-04：聚合查询下沉到各 Repository 统计方法（不再绕过 repo 裸写 SQL），
+        # 并行时用新会话实例化 repo；P-03 的并行策略保持不变。
         async def _status_dist(s):
             """设备状态分布（GROUP BY status，仅资产）。"""
-            return (
-                await s.execute(
-                    select(Device.status, func.count())
-                    .where(Device.is_asset.is_(True))
-                    .group_by(Device.status)
-                )
-            ).all()
+            return await DeviceRepository(s).count_by_status(is_asset=True)
 
         async def _capacity_and_rooms(s):
             """各机房机柜容量（GROUP BY room_id）+ 机房名映射（一次任务带回）。"""
-            room_name_map = {
-                r.id: r.name
-                for r in (
-                    await s.execute(select(Room.id, Room.name))
-                ).all()
-            }
-            cap = (
-                await s.execute(
-                    select(
-                        Rack.room_id,
-                        func.count(Rack.id),
-                        func.coalesce(func.sum(Rack.total_u), 0),
-                        func.coalesce(func.sum(Rack.used_u), 0),
-                    ).group_by(Rack.room_id)
-                )
-            ).all()
-            return room_name_map, cap
+            return (
+                await RoomRepository(s).id_name_map(),
+                await RackRepository(s).aggregate_capacity(),
+            )
 
         async def _type_dist(s):
             """设备类型分布（GROUP BY device_type，仅资产）。"""
-            return (
-                await s.execute(
-                    select(Device.device_type, func.count())
-                    .where(Device.is_asset.is_(True))
-                    .group_by(Device.device_type)
-                )
-            ).all()
+            return await DeviceRepository(s).count_by_type(is_asset=True)
 
         async def _power(s):
             """功率预算：额定 = Σ 机柜 design_power；已用 = Σ 有效上架设备 rated_power。"""
-            rated = float(
-                (
-                    await s.execute(
-                        select(func.coalesce(func.sum(Rack.design_power), 0))
-                    )
-                ).scalar()
-                or 0
+            return (
+                await RackRepository(s).sum_design_power(),
+                await MountRecordRepository(s).sum_rated_power_active(),
             )
-            used = float(
-                (
-                    await s.execute(
-                        select(func.coalesce(func.sum(Device.rated_power), 0))
-                        .select_from(MountRecord)
-                        .join(Device, Device.id == MountRecord.device_id)
-                        .where(
-                            MountRecord.record_status == MountRecordStatus.ACTIVE.value
-                        )
-                    )
-                ).scalar()
-                or 0
-            )
-            return rated, used
 
         async def _consumables(s):
             """耗材规模（类型 COUNT + 条目 count_all，独立会话）。"""
-            type_count = int(
-                (
-                    await s.execute(
-                        select(func.count()).select_from(ConsumableType)
-                    )
-                ).scalar()
-                or 0
-            )
+            type_count = await ConsumableTypeRepository(s).count()
             item_count, total_quantity = await ConsumableItemRepository(s).count_all()
             return type_count, item_count, total_quantity
 
         async def _links_users(s):
-            """链路 / 账号规模（两个 COUNT，独立会话）。"""
-            link_count = int(
-                (
-                    await s.execute(
-                        select(func.count()).select_from(DeviceLink)
-                    )
-                ).scalar()
-                or 0
+            """链路 / 账号规模（repo count_all，独立会话）。"""
+            return (
+                await LinkRepository(s).count_all(),
+                await UserRepository(s).count_all(),
             )
-            account_count = int(
-                (
-                    await s.execute(
-                        select(func.count()).select_from(User)
-                    )
-                ).scalar()
-                or 0
-            )
-            return link_count, account_count
 
         async def _run(fn):
             async with async_session_factory() as s:

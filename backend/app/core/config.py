@@ -55,6 +55,20 @@ class Settings(BaseSettings):
     # 改由用户在界面手动触发，避免误删）。
     LOG_RETENTION_DAYS: int = 180
 
+    # —— 安全与限流阈值（Q-03：原为各模块硬编码魔法数字，统一收口可 .env 覆盖）——
+    # 登录滑动窗口限流：同一「IP+用户名」在窗口内失败次数超阈值即临时锁定。
+    LOGIN_RATE_WINDOW: int = 300  # 统计窗口（秒）
+    LOGIN_MAX_FAILS: int = 5  # 窗口内最大失败次数
+    # 禁用账号态缓存 TTL（秒）：仅缓存「已禁用」结果，启用态实时查库。
+    USER_DISABLED_CACHE_TTL: int = 60
+    # 慢请求告警阈值（毫秒）：超过则请求日志降为 WARNING。
+    SLOW_REQUEST_MS: int = 1000
+    # 全站通用限流（按 IP 固定窗口）：每分钟上限与窗口秒数。
+    RATE_LIMIT_PER_MIN: int = 600
+    RATE_LIMIT_WINDOW: int = 60
+    # 操作日志请求体抓取上限（字节）：超过不抓 detail（避免超大 payload）。
+    LOG_BODY_SIZE_LIMIT: int = 4096
+
 
 # 全局唯一配置实例（模块级单例）。
 settings = Settings()

@@ -107,9 +107,10 @@ class LinkService:
 
         link = await self.link_repo.create(data)
         # —— 同一事务启用两端：本端恒启用，对端存在则一并启用（对端外部不反查）——
-        src.status = "up"
+        # A-03：接口状态统一经 repo 语义化方法修改（链路事务维护 status）。
+        await self.interface_repo.update_status(src, "up")
         if tgt is not None:
-            tgt.status = "up"
+            await self.interface_repo.update_status(tgt, "up")
         await self.session.commit()
         await self.session.refresh(link)
         return link
@@ -176,12 +177,13 @@ class LinkService:
     async def delete_link(self, link_id: str) -> None:
         link = await self.get_link(link_id)
         # —— 同一事务回滚两端状态：A、B 一起回落 down（半链路只对端内部）——
+        # A-03：接口状态统一经 repo 语义化方法修改。
         src = await self.interface_repo.get(link.source_interface_id)
         if src is not None:
-            src.status = "down"
+            await self.interface_repo.update_status(src, "down")
         if link.target_interface_id:
             tgt = await self.interface_repo.get(link.target_interface_id)
             if tgt is not None:
-                tgt.status = "down"
+                await self.interface_repo.update_status(tgt, "down")
         await self.link_repo.delete(link)
         await self.session.commit()

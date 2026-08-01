@@ -30,14 +30,16 @@ from app.models.device import Device
 from app.models.mount_record import MountRecord
 from app.repositories.device_repo import DeviceRepository
 from app.repositories.interface_repo import InterfaceRepository
-
-logger = logging.getLogger(__name__)
 from app.repositories.mount_record_repo import MountRecordRepository
 from app.repositories.rack_repo import RackRepository
 from app.repositories.room_repo import RoomRepository
 from app.schemas.common import ImportFailure, ImportResult
 from app.schemas.device import DeviceCreate, DeviceImportItem, DeviceOut, DeviceUpdate
 from app.schemas.mount_record import MountRecordUpdate
+from app.services.rack_usage import recalculate_rack_usage as _recalc_rack_usage
+
+# Q-01：logger 定义置于全部 import 之后（PEP8 要求 import 在模块顶部、其他代码之前）。
+logger = logging.getLogger(__name__)
 
 
 def _conflict_message(conflict: dict) -> str:
@@ -161,10 +163,14 @@ class DeviceService:
         return {"conflict": False}
 
     async def recalculate_rack_usage(self, rack_id: str) -> None:
-        """委托 RackService 实现 used_u 重算。"""
-        from app.services.rack_service import RackService
+        """重算机柜 used_u（按有效上架记录 occupied_u 求和）并失效机房缓存。
 
-        await RackService(self.session, self.cache).recalculate_rack_usage(rack_id)
+        A-02：委托共享模块 ``rack_usage``（与 RackService 同源实现），
+        不再方法内懒加载 RackService（原为规避循环依赖，现依赖已解耦）。
+        """
+        await _recalc_rack_usage(
+            self.session, self.mount_repo, self.rack_repo, self.cache, rack_id
+        )
 
     # --------------------------------------------------------------- CRUD
     async def _normalize_and_validate_device(
@@ -499,9 +505,8 @@ class DeviceService:
             device = await self.device_repo.update(device, data)
             # 同步已上架记录的占用 U 数，保证机柜 U 位图 / 占用统计与设备 U 数一致。
             if active is not None:
-                # 防御性下界：占用 U 数恒 ≥1（schema 已约束 ge=1，此处兜底避免脏数据）。
-                active.occupied_u = max(1, data.u_height or 1)
-                await self.session.flush()
+                # A-03：占用 U 数统一经 repo 语义化方法（内部含 ≥1 防御性下界）。
+                await self.mount_repo.update_occupied_u(active, data.u_height or 1)
                 await self.recalculate_rack_usage(active.rack_id)
             await self.session.commit()
             await self.session.refresh(device)

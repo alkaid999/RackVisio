@@ -3,22 +3,22 @@
 - 启动时建表（create_all）并写入默认管理员账号（不写入演示业务数据，生产库初始为空）。
 - 所有 v1 路由挂载在 ``settings.API_PREFIX``（默认 /api/v1）之下。
 - 启用 CORS 便于前端（Vite dev server）跨端口调用。
-- ``AuthMiddleware`` 对除登录/健康检查/文档外的所有 ``/api/v1`` 请求强制鉴权。
+- 中间件自 ``app/core/`` 独立文件引入（A-01 拆分）：
+  ``AuthMiddleware``（鉴权）、``SecurityHeadersMiddleware``（安全头）、
+  ``RequestTimingMiddleware``（计时/慢请求）、``GlobalRateLimitMiddleware``（全局限流）、
+  ``OperationLogMiddleware``（请求级操作日志）。
 """
 
 from __future__ import annotations
 
 import logging
-import time
 import traceback
-import uuid
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
-from starlette.middleware.base import BaseHTTPMiddleware
 
 logger = logging.getLogger("app")
 
@@ -36,116 +36,20 @@ from app.api.v1 import (
     rooms,
     stats,
 )
+from app.core.auth_middleware import AuthMiddleware
 from app.core.cache import cache
 from app.core.config import settings
 from app.core.database import async_session_factory, engine, init_models
 from app.core.log_middleware import OperationLogMiddleware
 from app.core.exceptions import AppError
-from app.core.security import TokenError, is_token_revoked, verify_token
+from app.core.rate_limit import GlobalRateLimitMiddleware
+from app.core.security_headers import SecurityHeadersMiddleware
+from app.core.timing_middleware import RequestTimingMiddleware
 from app.db.init_db import migrate, seed_data
-from app.repositories.user_repo import UserRepository
 from sqlalchemy import text
 
 # 重新导出，便于测试导入。
 __all__ = ["app"]
-
-
-# 禁用账号令牌即时失效：仅缓存「已禁用」结果（禁用态不变化），启用态每次实时查库，
-# 确保管理员禁用账号后令牌立即失效（P1）。
-# R-07：禁用态存共享缓存门面（Redis，多实例一致）而非模块级 dict——
-# 模块级可变字典在多 worker 下各自独立（A worker 禁用、B worker 仍放行），
-# 且「读-判-写」非原子；缓存门面天然线程安全、跨进程共享（Redis 不可达降级内存）。
-_DISABLED_CACHE_TTL = 60.0
-
-
-async def _is_user_disabled(sub: str) -> bool:
-    """查询用户是否已禁用。
-
-    - 已禁用：缓存 60s（禁用态短期不变），避免重复查库；缓存存共享门面，
-      Redis 可用时跨 worker 一致（R-07）。
-    - 启用中：不缓存，每次实时查库，确保禁用操作即时生效。
-    - 查询异常 **fail-close**（视为禁用、拒绝访问）：禁用校验是安全关键判定，
-      DB/缓存抖动时宁可误拒请求，也不能放行已被禁用的账号令牌（fail-open 会削弱
-      「管理员禁用账号即时失效」的语义）。异常结果不缓存，避免瞬时故障被长期缓存。
-    """
-    # 先查共享缓存（严格读取：缓存故障 fail-close，不削弱 S-05 语义）。
-    cached, ok = await cache.get_strict(f"user:disabled:{sub}")
-    if not ok:
-        logger.error("用户禁用态缓存查询失败（保守视为禁用）", exc_info=True)
-        return True
-    if cached:
-        return True
-    try:
-        async with async_session_factory() as session:
-            user = await UserRepository(session).get(sub)
-            disabled = bool(user and user.disabled)
-    except Exception:
-        # 查询异常时 fail-close：保守视为禁用；不缓存，避免瞬时故障被长期缓存。
-        logger.error("用户禁用状态查询失败（保守视为禁用）", exc_info=True)
-        return True
-    if disabled:
-        # 缓存写入为非关键操作：失败静默（下次请求实时查库兜底）。
-        try:
-            await cache.set(f"user:disabled:{sub}", 1, ttl=_DISABLED_CACHE_TTL)
-        except Exception:
-            logger.warning("用户禁用态缓存写入失败（已忽略）", exc_info=True)
-    return disabled
-
-
-class AuthMiddleware(BaseHTTPMiddleware):
-    """统一鉴权中间件：校验 ``Authorization: Bearer <token>``，写入 ``request.state.user``。
-
-    放行清单（无需 token）：
-    - ``OPTIONS`` 预检（CORS）
-    - ``/health``、``/docs``、``/redoc``、``/openapi.json``
-    - ``/api/v1/auth/login``（登录签发令牌本身）
-    - ``/api/v1/auth/default-credentials-active``（登录页公开探针：默认管理员是否仍用初始密码）
-    其余 ``/api/v1`` 请求必须携带有效令牌，否则返回 401 信封。
-    """
-
-    _PUBLIC_PREFIXES = ("/health", "/docs", "/redoc", "/openapi.json")
-    _PUBLIC_AUTH_PATHS = (
-        f"{settings.API_PREFIX}/auth/login",
-        f"{settings.API_PREFIX}/auth/default-credentials-active",
-    )
-
-    async def dispatch(self, request: Request, call_next):
-        path = request.url.path
-        if request.method == "OPTIONS":
-            return await call_next(request)
-        if path in self._PUBLIC_PREFIXES or path in self._PUBLIC_AUTH_PATHS:
-            return await call_next(request)
-
-        if path.startswith(settings.API_PREFIX):
-            auth_header = request.headers.get("Authorization", "")
-            token = auth_header[7:] if auth_header.startswith("Bearer ") else ""
-            if not token:
-                return JSONResponse(
-                    status_code=401,
-                    content={"code": 401, "message": "未登录或登录已过期", "data": None},
-                )
-            try:
-                payload = verify_token(token)
-            except TokenError as exc:
-                return JSONResponse(
-                    status_code=401,
-                    content={"code": 401, "message": str(exc) or "登录已过期", "data": None},
-                )
-            # 注销吊销（黑名单）：已主动 logout 的令牌即时失效。
-            if await is_token_revoked(payload):
-                return JSONResponse(
-                    status_code=401,
-                    content={"code": 401, "message": "令牌已注销，请重新登录", "data": None},
-                )
-            # 禁用账号令牌即时失效（P1：原先仅靠登录拦截，已签发令牌仍可用）。
-            if await _is_user_disabled(payload.get("sub")):
-                return JSONResponse(
-                    status_code=401,
-                    content={"code": 401, "message": "账号已被禁用", "data": None},
-                )
-            request.state.user = payload
-
-        return await call_next(request)
 
 
 @asynccontextmanager
@@ -191,81 +95,6 @@ app = FastAPI(
 )
 
 
-class SecurityHeadersMiddleware(BaseHTTPMiddleware):
-    """统一注入安全响应头（CSP / X-Frame-Options / nosniff 等）。
-
-    说明：script-src 保留 'unsafe-inline' 以兼容 Vite 开发期注入脚本；
-    真正的 XSS 风险已在各视图层通过转义彻底消除（见 Room3DView/Rack3DView）。
-
-    对 FastAPI 自带的 API 文档路由（/docs、/redoc、/openapi.json）针对性放宽 CSP，
-    放行其从 jsdelivr CDN 加载 Swagger UI / ReDoc 的脚本与样式，避免文档页白屏；
-    其余业务接口仍使用严格 CSP。
-    """
-
-    # 业务接口（JSON）响应本就不含内联脚本/样式；移除 'unsafe-inline' 收紧 XSS 防护面。
-    # 注意：API 文档路由（/docs、/redoc）依赖 CDN 内联资源，仍由 _CSP_DOCS 单独放宽。
-    _CSP = (
-        "default-src 'self'; "
-        "img-src 'self' data: blob:; "
-        "font-src 'self'; "
-        "style-src 'self'; "
-        "script-src 'self'; "
-        "frame-ancestors 'none'"
-    )
-
-    # API 文档路由依赖公网 CDN（cdn.jsdelivr.net）的脚本与样式，
-    # 严格 CSP 会拦截其跨域脚本执行导致页面白屏，故仅对此类路径放宽。
-    _CSP_DOCS = (
-        "default-src 'self'; "
-        "img-src 'self' data: blob:; "
-        "font-src 'self' https://cdn.jsdelivr.net; "
-        "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
-        "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
-        "frame-ancestors 'none'"
-    )
-
-    _DOCS_PATHS = {"/docs", "/redoc", "/openapi.json"}
-
-    async def dispatch(self, request: Request, call_next):
-        response = await call_next(request)
-        response.headers.setdefault("X-Content-Type-Options", "nosniff")
-        response.headers.setdefault("X-Frame-Options", "DENY")
-        response.headers.setdefault("Referrer-Policy", "no-referrer")
-        response.headers.setdefault(
-            "Permissions-Policy", "geolocation=(), microphone=(), camera=()"
-        )
-        csp = self._CSP_DOCS if request.url.path in self._DOCS_PATHS else self._CSP
-        response.headers.setdefault("Content-Security-Policy", csp)
-        return response
-
-
-class RequestTimingMiddleware(BaseHTTPMiddleware):
-    """请求计时与慢请求日志：记录 method/path/status/duration_ms/request_id。
-
-    - 正常请求 INFO 级单行日志；超过阈值（默认 1000ms）降为 WARNING 便于告警。
-    - 注入 ``X-Request-ID`` 响应头，便于链路追踪与日志关联。
-    """
-
-    _SLOW_MS = 1000.0
-
-    async def dispatch(self, request: Request, call_next):
-        request_id = uuid.uuid4().hex[:12]
-        start = time.perf_counter()
-        response = await call_next(request)
-        duration_ms = (time.perf_counter() - start) * 1000
-        response.headers["X-Request-ID"] = request_id
-        log_method = logger.warning if duration_ms > self._SLOW_MS else logger.info
-        log_method(
-            "request %s %s -> %d (%.1fms, rid=%s)",
-            request.method,
-            request.url.path,
-            response.status_code,
-            duration_ms,
-            request_id,
-        )
-        return response
-
-
 # 允许的前端跨域源（显式白名单，禁止 "*" + allow_credentials 的危险组合）。
 _cors_origins = [o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()]
 # 中间件执行顺序（外层→内层）= 注册顺序的反序。将 CORS 注册为最后一项使其处于最外层，
@@ -285,51 +114,6 @@ app.add_middleware(
 # 计时中间件注册为最后一项 → 处于最外层，包裹完整中间件链（含 CORS/鉴权），
 # 度量端到端耗时并注入 X-Request-ID。
 app.add_middleware(RequestTimingMiddleware)
-
-class GlobalRateLimitMiddleware(BaseHTTPMiddleware):
-    """全站通用限流（按客户端 IP 固定窗口）：防接口被恶意刷量 / 爬取。
-
-    - 以「当前分钟 + IP」为桶，每分钟上限 ``_MAX_PER_MIN``；超出返回 429 信封。
-    - 豁免健康检查 / 文档 / 登录（避免锁定合法登录入口）。
-    - 限流状态存于共享缓存（Redis），多实例一致；缓存写入/读取异常 fail-open，
-      绝不因限流组件故障阻塞正常业务。
-    """
-
-    _MAX_PER_MIN = 600
-    _WINDOW = 60
-
-    _EXEMPT_PATHS = (
-        "/health",
-        "/docs",
-        "/redoc",
-        "/openapi.json",
-        f"{settings.API_PREFIX}/auth/login",
-        f"{settings.API_PREFIX}/auth/default-credentials-active",
-    )
-
-    async def dispatch(self, request: Request, call_next):
-        path = request.url.path
-        if request.method == "OPTIONS" or path in self._EXEMPT_PATHS:
-            return await call_next(request)
-        host = request.client.host if request.client else "unknown"
-        minute = int(time.time() // self._WINDOW)
-        key = f"ratelimit:global:{host}:{minute}"
-        try:
-            count = await cache.get(key) or 0
-            if isinstance(count, list):  # 防御：历史脏数据非 int 时重置
-                count = 0
-            if count >= self._MAX_PER_MIN:
-                return JSONResponse(
-                    status_code=429,
-                    content={"code": 429, "message": "请求过于频繁，请稍后再试", "data": None},
-                )
-            await cache.set(key, count + 1, ttl=self._WINDOW)
-        except Exception:
-            # 限流组件异常 fail-open：不阻塞业务。
-            pass
-        return await call_next(request)
-
-
 # 全站限流置于计时之内、业务路由之前，异常 fail-open，多实例经 Redis 共享计数。
 app.add_middleware(GlobalRateLimitMiddleware)
 

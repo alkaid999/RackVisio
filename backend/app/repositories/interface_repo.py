@@ -155,6 +155,18 @@ class InterfaceRepository:
         await self.session.flush()
         return iface
 
+    async def update_status(
+        self, iface: DeviceInterface, status: str
+    ) -> DeviceInterface:
+        """语义化更新接口链路状态（up/down）。
+
+        A-03：接口状态由链路事务（建链/断链）维护，统一经 repo 方法修改，
+        不再由 Service 直接改 ORM 属性，保证数据修改入口收敛、可审计可测试。
+        """
+        iface.status = status
+        await self.session.flush()
+        return iface
+
     async def delete(self, iface: DeviceInterface) -> None:
         """删除接口：先解除引用该接口（作为源或目标）的链路，再删除接口。"""
         link_stmt = delete(DeviceLink).where(

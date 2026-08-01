@@ -186,3 +186,35 @@ class RackRepository:
         """物理删除指定机房下全部机柜（删除机房前清理，避免孤儿数据）。"""
         await self.session.execute(delete(Rack).where(Rack.room_id == room_id))
         await self.session.flush()
+
+    # ------------------------------------------------------------ 统计聚合（A-04）
+    async def count_all(self) -> int:
+        """机柜总数。"""
+        return (
+            await self.session.execute(select(func.count()).select_from(Rack))
+        ).scalar() or 0
+
+    async def aggregate_capacity(self) -> list[tuple]:
+        """按机房分组聚合机柜容量：room_id, 机柜数, Σtotal_u, Σused_u（统计概览用）。"""
+        rows = (
+            await self.session.execute(
+                select(
+                    Rack.room_id,
+                    func.count(Rack.id),
+                    func.coalesce(func.sum(Rack.total_u), 0),
+                    func.coalesce(func.sum(Rack.used_u), 0),
+                ).group_by(Rack.room_id)
+            )
+        ).all()
+        return [(r_id, rc, total_u, used_u) for r_id, rc, total_u, used_u in rows]
+
+    async def sum_design_power(self) -> float:
+        """Σ 机柜额定功率（design_power，W）；无数据返回 0.0。"""
+        return float(
+            (
+                await self.session.execute(
+                    select(func.coalesce(func.sum(Rack.design_power), 0))
+                )
+            ).scalar()
+            or 0
+        )

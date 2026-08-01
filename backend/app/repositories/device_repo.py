@@ -167,6 +167,51 @@ class DeviceRepository:
         await self.session.flush()
         return device
 
+    async def update_status(self, device: Device, status: str) -> Device:
+        """语义化更新设备生命周期状态（A-03：上架/下架事务统一经 repo 修改）。"""
+        device.status = status
+        await self.session.flush()
+        return device
+
+    # ------------------------------------------------------------ 统计聚合（A-04）
+    async def count_by_status(self, *, is_asset: bool = True) -> list[tuple[str, int]]:
+        """按设备状态分组计数（统计概览用，DB 端聚合，设施默认不计入资产统计）。"""
+        rows = (
+            await self.session.execute(
+                select(Device.status, func.count())
+                .where(Device.is_asset.is_(is_asset))
+                .group_by(Device.status)
+            )
+        ).all()
+        return [(s, c) for s, c in rows]
+
+    async def count_by_type(self, *, is_asset: bool = True) -> list[tuple[str, int]]:
+        """按设备类型分组计数（统计概览用，DB 端聚合）。"""
+        rows = (
+            await self.session.execute(
+                select(Device.device_type, func.count())
+                .where(Device.is_asset.is_(is_asset))
+                .group_by(Device.device_type)
+            )
+        ).all()
+        return [(t, c) for t, c in rows]
+
+    async def count_assets(self) -> int:
+        """资产设备数（is_asset=True）。"""
+        return (
+            await self.session.execute(
+                select(func.count()).select_from(Device).where(Device.is_asset.is_(True))
+            )
+        ).scalar() or 0
+
+    async def count_facilities(self) -> int:
+        """设施（非资产）数（is_asset=False）。"""
+        return (
+            await self.session.execute(
+                select(func.count()).select_from(Device).where(Device.is_asset.is_(False))
+            )
+        ).scalar() or 0
+
     async def delete_device(self, device_id: str) -> None:
         """删除设备：先清理引用其端口的链路，再级联删除端口与设备。"""
         device = await self.get(device_id)

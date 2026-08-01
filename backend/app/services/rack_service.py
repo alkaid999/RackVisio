@@ -11,8 +11,6 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
-logger = logging.getLogger(__name__)
-
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -39,6 +37,13 @@ from app.schemas.rack import (
     RackUpdate,
 )
 from app.services.device_service import DeviceService
+from app.services.rack_usage import (
+    invalidate_room_caches as _invalidate_room_caches,
+    recalculate_rack_usage as _recalc_rack_usage,
+)
+
+# Q-02：logger 定义置于全部 import 之后（PEP8 要求 import 在模块顶部）。
+logger = logging.getLogger(__name__)
 
 
 def _build_grid_allocator(existing: list[Rack]):
@@ -96,12 +101,26 @@ def _normalize_rack_status(val: Optional[str]) -> RackBizStatus:
 class RackService:
     """机柜相关业务逻辑：CRUD / U 位重算 / 设备上架下架 / 候选设备。"""
 
-    def __init__(self, session: AsyncSession, cache: Optional[Cache] = None) -> None:
+    def __init__(
+        self,
+        session: AsyncSession,
+        cache: Optional[Cache] = None,
+        # A-05：DeviceService 构造注入（默认 None 时内部懒建），
+        # 测试可注入 mock；解除「方法内临时实例化」的紧耦合。
+        device_service: Optional[DeviceService] = None,
+    ) -> None:
         self.session = session
         self.cache = cache or Cache()
         self.rack_repo = RackRepository(session)
         self.device_repo = DeviceRepository(session)
         self.mount_repo = MountRecordRepository(session)
+        self._device_service = device_service
+
+    def _get_device_service(self) -> DeviceService:
+        """取注入的 DeviceService；未注入时懒建（同一 session，避免临时实例）。"""
+        if self._device_service is None:
+            self._device_service = DeviceService(self.session, self.cache)
+        return self._device_service
 
     # ------------------------------------------------------------------ CRUD
     async def create_rack(self, data: RackCreate) -> Rack:
@@ -478,20 +497,14 @@ class RackService:
 
     # ----------------------------------------------------- 容量重算（仅 used_u）
     async def recalculate_rack_usage(self, rack_id: str) -> None:
-        """重算机柜 used_u（按有效上架记录 occupied_u 求和）。"""
-        rack = await self.rack_repo.get(rack_id)
-        if rack is None:
-            return
-        total_used = await self.mount_repo.sum_occupied_u_in_rack(rack_id)
-        rack.used_u = total_used
-        await self.session.flush()
-        await self.session.commit()
-        # 缓存失效为非关键操作：Redis 临时不可用时静默忽略，
-        # 避免「事务已提交 + 缓存失效抛异常」导致接口 500 且审计漏记。
-        try:
-            await self._invalidate_room_cache(rack.room_id)
-        except Exception:
-            logger.warning("机柜缓存失效失败（已忽略）", exc_info=True)
+        """重算机柜 used_u（按有效上架记录 occupied_u 求和）。
+
+        A-02：委托共享模块 ``rack_usage``（与 DeviceService 同源实现，消除
+        device_service 为规避循环依赖而做的懒加载 import）。
+        """
+        await _recalc_rack_usage(
+            self.session, self.mount_repo, self.rack_repo, self.cache, rack_id
+        )
 
     # ------------------------------------------------------------ 设备上架 / 下架
     async def mount_device(
@@ -521,7 +534,8 @@ class RackService:
             raise ConflictError("设备已在机柜中上架，请先下架再重新上架")
         size_u = device.u_height or 1
         # U 位冲突校验（排除设备自身，允许在同一机柜内重新摆放）。
-        conflict = await DeviceService(self.session, self.cache).check_u_conflict(
+        # A-05：经注入的 DeviceService（懒建一次），不再方法内临时实例化。
+        conflict = await self._get_device_service().check_u_conflict(
             rack_id, start_u, size_u, exclude_device_id=device.id
         )
         if conflict.get("conflict"):
@@ -538,7 +552,8 @@ class RackService:
             occupied_u=size_u,
             mounted_by=mounted_by,
         )
-        device.status = DeviceStatus.MOUNTED.value  # 上架 → 已上架
+        # A-03：设备状态变更统一经 repo 语义化方法（上架 → 已上架）。
+        await self.device_repo.update_status(device, DeviceStatus.MOUNTED.value)
         await self.session.flush()
         await self.recalculate_rack_usage(rack.id)
         return {
@@ -581,7 +596,8 @@ class RackService:
         await self.mount_repo.set_unmounted(
             active, unmounted_at=utcnow(), unmounted_by=unmounted_by
         )
-        device.status = DeviceStatus.IN_STOCK.value  # 下架 → 退回在库（资产池）
+        # A-03：设备状态变更统一经 repo 语义化方法（下架 → 退回在库资产池）。
+        await self.device_repo.update_status(device, DeviceStatus.IN_STOCK.value)
         await self.session.flush()
         await self.recalculate_rack_usage(rack.id)
         return {
@@ -604,9 +620,7 @@ class RackService:
         除原有 ``room_stats:`` / ``dashboard:`` / ``racks:layout:`` 外，机柜增删改、
         2D 拖拽、上架/下架也会改变「机柜管理列表（racks:list:）」与「设备列表
         （devices:list:，上架下架改设备状态）」，故一并失效，避免列表脏读。
+        A-02：实现委托共享模块 ``rack_usage.invalidate_room_caches``（与
+        DeviceService 侧同一前缀源，避免两处各自维护漂移）。
         """
-        await self.cache.delete_prefix(f"room_stats:{room_id}")
-        await self.cache.delete_prefix(f"dashboard:{room_id}")
-        await self.cache.delete_prefix(f"racks:layout:{room_id}")
-        await self.cache.delete_prefix("racks:list:")
-        await self.cache.delete_prefix("devices:list:")
+        await _invalidate_room_caches(self.cache, room_id)

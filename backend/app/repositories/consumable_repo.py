@@ -112,6 +112,14 @@ class ConsumableTypeRepository:
         ).all()
         return {t: c for t, c in rows}
 
+    async def count(self) -> int:
+        """耗材类型总数（统计概览用，A-04 下沉 repo）。"""
+        return (
+            await self.session.execute(
+                select(func.count()).select_from(ConsumableType)
+            )
+        ).scalar() or 0
+
 
 # ============ 分类 ============
 class ConsumableCategoryRepository:

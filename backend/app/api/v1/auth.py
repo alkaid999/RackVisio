@@ -41,8 +41,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 # 滑动窗口：同一「IP + 用户名」在窗口内失败次数超阈值即临时锁定。
 # 限流状态迁至 Redis 共享缓存（多实例一致）；无 Redis 时降级为进程内字典。
 # 限流状态查询失败时 **fail-close**（保守视为已达阈值），绝不放开暴力破解防护。
-_LOGIN_WINDOW = 300  # 统计窗口（秒）
-_LOGIN_MAX_FAILS = 5  # 窗口内最大失败次数
+# Q-03：窗口/阈值收敛到 Settings（LOGIN_RATE_WINDOW / LOGIN_MAX_FAILS，可 .env 覆盖）。
 
 from app.core.cache import cache  # noqa: E402
 
@@ -58,18 +57,24 @@ async def _login_failures_get(key: str) -> list[float]:
     value, ok = await cache.get_strict(f"ratelimit:login:{key}")
     if not ok:
         logger.error("登录限流状态查询失败（保守触发限流）", exc_info=True)
-        return [time.time()] * _LOGIN_MAX_FAILS
+        return [time.time()] * settings.LOGIN_MAX_FAILS
     return value if isinstance(value, list) else []
 
 
 async def _login_allowed(key: str) -> bool:
     now = time.time()
-    tries = [t for t in await _login_failures_get(key) if now - t < _LOGIN_WINDOW]
-    return len(tries) < _LOGIN_MAX_FAILS
+    tries = [
+        t for t in await _login_failures_get(key)
+        if now - t < settings.LOGIN_RATE_WINDOW
+    ]
+    return len(tries) < settings.LOGIN_MAX_FAILS
 
 
 async def _record_login_failure(key: str) -> None:
-    tries = [t for t in await _login_failures_get(key) if time.time() - t < _LOGIN_WINDOW]
+    tries = [
+        t for t in await _login_failures_get(key)
+        if time.time() - t < settings.LOGIN_RATE_WINDOW
+    ]
     tries.append(time.time())
     try:
         await cache.set(f"ratelimit:login:{key}", tries, ttl=_LOGIN_WINDOW)

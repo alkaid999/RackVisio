@@ -8,6 +8,7 @@ from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.room import Room
+from app.core.enums import RoomStatus
 from app.schemas.room import RoomCreate, RoomUpdate
 
 
@@ -103,6 +104,21 @@ class RoomRepository:
         stmt = select(Room).order_by(Room.created_at.desc())
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
+
+    async def id_name_map(self) -> dict[str, str]:
+        """机房 id → name 映射（统计概览容量分组展示用，只查两列）。"""
+        rows = (await self.session.execute(select(Room.id, Room.name))).all()
+        return {rid: name for rid, name in rows}
+
+    async def count_active(self) -> int:
+        """启用（active）机房数。"""
+        return (
+            await self.session.execute(
+                select(func.count())
+                .select_from(Room)
+                .where(Room.status == RoomStatus.ACTIVE.value)
+            )
+        ).scalar() or 0
 
     async def delete(self, room: Room) -> None:
         """物理删除机房（连同其机柜、上架记录由调用方先清理）。"""

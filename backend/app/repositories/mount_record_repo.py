@@ -103,6 +103,16 @@ class MountRecordRepository:
         )
         return int((await self.session.execute(stmt)).scalar() or 0)
 
+    async def sum_rated_power_active(self) -> float:
+        """Σ 当前有效上架设备的额定功率（rated_power，W）；统计概览功率预算用。"""
+        stmt = (
+            select(func.coalesce(func.sum(Device.rated_power), 0))
+            .select_from(MountRecord)
+            .join(Device, Device.id == MountRecord.device_id)
+            .where(MountRecord.record_status == MountRecordStatus.ACTIVE.value)
+        )
+        return float((await self.session.execute(stmt)).scalar() or 0)
+
     async def list_unmounted_devices(self) -> list[Device]:
         """候选上架设备：无有效上架记录的设备（仓库/已下架/待报废候选池）。"""
         subq = select(MountRecord.device_id).where(
@@ -187,6 +197,12 @@ class MountRecordRepository:
         for field, value in data.model_dump(exclude_unset=True).items():
             if value is not None:
                 setattr(record, field, value)
+        await self.session.flush()
+        return record
+
+    async def update_occupied_u(self, record: MountRecord, occupied_u: int) -> MountRecord:
+        """语义化更新占用 U 数（A-03：设备 U 数变更时同步上架记录，统一经 repo 修改）。"""
+        record.occupied_u = max(1, occupied_u)
         await self.session.flush()
         return record
 
