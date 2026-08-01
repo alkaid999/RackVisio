@@ -167,20 +167,31 @@ class DeviceService:
         await RackService(self.session, self.cache).recalculate_rack_usage(rack_id)
 
     # --------------------------------------------------------------- CRUD
-    async def create_device(self, data: DeviceCreate) -> DeviceOut:
-        # 设备编号留空时自动生成全局唯一编号。
+    async def _normalize_and_validate_device(
+        self, data: DeviceCreate, *, seen_codes: Optional[set[str]] = None
+    ) -> DeviceCreate:
+        """设备创建 / 导入共用的归一化与校验（R-06：消除 create_device 与导入的重复）。
+
+        - 设备编号留空自动生成全局唯一编号（碰撞重试；导入批内经 ``seen_codes`` 去重）。
+        - 设施（patch/odf/other_facility）强制 ``is_asset=False``。
+        - IP / 带外管理 IP：空串归 None、CIDR 校验、跨表唯一校验；SN 空串归 None。
+        - 三字段唯一性（SN / 业务IP / 带外管理IP）统一校验。
+        """
         if not data.device_code:
             data.device_code = _gen_device_code()
-        # 确保编号唯一（极小概率碰撞则重试）。
-        while await self.device_repo.get_by_code(data.device_code) is not None:
+        # 编号唯一：批内已用集合 + 库内已存在，均重试。
+        while data.device_code in (seen_codes or set()) or await self.device_repo.get_by_code(
+            data.device_code
+        ) is not None:
             data.device_code = _gen_device_code()
-        # 设施（patch/odf/other_facility）强制 is_asset=False：占 U 位但不进资产统计、
-        # 不建接口、不显设备编码。前端若误传 True 也以 False 为准。
+        if seen_codes is not None:
+            seen_codes.add(data.device_code)
+        # 设施强制非资产：占 U 位但不进资产统计、不建接口、不显设备编码。
         if data.device_type.value in FACILITY_TYPES:
             data = data.model_copy(update={"is_asset": False})
         # 归一化 IP：空串视为未设置 → None。否则空串 '' 会被 uq_device_ip 部分唯一索引
         # （WHERE ip_address IS NOT NULL）当作有效值强制唯一，导致第二个不填 IP 的设备
-        # 触发 UNIQUE 冲突。同时把 repo 写操作纳入 try，避免 flush 抛 IntegrityError 冒泡成 500。
+        # 触发 UNIQUE 冲突。
         raw_ip = (data.ip_address or "").strip()
         if raw_ip:
             assert_ip_cidr(raw_ip)
@@ -207,6 +218,10 @@ class DeviceService:
             oob_ip=raw_oob or None,
             device_id=None,
         )
+        return data
+
+    async def create_device(self, data: DeviceCreate) -> DeviceOut:
+        data = await self._normalize_and_validate_device(data)
         try:
             device = await self.device_repo.create(data)
             await self.session.commit()
@@ -222,43 +237,11 @@ class DeviceService:
     ) -> DeviceCreate:
         """导入设备落库准备：编号自动生成 / 设施强制非资产 / IP 归一化与唯一校验。
 
-        与 ``create_device`` 核心逻辑一致，但返回准备就绪的 ``DeviceCreate``，
+        与 ``create_device`` 共用 ``_normalize_and_validate_device``（R-06），
+        区别仅在于：编号批内去重（seen_codes）、返回准备就绪的 ``DeviceCreate``
         由调用方在 ``begin_nested`` 保存点内提交，实现逐行隔离。
         """
-        if not data.device_code:
-            data.device_code = _gen_device_code()
-        while data.device_code in seen_codes or await self.device_repo.get_by_code(
-            data.device_code
-        ) is not None:
-            data.device_code = _gen_device_code()
-        seen_codes.add(data.device_code)
-        if data.device_type.value in FACILITY_TYPES:
-            data = data.model_copy(update={"is_asset": False})
-        raw_ip = (data.ip_address or "").strip()
-        if raw_ip:
-            assert_ip_cidr(raw_ip)
-            await assert_ip_unique(self.device_repo, self.interface_repo, raw_ip)
-            data = data.model_copy(update={"ip_address": raw_ip})
-        else:
-            data = data.model_copy(update={"ip_address": None})
-        raw_oob = (data.oob_ip or "").strip()
-        if raw_oob:
-            assert_ip_cidr(raw_oob)
-            data = data.model_copy(update={"oob_ip": raw_oob})
-        else:
-            data = data.model_copy(update={"oob_ip": None})
-        raw_sn = (data.sn or "").strip()
-        data = data.model_copy(update={"sn": raw_sn or None})
-        # 三字段唯一性（SN / 业务IP / 带外管理IP）+ 跨字段放行规则统一校验。
-        await assert_device_fields_unique(
-            self.device_repo,
-            self.interface_repo,
-            sn=raw_sn or None,
-            ip_address=raw_ip or None,
-            oob_ip=raw_oob or None,
-            device_id=None,
-        )
-        return data
+        return await self._normalize_and_validate_device(data, seen_codes=seen_codes)
 
     async def import_devices(self, items: list[dict]) -> ImportResult:
         """批量导入设备：逐行 ``begin_nested`` 保存点隔离，单条失败不影响其余。

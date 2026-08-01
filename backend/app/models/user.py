@@ -12,11 +12,12 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 
-from sqlalchemy import JSON, Boolean, CHAR, DateTime, String, func
+from sqlalchemy import JSON, Boolean, CHAR, DateTime, String
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.core.database import Base
+from app.core.database import Base, utcnow
 
 
 class User(Base):
@@ -49,6 +50,7 @@ class User(Base):
     must_change_password: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False
     )
-    created_at: Mapped[str] = mapped_column(
-        String(32), nullable=False, server_default=func.now()
-    )
+    # 创建时间（R-01：对齐 login_logs/operation_logs 的 DateTime 类型，naive UTC）。
+    # 历史库由 0013 迁移统一：PostgreSQL ALTER TYPE 转换存量文本；SQLite 的
+    # DATETIME 列本就以 ISO 文本存储，SQLAlchemy 可直接解析，无需 DDL。
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)

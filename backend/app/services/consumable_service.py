@@ -172,7 +172,9 @@ class ConsumableService:
         self, item_id: str, payload: StockAdjustRequest, operator: Optional[str] = None
     ) -> ConsumableItemOut:
         obj = await self._require_item(item_id)
-        op = payload.operation_type
+        # R-08：operation_type 已由 schema 枚举校验（ConsumableOpType），
+        # 此处取 .value 参与业务比较；_OP_VALUES 检查保留为防御冗余。
+        op = payload.operation_type.value
         if op not in _OP_VALUES:
             raise ValidationError(
                 f"非法的操作类型：{op}（应为 入库 / 领用 / 报废 / 盘点）"

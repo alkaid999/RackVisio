@@ -47,7 +47,13 @@ class LogCleanupIn(BaseModel):
     """手动触发日志清理的可选入参。
 
     - ``days``：保留天数覆盖；省略时回退到配置 ``LOG_RETENTION_DAYS``。
-    - 仅接受 ``days >= 1``，避免误传 0 / 负数把全量日志清空。
+    - 仅接受 ``1 <= days <= 3650``：下界避免 0 / 负数清空全量日志（防呆），
+      上界避免误传超大值把保留期压到「几乎全删」（R-04 双向约束）。
     """
 
-    days: int | None = Field(default=None, ge=1, description="保留天数覆盖；省略则用 LOG_RETENTION_DAYS")
+    days: int | None = Field(
+        default=None,
+        ge=1,
+        le=3650,
+        description="保留天数覆盖（1~3650）；省略则用 LOG_RETENTION_DAYS",
+    )

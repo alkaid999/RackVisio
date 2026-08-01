@@ -52,22 +52,29 @@ __all__ = ["app"]
 
 # 禁用账号令牌即时失效：仅缓存「已禁用」结果（禁用态不变化），启用态每次实时查库，
 # 确保管理员禁用账号后令牌立即失效（P1）。
-_user_disabled_cache: dict[str, tuple[float, bool]] = {}
+# R-07：禁用态存共享缓存门面（Redis，多实例一致）而非模块级 dict——
+# 模块级可变字典在多 worker 下各自独立（A worker 禁用、B worker 仍放行），
+# 且「读-判-写」非原子；缓存门面天然线程安全、跨进程共享（Redis 不可达降级内存）。
 _DISABLED_CACHE_TTL = 60.0
 
 
 async def _is_user_disabled(sub: str) -> bool:
     """查询用户是否已禁用。
 
-    - 已禁用：缓存 60s（禁用态短期不变），避免重复查库。
+    - 已禁用：缓存 60s（禁用态短期不变），避免重复查库；缓存存共享门面，
+      Redis 可用时跨 worker 一致（R-07）。
     - 启用中：不缓存，每次实时查库，确保禁用操作即时生效。
     - 查询异常 **fail-close**（视为禁用、拒绝访问）：禁用校验是安全关键判定，
-      DB 抖动时宁可误拒请求，也不能放行已被禁用的账号令牌（fail-open 会削弱
+      DB/缓存抖动时宁可误拒请求，也不能放行已被禁用的账号令牌（fail-open 会削弱
       「管理员禁用账号即时失效」的语义）。异常结果不缓存，避免瞬时故障被长期缓存。
     """
-    cached = _user_disabled_cache.get(sub)
-    if cached and cached[0] > time.time():
-        return cached[1]
+    # 先查共享缓存（严格读取：缓存故障 fail-close，不削弱 S-05 语义）。
+    cached, ok = await cache.get_strict(f"user:disabled:{sub}")
+    if not ok:
+        logger.error("用户禁用态缓存查询失败（保守视为禁用）", exc_info=True)
+        return True
+    if cached:
+        return True
     try:
         async with async_session_factory() as session:
             user = await UserRepository(session).get(sub)
@@ -77,7 +84,11 @@ async def _is_user_disabled(sub: str) -> bool:
         logger.error("用户禁用状态查询失败（保守视为禁用）", exc_info=True)
         return True
     if disabled:
-        _user_disabled_cache[sub] = (time.time() + _DISABLED_CACHE_TTL, True)
+        # 缓存写入为非关键操作：失败静默（下次请求实时查库兜底）。
+        try:
+            await cache.set(f"user:disabled:{sub}", 1, ttl=_DISABLED_CACHE_TTL)
+        except Exception:
+            logger.warning("用户禁用态缓存写入失败（已忽略）", exc_info=True)
     return disabled
 
 

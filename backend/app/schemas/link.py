@@ -36,7 +36,14 @@ class LinkCreate(BaseModel):
 
 
 class LinkUpdate(BaseModel):
-    """更新链路请求（全部可选）。"""
+    """更新链路请求（全部可选）。
+
+    设计决策（R-09）：**不支持修改链路两端端点**（source/target 接口不可变）。
+    链路的物理连接关系一旦变更，语义上应视为「旧链路断开 + 新链路建立」——
+    两端接口的链路状态（up/down）需要同步回落与重建，直接改端点极易产生
+    状态不一致（如旧对端接口仍显示已连接）。因此编辑链路仅允许修改属性
+    （备注 / 介质 / 连接器 / 线缆长度）；如需更改连接关系，请先断开再新建。
+    """
 
     remark: Optional[str] = None
     medium: Optional[LinkMedium] = None

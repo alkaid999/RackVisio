@@ -89,9 +89,12 @@ class RoomRepository:
         return list(items), total
 
     async def update(self, room: Room, data: RoomUpdate) -> Room:
+        # exclude_unset=True：仅更新请求体中显式提供的字段（未提供的保持不变）。
+        # 必须无条件 setattr——前端清空可选字段（alias/area/building/floor/address）
+        # 时显式传 null，若此处 `if value is not None` 跳过，清空操作无法持久化
+        # （R-03：`is not None` 守卫会把「显式设 None」误当「未提供」）。
         for field, value in data.model_dump(exclude_unset=True).items():
-            if value is not None:
-                setattr(room, field, value)
+            setattr(room, field, value)
         await self.session.flush()
         return room
 

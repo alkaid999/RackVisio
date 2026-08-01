@@ -577,6 +577,36 @@ async def _migrate_user_must_change_password(session: AsyncSession) -> None:
     await session.flush()
 
 
+async def _migrate_user_created_at_datetime(session: AsyncSession) -> None:
+    """users.created_at 类型统一（0013，R-01）：String → DateTime。
+
+    对齐 login_logs / operation_logs 的 DateTime（naive UTC）语义：
+    - PostgreSQL：``ALTER COLUMN TYPE TIMESTAMP USING created_at::timestamp``
+      转换存量文本（列已是时间类型时跳过，幂等）。
+    - SQLite：无 DDL 需要——SQLite 的 DATETIME 列本就以 ISO 文本存储，
+      SQLAlchemy 的 DateTime 处理器可直接解析存量 "YYYY-MM-DD HH:MM:SS" 文本。
+    """
+    conn = await session.connection()
+    if conn.dialect.name != "postgresql":
+        return  # SQLite 直接跳过（模型列声明已改为 DateTime，读取自动解析）
+
+    def _col_type(sync_conn):
+        cols = {c["name"]: c["type"] for c in inspect(sync_conn).get_columns("users")}
+        return cols.get("created_at")
+
+    current = await conn.run_sync(_col_type)
+    type_name = getattr(current, "name", None) or str(current).upper()
+    if type_name in ("TIMESTAMP", "DATETIME"):
+        return  # 已是时间类型，跳过（幂等）
+    await session.execute(
+        text(
+            "ALTER TABLE users ALTER COLUMN created_at TYPE TIMESTAMP "
+            "USING created_at::timestamp"
+        )
+    )
+    await session.flush()
+
+
 async def seed_data(session: AsyncSession) -> None:
     """初始化种子数据（幂等）。
 
@@ -678,4 +708,5 @@ MIGRATIONS: list = [
     ("0010_op_log_resource", _migrate_operation_log_resource),
     ("0011_op_log_action_target", _migrate_operation_log_action_target),
     ("0012_user_must_change_password", _migrate_user_must_change_password),
+    ("0013_user_created_at_datetime", _migrate_user_created_at_datetime),
 ]

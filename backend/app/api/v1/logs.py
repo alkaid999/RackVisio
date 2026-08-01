@@ -7,13 +7,14 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.database import utcnow
 from app.core.deps import get_db
 from app.core.rbac import require_permission
 from app.repositories.log_repo import (
@@ -123,7 +124,9 @@ async def cleanup_logs(
     - 返回被删条数与 cutoff，便于运维立即回收 / 验证，也便于自动化测试。
     """
     retention_days = body.days if body.days is not None else settings.LOG_RETENTION_DAYS
-    cutoff = datetime.utcnow() - timedelta(days=retention_days)
+    # R-05：datetime.utcnow() 在 3.12+ 已弃用，统一走 app.core.database.utcnow
+    # （naive UTC，与 created_at 列存储口径一致——差 8 小时会误删/漏删）。
+    cutoff = utcnow() - timedelta(days=retention_days)
     op_deleted, login_deleted = await delete_logs_before(db, cutoff)
     return ok(
         {

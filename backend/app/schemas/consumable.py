@@ -11,6 +11,8 @@ from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.core.enums import ConsumableOpType
+
 # ============ 耗材类型 ============
 class ConsumableTypeCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=64)
@@ -106,7 +108,9 @@ class StockAdjustRequest(BaseModel):
     - reason：操作原因/备注（选填）。
     """
 
-    operation_type: str = Field(..., min_length=1, max_length=16)
+    # R-08：operation_type 用 ConsumableOpType 枚举校验（入库/领用/报废/盘点），
+    # 非法值在 schema 层即 422，不再下沉到 service 运行时校验（尽早校验原则）。
+    operation_type: ConsumableOpType
     quantity: int = Field(..., ge=0, description="数量（>=0）")
     reason: Optional[str] = Field(default=None, max_length=255)
     operation_time: Optional[datetime] = None

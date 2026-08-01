@@ -57,9 +57,10 @@ class ConsumableTypeRepository:
         )
 
     async def update(self, obj: ConsumableType, data: ConsumableTypeUpdate) -> ConsumableType:
+        # R-03：exclude_unset 已区分「未提供」与「显式设 None」，必须无条件 setattr，
+        # 否则清空可选字段（description 等）无法持久化。
         for field, value in data.model_dump(exclude_unset=True).items():
-            if value is not None:
-                setattr(obj, field, value)
+            setattr(obj, field, value)
         await self.session.flush()
         return obj
 
@@ -145,9 +146,9 @@ class ConsumableCategoryRepository:
     async def update(
         self, obj: ConsumableCategory, data: ConsumableCategoryUpdate
     ) -> ConsumableCategory:
+        # R-03：无条件 setattr（exclude_unset 已区分未提供 vs 显式 None）。
         for field, value in data.model_dump(exclude_unset=True).items():
-            if value is not None:
-                setattr(obj, field, value)
+            setattr(obj, field, value)
         await self.session.flush()
         return obj
 
@@ -236,9 +237,9 @@ class ConsumableItemRepository:
         return list(items), total
 
     async def update(self, obj: ConsumableItem, data: ConsumableItemUpdate) -> ConsumableItem:
+        # R-03：无条件 setattr（exclude_unset 已区分未提供 vs 显式 None）。
         for field, value in data.model_dump(exclude_unset=True).items():
-            if value is not None:
-                setattr(obj, field, value)
+            setattr(obj, field, value)
         await self.session.flush()
         return obj
 
