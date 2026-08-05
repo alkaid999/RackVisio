@@ -141,6 +141,43 @@ const routes = [
 const router = createRouter({
   history: createWebHistory(),
   routes,
+  // 滚动定位（M-xx 修复）：vue-router 4 默认在路由切换后【不重置滚动位置】，
+  // 导致从已滚动的页面（如仪表盘 / 机房详情 / 设备列表下方）钻取到详情页时，
+  // 滚动容器 <main> 的 scrollTop 被继承，页面打开即停留在中部区域（偶发「跳到接口面板」）。
+  // 注意：本项目滚动容器是布局中的 <main>（overflow-y-auto），body/html 不滚动
+  // （App.vue 根容器 h-screen overflow-hidden），因此不能用 vue-router 默认的
+  // window/document 滚动（{ top: 0 } 只滚 window），必须直接操作滚动容器元素。
+  // 实现说明：router 在「导航确认后、新组件挂载前」调用本函数，此时离场页
+  // （page-leave-active position:absolute）可能仍在过渡中，DOM 布局未稳定，
+  // 因此用 requestAnimationFrame 延后到下一帧执行置顶，确保对新页面生效。
+  scrollBehavior(to, from, savedPosition) {
+    const scrollEl = () =>
+      document.querySelector('main.overflow-y-auto') || document.scrollingElement || document.documentElement
+    const apply = (top) => {
+      const el = scrollEl()
+      if (el && el.scrollTo) el.scrollTo({ top, left: 0, behavior: 'auto' })
+    }
+    if (savedPosition) {
+      // 浏览器前进 / 后退：恢复原滚动位置（符合直觉）。
+      requestAnimationFrame(() => apply(savedPosition.top || 0))
+      return
+    }
+    if (to.hash) {
+      // 显式锚点跳转：优先滚动容器内查找目标元素。
+      requestAnimationFrame(() => {
+        const el = document.querySelector(to.hash)
+        if (el) {
+          const c = scrollEl()
+          c.scrollTo({ top: el.offsetTop, behavior: 'smooth' })
+        } else {
+          apply(0)
+        }
+      })
+      return
+    }
+    // 常规导航：滚动容器回到顶部（保证详情页从「基本信息」开始展示）。
+    requestAnimationFrame(apply.bind(null, 0))
+  },
 })
 
 // 全局前置守卫：鉴权 + 权限门控 + 强制改密。
