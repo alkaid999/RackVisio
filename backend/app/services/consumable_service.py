@@ -86,6 +86,13 @@ class ConsumableService:
         await self.type_repo.delete(obj)
         await self.session.commit()
 
+    async def reorder_types(self, ids: list[str]) -> list[ConsumableTypeOut]:
+        """类型手动排序（按传入顺序持久化），返回排序后的全量列表。"""
+        if ids:
+            await self.type_repo.reorder(ids)
+            await self.session.commit()
+        return await self.list_types()
+
     # ============ 分类 ============
     async def create_category(self, type_id: str, data: ConsumableCategoryCreate) -> ConsumableCategoryOut:
         await self._require_type(type_id)
@@ -122,6 +129,14 @@ class ConsumableService:
             raise ConflictError("该分类下仍存在耗材，无法删除（请先删除其下耗材）")
         await self.category_repo.delete(obj)
         await self.session.commit()
+
+    async def reorder_categories(self, type_id: str, ids: list[str]) -> list[ConsumableCategoryOut]:
+        """分类手动排序（类型内按传入顺序持久化），返回排序后的全量列表。"""
+        await self._require_type(type_id)
+        if ids:
+            await self.category_repo.reorder(ids)
+            await self.session.commit()
+        return await self.list_categories(type_id)
 
     # ============ 耗材 ============
     async def create_item(self, data: ConsumableItemCreate, operator: Optional[str] = None) -> ConsumableItemOut:

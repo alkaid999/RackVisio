@@ -19,6 +19,12 @@ class ConsumableTypeCreate(BaseModel):
     description: Optional[str] = None
 
 
+class ReorderRequest(BaseModel):
+    """手动排序：按展示顺序传入实体 id 列表（index 0 最靠前），后端持久化 sort_order。"""
+
+    ids: list[str] = Field(..., min_length=1)
+
+
 class ConsumableTypeUpdate(BaseModel):
     name: Optional[str] = Field(default=None, min_length=1, max_length=64)
     description: Optional[str] = None

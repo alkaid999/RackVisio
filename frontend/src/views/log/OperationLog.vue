@@ -219,7 +219,9 @@ const resourceOptions = [
   { value: 'link', label: '链路' },
   { value: 'account', label: '账号' },
   { value: 'consumable', label: '耗材' },
+  { value: 'hardware', label: '硬件' },
   { value: 'mount-record', label: '上下架记录' },
+  { value: 'log', label: '日志' },
 ]
 
 // 列定义与详情渲染顺序一致；grid 模板由 VirtualTable 统一推导，列宽自适应对齐。
@@ -320,14 +322,20 @@ const RESOURCE_LABELS = {
   interface: '接口',
   link: '链路',
   consumable: '耗材',
+  hardware: '硬件',
   'mount-record': '上下架记录',
   meta: '元数据',
   logs: '日志',
+  log: '日志',
   auth: '认证',
 }
 // HTTP 方法 → 动作（兜底用，优先 row.action）。PUT/PATCH 合并为「更新」。
 const METHOD_VERB = { POST: '新增', PUT: '更新', PATCH: '更新', DELETE: '删除' }
-const ACTION_VERB = { create: '新增', update: '更新', delete: '删除', mount: '上架', unmount: '下架', adjust: '库存调整' }
+const ACTION_VERB = {
+  create: '新增', update: '更新', delete: '删除',
+  mount: '上架', unmount: '下架', adjust: '库存调整',
+  assign: '分配', recover: '回收', cleanup: '清除日志',
+}
 
 const STATUS_LABELS = {
   200: '成功', 201: '已创建', 202: '已接受', 204: '无内容',

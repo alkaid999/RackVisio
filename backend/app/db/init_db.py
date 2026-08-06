@@ -25,10 +25,15 @@ from app.core.config import settings
 from app.core.database import utcnow
 from app.core.security import hash_password
 from app.models.consumable import ConsumableCategory, ConsumableType
+from app.models.hardware import HardwareCategory, HardwareType
 from app.models.user import User
 from app.repositories.consumable_repo import (
     ConsumableCategoryRepository,
     ConsumableTypeRepository,
+)
+from app.repositories.hardware_repo import (
+    HardwareCategoryRepository,
+    HardwareTypeRepository,
 )
 from app.repositories.user_repo import UserRepository
 
@@ -638,6 +643,10 @@ async def seed_data(session: AsyncSession) -> None:
     # 让「创建耗材」下拉恒有可选项，避免用户因缺类型而提交失败（需求#1）。
     await seed_consumable_types(session)
 
+    # —— 默认硬件类型与分类（幂等，仅当库内无任何类型时创建）——
+    # 预置主板/CPU/内存/硬盘/阵列卡/网卡/电源 7 类（需求#3），让「创建硬件」下拉恒有可选项。
+    await seed_hardware_types(session)
+
 
 
 
@@ -669,16 +678,17 @@ async def seed_consumable_types(session: AsyncSession) -> None:
     base = utcnow()
     n_types = len(type_defs)
     for i, (tname, tdesc, cats) in enumerate(type_defs):
-        # 展示序靠前的类型 → created_at 更晚（DESC 置顶）。
+        # 展示序靠前的类型 → created_at 更晚（DESC 置顶）+ sort_order 更小（升序靠前，手动排序持久化）。
         t_created = base + timedelta(seconds=(n_types - 1 - i) * 10)
         t_obj = ConsumableType(
-            name=tname, description=tdesc, created_at=t_created, updated_at=t_created
+            name=tname, description=tdesc, created_at=t_created, updated_at=t_created,
+            sort_order=i,
         )
         session.add(t_obj)
         await session.flush()  # 拿到 t_obj.id 供分类外键使用
         n_cats = len(cats)
         for j, cname in enumerate(cats):
-            # 同类下首个分类 → created_at 更晚（DESC 置顶）。
+            # 同类下首个分类 → created_at 更晚（DESC 置顶）+ sort_order 更小。
             c_created = t_created + timedelta(seconds=(n_cats - 1 - j) * 1)
             session.add(
                 ConsumableCategory(
@@ -686,11 +696,110 @@ async def seed_consumable_types(session: AsyncSession) -> None:
                     name=cname,
                     created_at=c_created,
                     updated_at=c_created,
+                    sort_order=j,
                 )
             )
         await session.flush()
     # 种子数据须显式提交（同 seed_data：async with session 块退出即关闭，未提交被回滚）。
     await session.commit()
+
+
+async def seed_hardware_types(session: AsyncSession) -> None:
+    """种子默认硬件类型与分类（幂等）。
+
+    仅当 ``hardware_types`` 表为空时创建，绝不覆盖用户已有数据。
+    预置 主板/CPU/内存/硬盘/阵列卡/网卡/电源 7 类（需求#3），确保用户创建硬件时
+    类型/分类下拉恒有可选项（硬件管理入口与耗材一致）。
+
+    顺序：列表按 ``created_at DESC`` 排序（新增置顶），显式指定 ``created_at``
+    以保证默认类型的展示顺序确定：主板 → CPU → 内存 → 硬盘 → 阵列卡 → 网卡 → 电源。
+    """
+    type_repo = HardwareTypeRepository(session)
+    if await type_repo.list():
+        return  # 已有类型，跳过（幂等，不覆盖用户数据）
+
+    cat_repo = HardwareCategoryRepository(session)
+
+    # (类型名, 说明, [分类名...])，按展示顺序（索引越小越靠上）。
+    type_defs = [
+        ("主板", "服务器/PC 主板，决定整机平台与扩展能力", ["标准 ATX", "定制服务器板"]),
+        ("CPU", "中央处理器", ["Intel Xeon", "Intel Core", "AMD EPYC", "海光"]),
+        ("内存", "运行内存条", ["DDR4 ECC", "DDR4 非ECC", "DDR5 ECC", "DDR5 非ECC"]),
+        ("硬盘", "存储介质（机械盘 / 固态盘 / NVMe）", ["SATA SSD", "NVMe SSD", "SAS 机械盘", "SATA 机械盘"]),
+        ("阵列卡", "RAID 阵列卡 / HBA 卡", ["RAID 卡", "HBA 卡"]),
+        ("网卡", "以太网适配器（含光口/电口）", ["1G 电口", "10G 光口", "25G 光口", "40G 光口"]),
+        ("电源", "服务器电源模块（冗余）", ["550W", "800W", "1200W", "2000W"]),
+    ]
+    base = utcnow()
+    n_types = len(type_defs)
+    for i, (tname, tdesc, cats) in enumerate(type_defs):
+        # 展示序靠前的类型 → created_at 更晚（DESC 置顶）+ sort_order 更小（升序靠前）。
+        t_created = base + timedelta(seconds=(n_types - 1 - i) * 10)
+        t_obj = HardwareType(
+            name=tname, description=tdesc, created_at=t_created, updated_at=t_created,
+            sort_order=i,
+        )
+        session.add(t_obj)
+        await session.flush()  # 拿到 t_obj.id 供分类外键使用
+        n_cats = len(cats)
+        for j, cname in enumerate(cats):
+            # 同类下首个分类 → created_at 更晚（DESC 置顶）+ sort_order 更小。
+            c_created = t_created + timedelta(seconds=(n_cats - 1 - j) * 1)
+            session.add(
+                HardwareCategory(
+                    type_id=t_obj.id,
+                    name=cname,
+                    created_at=c_created,
+                    updated_at=c_created,
+                    sort_order=j,
+                )
+            )
+        await session.flush()
+    # 种子数据须显式提交（同 seed_data：async with session 块退出即关闭，未提交被回滚）。
+    await session.commit()
+
+
+async def _migrate_type_sort_order(session: AsyncSession) -> None:
+    """类型/分类手动排序列（0014，需求：类型管理页上移/下移持久化）。
+
+    为 consumable_types / consumable_categories / hardware_types / hardware_categories
+    四张表追加 ``sort_order``（Integer，越小越靠前）。存量数据统一归 0，
+    再按现有展示顺序（created_at DESC）回填递增序号，保证迁移后顺序不变。
+    """
+    for table in ("consumable_types", "consumable_categories", "hardware_types", "hardware_categories"):
+        cols = await _existing_columns(session, table)
+        if "sort_order" not in cols:
+            await session.execute(text(f"ALTER TABLE {table} ADD COLUMN sort_order INTEGER DEFAULT 0"))
+    # 回填：按创建时间倒序（与现有展示一致）赋 0..N，使存量顺序平滑迁移。
+    for table in ("consumable_types", "hardware_types"):
+        rows = (
+            await session.execute(
+                text(f"SELECT id FROM {table} ORDER BY created_at DESC")
+            )
+        ).all()
+        for i, (rid,) in enumerate(rows):
+            await session.execute(
+                text(f"UPDATE {table} SET sort_order = :o WHERE id = :i"),
+                {"o": i, "i": rid},
+            )
+    # 分类按类型分组回填（同类型内 created_at DESC 赋 0..N）。
+    for table in ("consumable_categories", "hardware_categories"):
+        type_rows = (
+            await session.execute(text(f"SELECT DISTINCT type_id FROM {table}"))
+        ).all()
+        for (tid,) in type_rows:
+            cat_rows = (
+                await session.execute(
+                    text(f"SELECT id FROM {table} WHERE type_id = :t ORDER BY created_at DESC"),
+                    {"t": tid},
+                )
+            ).all()
+            for i, (rid,) in enumerate(cat_rows):
+                await session.execute(
+                    text(f"UPDATE {table} SET sort_order = :o WHERE id = :i"),
+                    {"o": i, "i": rid},
+                )
+    await session.flush()
 
 
 # 版本化迁移注册表：未来新增迁移追加于此即可，已应用版本自动跳过（见 migrate()）。
@@ -709,4 +818,5 @@ MIGRATIONS: list = [
     ("0011_op_log_action_target", _migrate_operation_log_action_target),
     ("0012_user_must_change_password", _migrate_user_must_change_password),
     ("0013_user_created_at_datetime", _migrate_user_created_at_datetime),
+    ("0014_type_sort_order", _migrate_type_sort_order),
 ]

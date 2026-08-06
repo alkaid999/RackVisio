@@ -350,7 +350,8 @@ export const ROLE_LABELS = {
 
 // 权限目录（声明式单一数据源；新增模块 / 操作只需在此扩展，前后端同步）。
 // 顺序即界面展示顺序。
-export const PERMISSION_MODULES = ['room', 'rack', 'device', 'link', 'account', 'consumable']
+
+export const PERMISSION_MODULES = ['room', 'rack', 'device', 'link', 'account', 'consumable', 'hardware']
 export const PERMISSION_OPERATIONS = ['view', 'edit']
 
 // 权限模块中文名（权限键形如 "<module>:<action>"）。
@@ -361,6 +362,7 @@ export const PERMISSION_MODULE_LABELS = {
   link: '链路',
   account: '账号',
   consumable: '耗材',
+  hardware: '硬件',
 }
 // 权限动作中文名。
 export const PERMISSION_ACTION_LABELS = {
@@ -458,6 +460,36 @@ export function consumableOpQuantityHint(op) {
   }
 }
 
+// ============ 硬件管理常量（独立个体模型，与后端 HardwareOpType / HardwareStatus 严格一致）============
+// 硬件变动操作类型：新增=绿（建档）、报废=红（出库）、分配=蓝（装到设备）、回收=橙（回库可再分配）。
+export const HARDWARE_OP_OPTIONS = [
+  { value: '新增', label: '新增' },
+  { value: '报废', label: '报废' },
+  { value: '分配', label: '分配' },
+  { value: '回收', label: '回收' },
+]
+export const HARDWARE_OP_LABELS = {
+  新增: '新增',
+  报废: '报废',
+  分配: '分配',
+  回收: '回收',
+}
+export const HARDWARE_OP_COLORS = {
+  新增: '#22c55e',
+  报废: '#ef4444',
+  分配: '#409EFF',
+  回收: '#e6a23c',
+}
+// 硬件在位状态：在库（可分配）↔ 已安装（占用中，一对一）。
+export const HARDWARE_STATUS_OPTIONS = [
+  { value: '在库', label: '在库' },
+  { value: '已安装', label: '已安装' },
+]
+export const HARDWARE_STATUS_COLORS = {
+  在库: '#909399',
+  已安装: '#409EFF',
+}
+
 // ============ 耗材类型配色（同类同色、类型间唯一）============
 // 同一 typeId 永远得到同一种颜色（同类耗材同色）；不同 typeId 通过「在全量类型有序列表中的
 // 下标」映射到黄金角（137.508°）分隔的色相，保证任意两个类型颜色互不相同（唯一），且不依赖后端存储。
@@ -495,6 +527,50 @@ export function consumableTypeColor(typeId) {
 // 类型徽章样式：底色 = 类型色 + 透明度，文字 = 类型色，边框 = 类型色 + 透明度。
 export function consumableTypeBadgeStyle(typeId) {
   const hue = typeHue(typeId)
+  if (hue === null) return { backgroundColor: '#90939922', color: '#909399', borderColor: '#90939955' }
+  const c = `hsl(${hue.toFixed(1)}, 72%, 45%)`
+  return {
+    backgroundColor: `hsla(${hue.toFixed(1)}, 72%, 45%, 0.14)`,
+    color: c,
+    borderColor: `hsla(${hue.toFixed(1)}, 72%, 45%, 0.45)`,
+  }
+}
+
+// ============ 硬件类型配色（与耗材同机制、独立映射，避免两类资产串色）============
+// 同一硬件 typeId 永远得到同一种颜色；不同 typeId 通过「全量类型有序列表」下标映射到
+// 黄金角（137.508°）分隔的色相，任意两个类型颜色互不相同。setHardwareTypeOrder 统一计算，
+// 硬件类型管理 / 硬件列表 / 设备硬件卡片共用同一映射，确保一致。
+let _hwTypeColorHues = new Map()
+
+// 以全量类型 id 的有序集合计算配色：排序后按下标取黄金角色相，相邻类型色相差最大、永不重复。
+export function setHardwareTypeOrder(ids) {
+  const sorted = Array.from(new Set(ids || [])).sort()
+  _hwTypeColorHues = new Map()
+  sorted.forEach((id, i) => {
+    _hwTypeColorHues.set(id, (i * 137.508) % 360)
+  })
+}
+
+// 取某硬件类型的色相；未登记时回退到基于 id 的稳定哈希（仍保证同类同色）。
+function hwTypeHue(typeId) {
+  if (!typeId) return null
+  if (_hwTypeColorHues.has(typeId)) return _hwTypeColorHues.get(typeId)
+  let h = 0
+  for (let i = 0; i < typeId.length; i++) {
+    h = (h * 31 + typeId.charCodeAt(i)) >>> 0
+  }
+  return h % 360
+}
+
+export function hardwareTypeColor(typeId) {
+  const hue = hwTypeHue(typeId)
+  if (hue === null) return '#909399'
+  return `hsl(${hue.toFixed(1)}, 72%, 45%)`
+}
+
+// 硬件类型徽章样式：底色 = 类型色 + 透明度，文字 = 类型色，边框 = 类型色 + 透明度。
+export function hardwareTypeBadgeStyle(typeId) {
+  const hue = hwTypeHue(typeId)
   if (hue === null) return { backgroundColor: '#90939922', color: '#909399', borderColor: '#90939955' }
   const c = `hsl(${hue.toFixed(1)}, 72%, 45%)`
   return {
@@ -557,6 +633,10 @@ export const LOG_FIELD_LABELS = {
   consumable_id: '耗材',
   consumable_type_id: '耗材类型',
   category_id: '分类',
+  // 硬件模块（独立个体台账）专属字段。
+  hardware_type_id: '硬件类型',
+  hardware_item_id: '硬件',
+  assigned_device_id: '所属设备',
   quantity: '数量',
   unit: '单位',
   medium: '介质',

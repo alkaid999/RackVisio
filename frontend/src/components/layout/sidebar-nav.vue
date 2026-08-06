@@ -21,6 +21,7 @@ import {
   Tags,
   FileText,
   LogIn,
+  ServerCog,
 } from 'lucide-vue-next'
 
 const props = defineProps({ collapsed: { type: Boolean, default: false } })
@@ -53,11 +54,14 @@ const nav = [
     ],
   },
   {
-    label: '耗材管理',
+    // 需求#2：耗材管理升级为「资产管理」，统一管理耗材与硬件两大类资产。
+    label: '资产管理',
     icon: Package,
     children: [
-      { to: '/consumables/types', label: '类型与分类', icon: Tags, permission: 'consumable:edit' },
-      { to: '/consumables', label: '耗材列表', icon: PackageOpen, permission: 'consumable:view' },
+      { to: '/consumables/types', label: '耗材类型与分类', icon: Tags, permission: 'consumable:edit' },
+      { to: '/consumables', label: '耗材管理', icon: PackageOpen, permission: 'consumable:view' },
+      { to: '/hardwares/types', label: '硬件类型与分类', icon: Cpu, permission: 'hardware:edit' },
+      { to: '/hardwares', label: '硬件管理', icon: ServerCog, permission: 'hardware:view' },
     ],
   },
   {

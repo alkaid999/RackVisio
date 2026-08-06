@@ -47,6 +47,8 @@ class ConsumableType(Base):
     )
     name: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # 手动排序：类型管理页上移/下移持久化（越小越靠前，新建追加到末尾）。
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(
@@ -73,6 +75,8 @@ class ConsumableCategory(Base):
     )
     name: Mapped[str] = mapped_column(String(64), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # 手动排序（同类型内上移/下移持久化，越小越靠前）。
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(

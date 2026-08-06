@@ -16,6 +16,10 @@ export default {
   removeType(id) {
     return http.delete(`/consumables/types/${id}`)
   },
+  // 类型手动排序（按展示顺序传入 id 列表，持久化）。返回排序后的全量类型。
+  reorderTypes(ids) {
+    return http.post('/consumables/types/reorder', { ids })
+  },
 
   // ===== 耗材分类（归属某类型）=====
   // 某类型下分类列表（含 item_count）。data = [ConsumableCategoryOut]
@@ -30,6 +34,10 @@ export default {
   },
   removeCategory(id) {
     return http.delete(`/consumables/categories/${id}`)
+  },
+  // 分类手动排序（同类型内按展示顺序传入 id 列表，持久化）。返回排序后的分类列表。
+  reorderCategories(typeId, ids) {
+    return http.post(`/consumables/types/${typeId}/categories/reorder`, { ids })
   },
 
   // ===== 具体耗材 =====

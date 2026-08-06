@@ -29,6 +29,11 @@ export const useConsumableStore = defineStore('consumable', {
     async removeType(id) {
       return await consumableApi.removeType(id)
     },
+    // 类型手动排序：调用后端持久化，并用返回的全量列表刷新本地 types。
+    async reorderTypes(ids) {
+      this.types = await consumableApi.reorderTypes(ids)
+      return this.types
+    },
 
     // ===== 分类 =====
     // 拉取某类型下的分类；空 typeId 直接清空（避免无意义请求 / 误筛）。
@@ -48,6 +53,11 @@ export const useConsumableStore = defineStore('consumable', {
     },
     async removeCategory(id) {
       return await consumableApi.removeCategory(id)
+    },
+    // 分类手动排序：调用后端持久化，并用返回的全量列表刷新本地 categories。
+    async reorderCategories(typeId, ids) {
+      this.categories = await consumableApi.reorderCategories(typeId, ids)
+      return this.categories
     },
 
     // ===== 耗材 =====

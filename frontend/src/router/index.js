@@ -128,6 +128,18 @@ const routes = [
     component: () => import('@/views/consumable/ConsumableTypeManager.vue'),
     meta: { title: '类型与分类', requiresAuth: true, permission: 'consumable:edit' },
   },
+  {
+    path: '/hardwares',
+    name: 'HardwareList',
+    component: () => import('@/views/hardware/HardwareList.vue'),
+    meta: { title: '硬件管理', requiresAuth: true, permission: 'hardware:view' },
+  },
+  {
+    path: '/hardwares/types',
+    name: 'HardwareTypeManager',
+    component: () => import('@/views/hardware/HardwareTypeManager.vue'),
+    meta: { title: '硬件类型与分类', requiresAuth: true, permission: 'hardware:edit' },
+  },
   // 全捕获路由：访问任何未注册的子路径都给到 404 反馈，而非白屏。
   // 标记为 fullscreen + public，不走侧边栏布局、未登录也直接展示。
   {

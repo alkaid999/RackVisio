@@ -214,6 +214,33 @@ class ConsumableOpType(str, Enum):
     CHECK = "盘点"
 
 
+class HardwareOpType(str, Enum):
+    """硬件变动操作类型（独立个体台账：每件硬件单独记录、单独追踪）。
+
+    - NEW（新增）：一件硬件入库建档（硬件管理新增）。
+    - SCRAP（报废）：一件硬件报废出库（硬件管理删除/报废）。
+    - ASSIGN（分配）：一件硬件被分配到某台设备（设备添加硬件自动触发）。
+    - RECOVER（回收）：一件硬件从设备回收回库（设备删除硬件自动触发，重新可分配）。
+
+    前端 ``frontend/src/utils/constants.js`` 的 ``HARDWARE_OP_OPTIONS`` 需与本枚举一致。
+    """
+
+    NEW = "新增"
+    SCRAP = "报废"
+    ASSIGN = "分配"
+    RECOVER = "回收"
+
+
+class HardwareStatus(str, Enum):
+    """硬件在位状态（独立个体：在库可分配 / 已安装到某设备）。
+
+    与设备硬件关联一一对应：``assigned_device_id`` 为空 → 在库；非空 → 已安装。
+    """
+
+    IN_STOCK = "在库"
+    INSTALLED = "已安装"
+
+
 def calculate_rack_status(used_u: int, total_u: int) -> RackStatus:
     """根据已用 U 位与总 U 位计算机柜容量状态。
 

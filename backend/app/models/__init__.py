@@ -7,6 +7,12 @@ from app.models.consumable import (
     ConsumableType,
 )
 from app.models.device import Device
+from app.models.hardware import (
+    HardwareCategory,
+    HardwareItem,
+    HardwareRecord,
+    HardwareType,
+)
 from app.models.interface import DeviceInterface
 from app.models.link import DeviceLink
 from app.models.login_log import LoginLog
@@ -30,4 +36,8 @@ __all__ = [
     "ConsumableCategory",
     "ConsumableItem",
     "ConsumableRecord",
+    "HardwareType",
+    "HardwareCategory",
+    "HardwareItem",
+    "HardwareRecord",
 ]

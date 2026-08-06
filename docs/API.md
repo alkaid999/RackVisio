@@ -20,6 +20,7 @@
 - [mount-records（上架记录）](#mount-records上架记录)
 - [links（链路）](#links链路)
 - [consumables（耗材）](#consumables耗材)
+- [hardwares（硬件管理）](#hardwares硬件管理)
 - [logs（日志）](#logs日志)
 - [stats（统计）](#stats统计)
 - [meta（展示元数据）](#meta展示元数据)
@@ -419,6 +420,84 @@
 ```
 
 > `operation_type` 支持：入库 / 领用 / 报废 / 盘点等（以 `/meta` 返回为准）；领用与报废扣减库存，入库增加。
+
+---
+
+## hardwares（硬件管理）
+
+> 硬件为**独立个体台账**（与耗材的批量库存模型不同）：每件硬件一行记录、SN 独立编号、单独追踪；
+> 设备添加硬件 = 从硬件管理选「在库」的具体某件（与机柜上架选设备同理），一对一分配。
+> 变动操作（新增 / 报废 / 分配 / 回收）自动落 `hardware_records`，可完整追溯每件硬件生命周期。
+
+### 类型（types）
+
+| 方法 | 路径 | 权限 | 说明 |
+| --- | --- | --- | --- |
+| GET | `/api/v1/hardwares/types` | `hardware:view` | 硬件类型列表（预置 主板/CPU/内存/硬盘/阵列卡/网卡/电源，可自定义） |
+| POST | `/api/v1/hardwares/types` | `hardware:edit` | 新建硬件类型 |
+| GET | `/api/v1/hardwares/types/{type_id}` | `hardware:view` | 类型详情 |
+| PUT | `/api/v1/hardwares/types/{type_id}` | `hardware:edit` | 更新类型 |
+| DELETE | `/api/v1/hardwares/types/{type_id}` | `hardware:edit` | 删除类型（其下无分类/硬件时） |
+
+### 分类（categories）
+
+| 方法 | 路径 | 权限 | 说明 |
+| --- | --- | --- | --- |
+| GET | `/api/v1/hardwares/types/{type_id}/categories` | `hardware:view` | 类型下分类列表 |
+| POST | `/api/v1/hardwares/types/{type_id}/categories` | `hardware:edit` | 新建分类 |
+| GET | `/api/v1/hardwares/categories/{category_id}` | `hardware:view` | 分类详情 |
+| PUT | `/api/v1/hardwares/categories/{category_id}` | `hardware:edit` | 更新分类 |
+| DELETE | `/api/v1/hardwares/categories/{category_id}` | `hardware:edit` | 删除分类（其下无硬件时） |
+
+### 硬件条目（独立个体）
+
+| 方法 | 路径 | 权限 | 说明 |
+| --- | --- | --- | --- |
+| GET | `/api/v1/hardwares/items` | `hardware:view` | 硬件列表（分页；`type_id`/`category_id`/`status`（在库/已安装）/`keyword`（名称/品牌/SN/规格）过滤） |
+| POST | `/api/v1/hardwares/items` | `hardware:edit` | 新建硬件（建档即「在库」，落「新增」记录） |
+| GET | `/api/v1/hardwares/items/{item_id}` | `hardware:view` | 硬件详情 |
+| PUT | `/api/v1/hardwares/items/{item_id}` | `hardware:edit` | 更新硬件 |
+| DELETE | `/api/v1/hardwares/items/{item_id}` | `hardware:edit` | 删除硬件（仅「在库」可删；已安装须先回收；删除即报废出库） |
+
+**POST /api/v1/hardwares/items（新建硬件）**
+
+```json
+{
+  "type_id": "…",
+  "category_id": "…",
+  "name": "32GB DDR4 ECC 内存条",
+  "brand": "Kingston",
+  "sn": "SN-RAM-0001",
+  "spec": "32GB DDR4-3200 ECC"
+}
+```
+
+> `sn`（SN 号/独立编号）非空时**唯一**，重复返回 409；`brand` 为硬件专属新增字段（需求#3）。
+
+### 设备硬件联动（一对一）
+
+| 方法 | 路径 | 权限 | 说明 |
+| --- | --- | --- | --- |
+| GET | `/api/v1/hardwares/devices/{device_id}/hardwares` | `hardware:view` | 设备已安装硬件列表（设备详情页「设备硬件」卡片） |
+| POST | `/api/v1/hardwares/devices/{device_id}/hardwares` | `hardware:edit` | 从硬件管理选「在库」硬件分配到设备（状态→已安装，落「分配」记录） |
+| DELETE | `/api/v1/hardwares/devices/{device_id}/hardwares/{hardware_item_id}` | `hardware:edit` | 回收：解除关联、硬件回「在库」（落「回收」记录，可重新分配） |
+
+**POST /api/v1/hardwares/devices/{device_id}/hardwares（分配）**
+
+```json
+{ "hardware_item_id": "…", "remark": "盘位 0" }
+```
+
+> 已安装/不在库的硬件不可分配（409）；回收后硬件重新出现在硬件管理「在库」列表，可再分配。
+
+### 变动历史
+
+| 方法 | 路径 | 权限 | 说明 |
+| --- | --- | --- | --- |
+| GET | `/api/v1/hardwares/items/{item_id}/records` | `hardware:view` | 单件硬件变动历史 |
+| GET | `/api/v1/hardwares/records` | `hardware:view` | 全部硬件变动记录（`type_id`/`category_id`/`item_id`/`operation_type` 过滤） |
+
+> `operation_type`：新增（建档）/ 报废（出库）/ 分配（装到设备）/ 回收（回库）；分配/回收记录带目标设备名（`device_name`），可追溯「装到哪台 / 从哪台回收」。
 
 ---
 

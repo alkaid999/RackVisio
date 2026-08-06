@@ -144,6 +144,9 @@
         </template>
       </Card>
 
+      <!-- 设备硬件（需求#1：展示设备已安装硬件，可从硬件管理分配，删除即回收回库） -->
+      <DeviceHardwarePanel :device-id="deviceId" :can-edit="canEdit" />
+
       <!-- 添加 / 编辑接口弹窗 -->
       <InterfaceFormModal
         v-model="formOpen"
@@ -342,6 +345,7 @@ import InterfaceFrontPanel from '@/components/device/InterfaceFrontPanel.vue'
 import InterfaceFormModal from '@/components/device/InterfaceFormModal.vue'
 import InterfaceDetailDialog from '@/components/device/InterfaceDetailDialog.vue'
 import DeviceTypeTag from '@/components/device/DeviceTypeTag.vue'
+import DeviceHardwarePanel from '@/components/device/DeviceHardwarePanel.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import DeviceForm from '@/views/device/DeviceForm.vue'
 import LinkFormDialog from '@/views/link/LinkFormDialog.vue'

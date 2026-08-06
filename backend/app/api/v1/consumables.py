@@ -33,6 +33,7 @@ from app.schemas.consumable import (
     ConsumableTypeCreate,
     ConsumableTypeOut,
     ConsumableTypeUpdate,
+    ReorderRequest,
     StockAdjustRequest,
 )
 from app.services.consumable_service import ConsumableService
@@ -80,6 +81,13 @@ async def delete_type(type_id: str, db: AsyncSession = Depends(get_db)):
     svc = ConsumableService(db)
     await svc.delete_type(type_id)
     return ok()
+
+
+# 类型手动排序（须在 /types/{type_id} 路由之前声明，避免路径段被当 id 匹配）。
+@router.post("/types/reorder", dependencies=[Depends(require_permission("consumable:edit"))])
+async def reorder_types(payload: ReorderRequest, db: AsyncSession = Depends(get_db)):
+    svc = ConsumableService(db)
+    return ok(await svc.reorder_types(payload.ids))
 
 
 # ============ 耗材分类 ============
@@ -133,6 +141,18 @@ async def delete_category(category_id: str, db: AsyncSession = Depends(get_db)):
     svc = ConsumableService(db)
     await svc.delete_category(category_id)
     return ok()
+
+
+# 分类手动排序（同类型内）。
+@router.post(
+    "/types/{type_id}/categories/reorder",
+    dependencies=[Depends(require_permission("consumable:edit"))],
+)
+async def reorder_categories(
+    type_id: str, payload: ReorderRequest, db: AsyncSession = Depends(get_db)
+):
+    svc = ConsumableService(db)
+    return ok(await svc.reorder_categories(type_id, payload.ids))
 
 
 # ============ 具体耗材 ============

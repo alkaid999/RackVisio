@@ -27,6 +27,7 @@ from app.api.v1 import (
     auth,
     consumables,
     devices,
+    hardwares,
     interfaces,
     links,
     logs,
@@ -120,7 +121,7 @@ app.add_middleware(GlobalRateLimitMiddleware)
 # 挂载全部 v1 路由（前缀统一为 /api/v1）。
 # 操作日志由 OperationLogMiddleware 请求级自动记录，端点零侵入；
 # 登录日志由认证端点写入 login_logs，两者在前端分别以二级菜单展示。
-for module in (rooms, racks, devices, interfaces, links, stats, mount_records, auth, accounts, consumables, meta, logs):
+for module in (rooms, racks, devices, interfaces, links, stats, mount_records, auth, accounts, consumables, hardwares, meta, logs):
     app.include_router(module.router, prefix=settings.API_PREFIX)
 
 

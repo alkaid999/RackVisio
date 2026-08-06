@@ -40,6 +40,7 @@ from app.core.config import settings
 from app.core.database import async_session_factory
 from app.models.consumable import ConsumableCategory, ConsumableItem, ConsumableType
 from app.models.device import Device
+from app.models.hardware import HardwareCategory, HardwareItem, HardwareType
 from app.models.interface import DeviceInterface
 from app.models.link import DeviceLink
 from app.models.mount_record import MountRecord
@@ -57,8 +58,10 @@ _WRITE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 _EXEMPT_PREFIX = f"{settings.API_PREFIX}/auth"
 # 导入 / 导出不审计（业务决策），且请求体可能极大，直接跳过整条日志。
 # check-u 是只读查询（但用 POST），无业务写语义，不审计。
-# cleanup 是日志自清理，由服务器访问日志可追溯，不写入审计表避免递归。
-_SKIP_HINTS = ("/import", "/export", "/check-u", "/cleanup")
+# 注意：/cleanup（日志清理）刻意【不】在此跳过——「清除日志」操作本身必须留痕
+# （需求：清除动作可追溯谁在何时清了多长时间的日志），由中间件自动记录；
+# 中间件在响应后写入，created_at=now 大于删除 cutoff，不会被本次清理误删。
+_SKIP_HINTS = ("/import", "/export", "/check-u")
 # 请求体抓取上限（字节），超过不抓 detail（如超大 payload）。
 # Q-03：收敛到 Settings.LOG_BODY_SIZE_LIMIT（可 .env 覆盖）。
 _BODY_SIZE_LIMIT = settings.LOG_BODY_SIZE_LIMIT
@@ -80,6 +83,9 @@ _ID_RESOLVERS = {
     "consumable_id": (ConsumableItem, ["name"]),
     "source_interface_id": (DeviceInterface, ["name"]),
     "target_interface_id": (DeviceInterface, ["name"]),
+    # 硬件模块（独立个体台账）：类型/分类/具体硬件/设备联动。
+    "hardware_type_id": (HardwareType, ["name"]),
+    "hardware_item_id": (HardwareItem, ["name"]),
 }
 
 # 单实体展示名解析用的列（供 _name_of 复用，与 _ID_RESOLVERS 同源）。
@@ -90,6 +96,9 @@ _NAME_COLS = {
     ConsumableItem: ["name"],
     ConsumableType: ["name"],
     ConsumableCategory: ["name"],
+    HardwareItem: ["name"],
+    HardwareType: ["name"],
+    HardwareCategory: ["name"],
     DeviceInterface: ["name"],
 }
 
@@ -216,6 +225,15 @@ def _classify(path: str) -> tuple[str | None, type | None, int]:
         if "categories" in segs:
             return "consumable", ConsumableCategory, 0
         return "consumable", ConsumableItem, 0
+    if "hardwares" in segs:
+        # 硬件子路径细分布局：条目/类型/分类；设备联动（分配/回收）归 hardware。
+        if "items" in segs:
+            return "hardware", HardwareItem, 0
+        if "types" in segs:
+            return "hardware", HardwareType, 0
+        if "categories" in segs:
+            return "hardware", HardwareCategory, 0
+        return "hardware", HardwareItem, 0
     if "racks" in segs:
         return "rack", Rack, 0
     if "devices" in segs:
@@ -224,6 +242,8 @@ def _classify(path: str) -> tuple[str | None, type | None, int]:
         return "room", Room, 0
     if "meta" in segs:
         return "meta", None, 0
+    if "logs" in segs:
+        return "log", None, 0
     return None, None, 0
 
 
@@ -238,8 +258,13 @@ def _extract_id(path: str, id_idx: int = 0) -> str | None:
         return None
 
 
-async def _resolve_names(session, body: dict) -> dict:
-    """best-effort 把 body 中的外键 ID 解析为可读名称；任一失败静默跳过。"""
+async def _resolve_names(session, body: dict, category_model=None) -> dict:
+    """best-effort 把 body 中的外键 ID 解析为可读名称；任一失败静默跳过。
+
+    ``category_model``：body 的 ``category_id`` 字段对应的分类模型——耗材与硬件
+    共用字段名 ``category_id`` 但指向不同表（ConsumableCategory / HardwareCategory），
+    调用方按路径上下文传入对应模型以正确解析（默认耗材）。
+    """
     names: dict = {}
     if not isinstance(body, dict):
         return names
@@ -247,6 +272,9 @@ async def _resolve_names(session, body: dict) -> dict:
         val = body.get(field)
         if val is None:
             continue
+        # category_id 按上下文换模型（硬件路径 → HardwareCategory）。
+        if field == "category_id" and category_model is not None:
+            model, cols = category_model, ["name"]
         try:
             stmt = select(*[getattr(model, c) for c in cols]).where(model.id == val)
             row = (await session.execute(stmt)).first()
@@ -259,10 +287,11 @@ async def _resolve_names(session, body: dict) -> dict:
     return names
 
 
-async def _snapshot_old(entity_id: str, model) -> tuple[dict | None, dict]:
+async def _snapshot_old(entity_id: str, model, category_model=None) -> tuple[dict | None, dict]:
     """在 call_next 之前用独立会话快照旧实体字段（旧值），并解析外键可读名称。
 
     返回 (old_dict, old_names)；实体不存在返回 (None, {})。任何异常静默降级。
+    ``category_model``：见 _resolve_names（硬件路径 → HardwareCategory）。
     """
     try:
         async with async_session_factory() as session:
@@ -277,7 +306,7 @@ async def _snapshot_old(entity_id: str, model) -> tuple[dict | None, dict]:
                     continue
                 old_dict[col.name] = _jsonable(getattr(inst, col.name))
             try:
-                old_names = await _resolve_names(session, old_dict)
+                old_names = await _resolve_names(session, old_dict, category_model=category_model)
             except Exception:
                 old_names = {}
             return old_dict, old_names
@@ -322,6 +351,9 @@ _PATH_ACTION_OVERRIDES: dict[str, str] = {
     "mount": "mount",        # 设备上架
     "unmount": "unmount",    # 设备下架
     "adjust": "adjust",      # 耗材库存调整
+    "cleanup": "cleanup",    # 日志清理（清除日志操作本身留痕）
+    "assign": "assign",      # 硬件分配（设备添加硬件，动作语义为分配）
+    "recover": "recover",    # 硬件回收（设备删除硬件，动作语义为回收）
 }
 
 
@@ -465,6 +497,43 @@ async def _resolve_target(
                 return s(v)
         return None
 
+    if resource_key == "hardware":
+        # 硬件（独立个体台账）：
+        # - 分配/回收（/hardwares/devices/{device_id}/hardwares[/{hw_id}]）：目标=「硬件 @ 设备」。
+        # - 条目/类型/分类创建：优先 body.name；分类可带父类型「类型 / 分类」。
+        # - 外键名称（type_id/category_id/hardware_item_id）已由 _ID_RESOLVERS 解析。
+        hw_id = body_d.get("hardware_item_id")
+        if not hw_id and "/devices/" in path and "/hardwares" in path:
+            # DELETE 回收：id 在路径末段（/hardwares/devices/{did}/hardwares/{hw_id}）。
+            segs = [seg for seg in path.split("/") if seg]
+            if segs and segs[-1] not in ("hardwares", "devices"):
+                hw_id = segs[-1]
+        if hw_id:
+            hw_name = await _name_of(session, HardwareItem, hw_id)
+            if hw_name:
+                dev_id = body_d.get("device_id") or _device_id_from_path(path)
+                dev_name = all_names.get("device_id")
+                if not dev_name and dev_id:
+                    dev_name = await _name_of(session, Device, dev_id)
+                if dev_name:
+                    return f"{hw_name} @ {dev_name}"
+                return hw_name
+        nm = body_d.get("name") or old_d.get("name")
+        if nm:
+            # 类型/分类创建：若路径带父类型（/hardwares/types/{id}/categories），
+            # 展示为「父类型 / 分类」，与耗材一致。
+            parent_type_id = _extract_parent_id(path, "types")
+            if parent_type_id:
+                pname = await _name_of(session, HardwareType, parent_type_id)
+                if pname:
+                    return f"{pname} / {nm}"
+            return s(nm)
+        # 外键可读名兜底（type_id / category_id / hardware_item_id 等）。
+        for v in all_names.values():
+            if v is not None:
+                return s(v)
+        return None
+
     if resource_key == "mount-record":
         dev = all_names.get("device_id")
         rack = all_names.get("rack_id")
@@ -493,6 +562,13 @@ async def _resolve_target(
             uname = old_d.get("display_name") or old_d.get("username")
         if uname:
             return s(uname)
+
+    if resource_key == "log" and "/cleanup" in path:
+        # 日志清理：展示清理范围（保留天数），让「清除日志」动作可读可追溯。
+        days = body_d.get("days")
+        if days is not None:
+            return f"清理 {days} 天前的日志"
+        return "清理过期日志"
 
     if resource_key == "rack" and "/positions" in path:
         # 机柜平面图坐标更新：按位置数组里的机柜 id 解析可读机柜名（含编号），
@@ -550,10 +626,16 @@ class OperationLogMiddleware(BaseHTTPMiddleware):
                 data = None
             try:
                 resource_key, snapshot_model, id_idx = _classify(path)
+                # category_id 字段名耗材/硬件共用：按资源上下文选分类模型（见 _resolve_names）。
+                category_model = (
+                    HardwareCategory if resource_key == "hardware" else None
+                )
                 if snapshot_model is not None and request.method in ("PUT", "PATCH", "DELETE"):
                     entity_id = _extract_id(path, id_idx)
                     if entity_id:
-                        old_snapshot = await _snapshot_old(entity_id, snapshot_model)
+                        old_snapshot = await _snapshot_old(
+                            entity_id, snapshot_model, category_model=category_model
+                        )
             except Exception:
                 old_snapshot = None
 
@@ -576,7 +658,9 @@ class OperationLogMiddleware(BaseHTTPMiddleware):
                 async with async_session_factory() as session:
                     if isinstance(masked_data, dict):
                         try:
-                            detail["names"] = await _resolve_names(session, masked_data)
+                            detail["names"] = await _resolve_names(
+                                session, masked_data, category_model=category_model
+                            )
                         except Exception:
                             detail["names"] = {}
                     # 修改类操作：对照旧实体算 diff（外键用解析后的可读名称）。
@@ -608,6 +692,11 @@ class OperationLogMiddleware(BaseHTTPMiddleware):
                                 if any(isinstance(p, dict) and p.get("id") for p in positions)
                                 else "create"
                             )
+                    # 硬件设备联动（/hardwares/devices/{device_id}/hardwares[/{hw_id}]）：
+                    # POST = 分配（设备添加硬件），DELETE = 回收（设备删除硬件，回库可再分配）。
+                    # 路径无 assign/recover 语义段，须按方法 + 嵌套路径显式判定。
+                    if "/hardwares/devices/" in path:
+                        action = "assign" if request.method == "POST" else "recover"
                     # DELETE 操作：把旧实体快照的可读摘要写入 detail，
                     # 让前端能展示「删除了什么」而非只有一个 UUID。
                     if request.method == "DELETE" and old_dict:

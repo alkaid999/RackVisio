@@ -34,7 +34,7 @@ from app.models.user import User
 from app.repositories.user_repo import UserRepository
 
 # —— 权限目录（单一数据源；新增模块/操作只需扩展此处）——
-MODULES = ("room", "rack", "device", "link", "account", "consumable")
+MODULES = ("room", "rack", "device", "link", "account", "consumable", "hardware")
 OPERATIONS = ("view", "edit")
 
 ALL_PERMISSIONS: list[str] = [f"{m}:{o}" for m in MODULES for o in OPERATIONS]
@@ -53,6 +53,7 @@ MODULE_LABELS = {
     "link": "链路",
     "account": "账号",
     "consumable": "耗材",
+    "hardware": "硬件",
 }
 
 OPERATION_LABELS = {

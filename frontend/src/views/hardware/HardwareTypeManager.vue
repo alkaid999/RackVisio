@@ -2,19 +2,19 @@
   <div class="type-manager-page">
     <div class="page-head">
       <div>
-        <h2 class="page-title flex items-center gap-2"><Tags class="h-5 w-5 text-primary" />类型与分类管理</h2>
-        <p class="page-sub">维护耗材类型与分类字典，作为耗材筛选与统计的统一来源（仅管理员可编辑）</p>
+        <h2 class="page-title flex items-center gap-2"><Cpu class="h-5 w-5 text-primary" />硬件类型与分类管理</h2>
+        <p class="page-sub">维护硬件类型与分类字典，作为硬件管理与筛选的统一来源（预置主板/CPU/内存/硬盘/阵列卡/网卡/电源，可自定义）</p>
       </div>
     </div>
 
     <Card class="overflow-hidden">
       <!-- 双栏布局：左「类型」右「分类」，选中态高亮联动 -->
       <div class="grid grid-cols-1 gap-0 md:grid-cols-2">
-        <!-- 耗材类型 -->
+        <!-- 硬件类型 -->
         <div class="flex flex-col border-b border-border p-5 md:border-b-0 md:border-r">
           <div class="mb-3 flex items-center justify-between">
             <h3 class="flex items-center gap-2 text-sm font-semibold text-foreground">
-              耗材类型
+              硬件类型
               <span class="rounded-full bg-muted px-2 py-0.5 text-xs font-normal text-muted-foreground">{{ store.types.length }}</span>
             </h3>
             <Button size="sm" variant="outline" @click="openTypeCreate"><Plus class="h-3.5 w-3.5" />新建</Button>
@@ -31,10 +31,10 @@
               @click="selectType(t.id)"
             >
               <div class="flex min-w-0 items-center gap-2.5">
-                <span class="h-2.5 w-2.5 shrink-0 rounded-full" :style="{ backgroundColor: consumableTypeColor(t.id) }"></span>
+                <span class="h-2.5 w-2.5 shrink-0 rounded-full" :style="{ backgroundColor: hardwareTypeColor(t.id) }"></span>
                 <div class="min-w-0">
                   <div class="truncate text-sm font-medium text-foreground">{{ t.name }}</div>
-                  <div class="text-xs text-muted-foreground">{{ t.item_count }} 项 · {{ t.category_count }} 分类</div>
+                  <div class="text-xs text-muted-foreground">{{ t.item_count }} 件 · {{ t.category_count }} 分类</div>
                 </div>
               </div>
               <div class="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100" @click.stop>
@@ -74,7 +74,7 @@
               >
                 <div class="min-w-0">
                   <div class="truncate text-sm font-medium text-foreground">{{ c.name }}</div>
-                  <div class="text-xs text-muted-foreground">{{ c.item_count }} 项</div>
+                  <div class="text-xs text-muted-foreground">{{ c.item_count }} 件</div>
                 </div>
                 <div class="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
                   <!-- 手动排序：上移 / 下移（首条禁上、末条禁下） -->
@@ -93,7 +93,7 @@
       <!-- 类型新建/编辑弹窗 -->
       <Dialog
         v-model="typeDialogVisible"
-        :title="typeDraft.mode === 'edit' ? '编辑耗材类型' : '新建耗材类型'"
+        :title="typeDraft.mode === 'edit' ? '编辑硬件类型' : '新建硬件类型'"
         :z-index="'z-[60]'"
         :dismissible="false"
         class="max-w-md"
@@ -101,7 +101,7 @@
         <div class="space-y-3">
           <div>
             <label class="mb-1 block text-sm font-medium text-foreground">类型名称</label>
-            <Input v-model="typeDraft.name" placeholder="类型名称（如：网线）" />
+            <Input v-model="typeDraft.name" placeholder="类型名称（如：主板 / CPU / 内存）" />
           </div>
           <div>
             <label class="mb-1 block text-sm font-medium text-foreground">说明</label>
@@ -132,7 +132,7 @@
         <div class="space-y-3">
           <div>
             <label class="mb-1 block text-sm font-medium text-foreground">分类名称</label>
-            <Input v-model="catDraft.name" placeholder="分类名称（如：六类跳线）" />
+            <Input v-model="catDraft.name" placeholder="分类名称（如：DDR4 ECC）" />
           </div>
           <div>
             <label class="mb-1 block text-sm font-medium text-foreground">说明</label>
@@ -157,17 +157,17 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
-import { useConsumableStore } from '@/stores/consumable'
+import { useHardwareStore } from '@/stores/hardware'
 import { useToast } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
 import Dialog from '@/components/ui/dialog.vue'
 import Button from '@/components/ui/button.vue'
 import Input from '@/components/ui/input.vue'
 import Card from '@/components/ui/card.vue'
-import { Plus, Pencil, Trash2, Tags, Package, Layers, ChevronRight, MousePointerClick, ArrowUp, ArrowDown } from 'lucide-vue-next'
-import { consumableTypeColor, setConsumableTypeOrder } from '@/utils/constants'
+import { Plus, Pencil, Trash2, Cpu, Layers, ChevronRight, MousePointerClick, ArrowUp, ArrowDown } from 'lucide-vue-next'
+import { hardwareTypeColor, setHardwareTypeOrder } from '@/utils/constants'
 
-const store = useConsumableStore()
+const store = useHardwareStore()
 const { success, error: toastError } = useToast()
 const { confirm } = useConfirm()
 
@@ -184,7 +184,7 @@ const catDialogVisible = ref(false)
 
 async function loadTypes() {
   await store.fetchTypes()
-  setConsumableTypeOrder(store.types.map((t) => t.id))
+  setHardwareTypeOrder(store.types.map((t) => t.id))
   if (!selectedTypeId.value && store.types.length) {
     await selectType(store.types[0].id)
   }
@@ -210,8 +210,8 @@ async function moveType(id, dir) {
   if (idx < 0 || target < 0 || target >= store.types.length) return
   const list = store.types.map((t) => t.id)
   ;[list[idx], list[target]] = [list[target], list[idx]]
-  await store.reorderTypes(list) // 持久化并刷新（含 setConsumableTypeOrder 联动由调用方处理）
-  setConsumableTypeOrder(store.types.map((t) => t.id))
+  await store.reorderTypes(list) // 持久化并刷新（含 setHardwareTypeOrder 联动由调用方处理）
+  setHardwareTypeOrder(store.types.map((t) => t.id))
 }
 
 function isFirstCat(id) {
@@ -263,7 +263,6 @@ async function saveType() {
     success(typeDraft.mode === 'create' ? '类型已创建' : '类型已更新')
     typeDialogVisible.value = false
     typeDraft.mode = 'none'
-    // 保存后选中当前创建的类型，并让列表按「新增置顶」刷新。
     selectedTypeId.value = targetId
     await loadTypes()
     await selectType(targetId)
@@ -273,8 +272,8 @@ async function saveType() {
 }
 async function removeType(t) {
   const ok = await confirm({
-    title: '删除耗材类型',
-    description: `确认删除类型「${t.name}」？其下分类与耗材将一并删除，不可撤销。`,
+    title: '删除硬件类型',
+    description: `确认删除类型「${t.name}」？其下分类与硬件将一并删除，不可撤销。`,
     variant: 'danger',
     confirmText: '删除',
   })
@@ -320,9 +319,8 @@ async function saveCat() {
     success(catDraft.mode === 'create' ? '分类已创建' : '分类已更新')
     catDialogVisible.value = false
     catDraft.mode = 'none'
-    // 新增分类后立即同步分类列表（无需重新点类型）。
     await store.fetchCategories(selectedTypeId.value)
-    await store.fetchTypes() // 同步类型下的分类计数
+    await store.fetchTypes()
   } finally {
     catSaving.value = false
   }
@@ -330,7 +328,7 @@ async function saveCat() {
 async function removeCat(c) {
   const ok = await confirm({
     title: '删除分类',
-    description: `确认删除分类「${c.name}」？其下耗材将一并删除，不可撤销。`,
+    description: `确认删除分类「${c.name}」？其下硬件将一并删除，不可撤销。`,
     variant: 'danger',
     confirmText: '删除',
   })
