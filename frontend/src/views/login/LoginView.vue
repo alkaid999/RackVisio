@@ -61,8 +61,6 @@
           {{ loading ? '登录中…' : '登 录' }}
         </Button>
       </form>
-
-      <p class="login-hint">初始管理员首次登录请使用部署时配置的初始密码，登录后将强制修改密码</p>
     </div>
   </div>
 </template>
@@ -261,18 +259,5 @@ async function onSubmit() {
     opacity: 1;
     transform: none;
   }
-}
-
-.login-hint {
-  margin: 18px 0 0;
-  text-align: center;
-  font-size: 12px;
-  color: hsl(var(--muted-foreground));
-}
-.login-hint code {
-  padding: 1px 6px;
-  border-radius: 6px;
-  background: hsl(var(--muted));
-  font-size: 12px;
 }
 </style>
