@@ -670,10 +670,11 @@ async def seed_consumable_types(session: AsyncSession) -> None:
 
     # (类型名, 说明, [分类名...])，按展示顺序（索引越小越靠上）。
     type_defs = [
-        ("光纤", "光通信纤芯介质，用于长距离 / 高带宽传输", ["单模光纤", "多模光纤", "皮线光缆"]),
-        ("网线", "铜缆双绞线，用于短距离以太网接入", ["超五类网线", "六类网线", "超六类网线"]),
+        # 命名规范：类型=资产大类（名词）、分类=规格细分；「电源线缆」与硬件「电源模块」语义隔离。
+        ("光纤跳线", "光通信纤芯跳线，用于长距离 / 高带宽传输", ["单模光纤", "多模光纤", "皮线光缆"]),
+        ("双绞网线", "铜缆双绞线，用于短距离以太网接入", ["超五类网线", "六类网线", "超六类网线"]),
         ("光模块", "光电转换模块，插于设备 SFP 插槽", ["1G SFP", "10G SFP+", "25G SFP28"]),
-        ("电源线", "设备供电线缆，按制式区分", ["国标电源线", "美标电源线", "欧标电源线"]),
+        ("电源线缆", "设备供电线缆，按制式区分", ["国标电源线", "美标电源线", "欧标电源线"]),
     ]
     base = utcnow()
     n_types = len(type_defs)
@@ -722,13 +723,14 @@ async def seed_hardware_types(session: AsyncSession) -> None:
 
     # (类型名, 说明, [分类名...])，按展示顺序（索引越小越靠上）。
     type_defs = [
+        # 命名规范：类型=资产大类（名词）、分类=规格细分；「电源模块」与耗材「电源线缆」语义隔离。
         ("主板", "服务器/PC 主板，决定整机平台与扩展能力", ["标准 ATX", "定制服务器板"]),
-        ("CPU", "中央处理器", ["Intel Xeon", "Intel Core", "AMD EPYC", "海光"]),
-        ("内存", "运行内存条", ["DDR4 ECC", "DDR4 非ECC", "DDR5 ECC", "DDR5 非ECC"]),
+        ("CPU 处理器", "中央处理器", ["Intel Xeon", "Intel Core", "AMD EPYC", "海光"]),
+        ("内存条", "运行内存条", ["DDR4 ECC", "DDR4 非ECC", "DDR5 ECC", "DDR5 非ECC"]),
         ("硬盘", "存储介质（机械盘 / 固态盘 / NVMe）", ["SATA SSD", "NVMe SSD", "SAS 机械盘", "SATA 机械盘"]),
         ("阵列卡", "RAID 阵列卡 / HBA 卡", ["RAID 卡", "HBA 卡"]),
         ("网卡", "以太网适配器（含光口/电口）", ["1G 电口", "10G 光口", "25G 光口", "40G 光口"]),
-        ("电源", "服务器电源模块（冗余）", ["550W", "800W", "1200W", "2000W"]),
+        ("电源模块", "服务器电源模块（冗余）", ["550W", "800W", "1200W", "2000W"]),
     ]
     base = utcnow()
     n_types = len(type_defs)
@@ -802,6 +804,38 @@ async def _migrate_type_sort_order(session: AsyncSession) -> None:
     await session.flush()
 
 
+async def _migrate_rename_preset_types(session: AsyncSession) -> None:
+    """预置类型命名规范化（0015，文案优化：类型=资产大类+量词、与硬件语义隔离）。
+
+    仅对**精确匹配旧预置名**的类型重命名（不碰用户自定义类型），分类不动。
+    - 耗材：光纤→光纤跳线、网线→双绞网线、电源线→电源线缆（区分硬件「电源模块」）。
+    - 硬件：CPU→CPU 处理器、内存→内存条、电源→电源模块。
+    幂等：目标名已存在（如用户已手动改过）则跳过，避免撞 unique 约束。
+    """
+    renames = [
+        ("consumable_types", "光纤", "光纤跳线"),
+        ("consumable_types", "网线", "双绞网线"),
+        ("consumable_types", "电源线", "电源线缆"),
+        ("hardware_types", "CPU", "CPU 处理器"),
+        ("hardware_types", "内存", "内存条"),
+        ("hardware_types", "电源", "电源模块"),
+    ]
+    for table, old_name, new_name in renames:
+        # 目标名已存在（用户自定义或已迁移过）→ 跳过本次改名，避免唯一约束冲突。
+        exists = (
+            await session.execute(
+                text(f"SELECT 1 FROM {table} WHERE name = :n LIMIT 1"), {"n": new_name}
+            )
+        ).first()
+        if exists:
+            continue
+        await session.execute(
+            text(f"UPDATE {table} SET name = :new WHERE name = :old"),
+            {"new": new_name, "old": old_name},
+        )
+    await session.flush()
+
+
 # 版本化迁移注册表：未来新增迁移追加于此即可，已应用版本自动跳过（见 migrate()）。
 # 每项：(版本号, 迁移协程)。版本号建议用 4 位零填充递增（0001, 0002, ...）。
 MIGRATIONS: list = [
@@ -819,4 +853,5 @@ MIGRATIONS: list = [
     ("0012_user_must_change_password", _migrate_user_must_change_password),
     ("0013_user_created_at_datetime", _migrate_user_created_at_datetime),
     ("0014_type_sort_order", _migrate_type_sort_order),
+    ("0015_rename_preset_types", _migrate_rename_preset_types),
 ]

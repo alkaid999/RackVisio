@@ -2,8 +2,8 @@
   <div class="type-manager-page">
     <div class="page-head">
       <div>
-        <h2 class="page-title flex items-center gap-2"><Tags class="h-5 w-5 text-primary" />类型与分类管理</h2>
-        <p class="page-sub">维护耗材类型与分类字典，作为耗材筛选与统计的统一来源（仅管理员可编辑）</p>
+        <h2 class="page-title flex items-center gap-2"><Tags class="h-5 w-5 text-primary" />耗材类型与分类</h2>
+        <p class="page-sub">维护耗材类型与分类字典，作为耗材筛选与统计的统一来源</p>
       </div>
     </div>
 

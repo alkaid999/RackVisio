@@ -55,13 +55,14 @@ const nav = [
   },
   {
     // 需求#2：耗材管理升级为「资产管理」，统一管理耗材与硬件两大类资产。
+    // 父级已含「管理」，子菜单直接点明资产类型：耗材列表 / 硬件列表。
     label: '资产管理',
     icon: Package,
     children: [
       { to: '/consumables/types', label: '耗材类型与分类', icon: Tags, permission: 'consumable:edit' },
-      { to: '/consumables', label: '耗材管理', icon: PackageOpen, permission: 'consumable:view' },
+      { to: '/consumables', label: '耗材列表', icon: PackageOpen, permission: 'consumable:view' },
       { to: '/hardwares/types', label: '硬件类型与分类', icon: Cpu, permission: 'hardware:edit' },
-      { to: '/hardwares', label: '硬件管理', icon: ServerCog, permission: 'hardware:view' },
+      { to: '/hardwares', label: '硬件列表', icon: ServerCog, permission: 'hardware:view' },
     ],
   },
   {

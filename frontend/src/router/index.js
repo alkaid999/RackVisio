@@ -120,19 +120,19 @@ const routes = [
     path: '/consumables',
     name: 'ConsumableList',
     component: () => import('@/views/consumable/ConsumableList.vue'),
-    meta: { title: '耗材管理', requiresAuth: true, permission: 'consumable:view' },
+    meta: { title: '耗材列表', requiresAuth: true, permission: 'consumable:view' },
   },
   {
     path: '/consumables/types',
     name: 'ConsumableTypeManager',
     component: () => import('@/views/consumable/ConsumableTypeManager.vue'),
-    meta: { title: '类型与分类', requiresAuth: true, permission: 'consumable:edit' },
+    meta: { title: '耗材类型与分类', requiresAuth: true, permission: 'consumable:edit' },
   },
   {
     path: '/hardwares',
     name: 'HardwareList',
     component: () => import('@/views/hardware/HardwareList.vue'),
-    meta: { title: '硬件管理', requiresAuth: true, permission: 'hardware:view' },
+    meta: { title: '硬件列表', requiresAuth: true, permission: 'hardware:view' },
   },
   {
     path: '/hardwares/types',

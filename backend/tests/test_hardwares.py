@@ -56,12 +56,12 @@ async def _mk_device(client, name="HW-TEST-01"):
 
 # ============ 类型 / 分类 ============
 async def test_type_category_crud(client):
-    # 种子数据：预置 7 类硬件类型（主板/CPU/内存/硬盘/阵列卡/网卡/电源）。
+    # 种子数据：预置 7 类硬件类型（主板/CPU 处理器/内存条/硬盘/阵列卡/网卡/电源模块）。
     resp = await client.get("/api/v1/hardwares/types")
     assert resp.status_code == 200
     types = resp.json()["data"]
     names = {t["name"] for t in types}
-    assert {"主板", "CPU", "内存", "硬盘", "阵列卡", "网卡", "电源"} <= names
+    assert {"主板", "CPU 处理器", "内存条", "硬盘", "阵列卡", "网卡", "电源模块"} <= names
 
     # 自定义类型 + 分类。
     t = await _mk_hw_type(client, "显卡", "GPU 加速卡")

@@ -2,8 +2,8 @@
   <div class="type-manager-page">
     <div class="page-head">
       <div>
-        <h2 class="page-title flex items-center gap-2"><Cpu class="h-5 w-5 text-primary" />硬件类型与分类管理</h2>
-        <p class="page-sub">维护硬件类型与分类字典，作为硬件管理与筛选的统一来源（预置主板/CPU/内存/硬盘/阵列卡/网卡/电源，可自定义）</p>
+        <h2 class="page-title flex items-center gap-2"><Cpu class="h-5 w-5 text-primary" />硬件类型与分类</h2>
+        <p class="page-sub">维护硬件类型与分类字典，作为硬件筛选与统计的统一来源（预置主板 / CPU 处理器 / 内存条 / 硬盘 / 阵列卡 / 网卡 / 电源模块，可自定义）</p>
       </div>
     </div>
 
