@@ -113,12 +113,28 @@
                 {{ room.status === 'active' ? '启用' : '停用' }}
               </span>
             </div>
-            <div class="space-y-1.5 text-sm text-muted-foreground">
-              <div class="flex justify-between"><span>编号</span><span class="text-foreground">{{ room.code }}</span></div>
-              <div class="flex justify-between"><span>别名</span><span class="text-foreground">{{ room.alias || '—' }}</span></div>
-              <div class="flex justify-between"><span>区域</span><span class="text-foreground">{{ room.area || '—' }}</span></div>
-              <div class="flex justify-between"><span>楼宇/楼层</span><span class="text-foreground">{{ [room.building, room.floor].filter(Boolean).join(' / ') || '—' }}</span></div>
-              <div class="flex justify-between"><span>地址</span><span class="text-foreground truncate max-w-[12rem]">{{ room.address || '—' }}</span></div>
+            <!-- 信息区：每行「小图标 + 文本」（与机柜列表卡片一致） -->
+            <div class="mt-2 space-y-1.5 text-xs text-muted-foreground">
+              <div class="flex items-center gap-1">
+                <MapPin class="h-3.5 w-3.5 shrink-0" />
+                <span class="truncate">编号：{{ room.code || '—' }}</span>
+              </div>
+              <div class="flex items-center gap-1">
+                <Tag class="h-3.5 w-3.5 shrink-0" />
+                <span class="truncate">别名：{{ room.alias || '—' }}</span>
+              </div>
+              <div class="flex items-center gap-1">
+                <MapIcon class="h-3.5 w-3.5 shrink-0" />
+                <span class="truncate">区域：{{ room.area || '—' }}</span>
+              </div>
+              <div class="flex items-center gap-1">
+                <Building2 class="h-3.5 w-3.5 shrink-0" />
+                <span class="truncate">楼宇 / 楼层：{{ [room.building, room.floor].filter(Boolean).join(' / ') || '—' }}</span>
+              </div>
+              <div v-if="room.address" class="flex items-center gap-1">
+                <MapPin class="h-3.5 w-3.5 shrink-0" />
+                <span class="truncate">地址：{{ room.address }}</span>
+              </div>
             </div>
             <div class="mt-2.5 flex flex-wrap justify-end gap-1 border-t border-border pt-2.5">
               <EntityActions v-if="canEdit" variant="full" :show-view="false" @view="() => goDetail(room.id)" @edit="() => openEdit(room.id)" @delete="() => onDelete(room)" />
@@ -127,24 +143,28 @@
         </div>
       </div>
 
-      <!-- 表格视图 -->
+      <!-- 表格视图（与硬件列表标准表格一致） -->
       <div v-else>
-        <div v-if="!store.rooms.length">
-          <EmptyState :icon="Server" title="暂无机房" />
+        <div v-if="store.loading" class="flex justify-center py-16">
+          <Spinner class="h-6 w-6 text-primary" />
         </div>
-        <Table v-else>
-          <TableHeader>
-            <TableRow>
-              <TableHead v-for="col in roomColumns" :key="col.key">{{ col.label }}</TableHead>
-              <TableHead class="w-32 text-right">操作</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            <TableRow v-for="room in store.rooms" :key="room.id">
-              <TableCell v-for="col in roomColumns" :key="col.key" :class="isMutedCol(col.key) ? 'text-muted-foreground' : ''">
-                <template v-if="col.key === 'name'">
-                  <button class="font-medium text-primary hover:underline" @click="goDetail(room.id)">{{ room.name }}</button>
-                </template>
+        <template v-else>
+          <div v-if="!store.rooms.length">
+            <EmptyState :icon="Server" title="暂无机房" />
+          </div>
+          <Table v-else class="table-fixed w-full">
+            <TableHeader>
+              <TableRow>
+                <TableHead v-for="col in roomColumns" :key="col.key" :class="col.width">{{ col.label }}</TableHead>
+                <TableHead class="w-32 text-right">操作</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow v-for="room in store.rooms" :key="room.id">
+                <TableCell v-for="col in roomColumns" :key="col.key" :class="isMutedCol(col.key) ? 'text-muted-foreground' : ''">
+                  <template v-if="col.key === 'name'">
+                    <button class="block w-full truncate font-medium text-primary hover:underline" @click="goDetail(room.id)">{{ room.name }}</button>
+                  </template>
                 <template v-else-if="col.key === 'code'">{{ room.code }}</template>
                 <template v-else-if="col.key === 'alias'">{{ room.alias || '—' }}</template>
                 <template v-else-if="col.key === 'area'">{{ room.area || '—' }}</template>
@@ -169,6 +189,7 @@
             </TableRow>
           </TableBody>
         </Table>
+        </template>
       </div>
     </template>
 
@@ -191,7 +212,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { LayoutGrid, List, Plus, Server, Search, Filter, Undo2, MapPin, Activity, Download, Upload, ChevronDown, FileSpreadsheet, FileText } from 'lucide-vue-next'
+import { LayoutGrid, List, Plus, Server, Search, Filter, Undo2, MapPin, Activity, Download, Upload, ChevronDown, FileSpreadsheet, FileText, Tag, Map as MapIcon, Building2 } from 'lucide-vue-next'
 import { useRoomStore } from '@/stores/room'
 import { useAuthStore } from '@/stores/auth'
 import RoomForm from '@/views/room/RoomForm.vue'
@@ -241,7 +262,7 @@ const viewMode = ref('card')
 
 // 分页：卡片每页 12，表格每页 10（服务端分页）。
 const page = ref(1)
-const pageSize = computed(() => (viewMode.value === 'card' ? 12 : 10))
+const pageSize = computed(() => (viewMode.value === 'card' ? 12 : 20))
 const totalPages = computed(() => Math.max(1, Math.ceil(store.total / pageSize.value)))
 function setView(mode) {
   if (viewMode.value === mode) return
@@ -252,13 +273,13 @@ function setView(mode) {
 
 // 机房列表表格固定列（移除「显示字段」配置功能）。
 const roomColumns = [
-  { key: 'name', label: '名称' },
-  { key: 'code', label: '编号' },
-  { key: 'alias', label: '别名' },
-  { key: 'area', label: '区域' },
-  { key: 'building_floor', label: '楼宇/楼层' },
-  { key: 'address', label: '地址' },
-  { key: 'status', label: '状态' },
+  { key: 'name', label: '名称', width: 'w-36' },
+  { key: 'code', label: '编号', width: 'w-24' },
+  { key: 'alias', label: '别名', width: 'w-24' },
+  { key: 'area', label: '区域', width: 'w-24' },
+  { key: 'building_floor', label: '楼宇/楼层', width: 'w-32' },
+  { key: 'address', label: '地址', width: 'w-40' },
+  { key: 'status', label: '状态', width: 'w-20' },
 ]
 // 名称列以强调样式呈现，其余文本列用 muted。
 const EMPHASIS_ROOM_COLS = new Set(['name'])

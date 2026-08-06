@@ -580,6 +580,23 @@ export function hardwareTypeBadgeStyle(typeId) {
   }
 }
 
+// ============ 品牌可视化（硬件列表品牌首字母圆标）============
+// 品牌名 hash → 稳定色相：同一品牌永远同色（Intel 恒蓝系、Kingston 恒橙系），
+// 不同品牌色相分散，无需人工配置。
+export function brandColor(brand) {
+  if (!brand) return '#909399'
+  let h = 0
+  for (let i = 0; i < brand.length; i++) {
+    h = (h * 31 + brand.charCodeAt(i)) >>> 0
+  }
+  return `hsl(${h % 360}, 55%, 42%)`
+}
+// 品牌首字母（英文取首字母大写，中文取首字）。
+export function brandInitial(brand) {
+  if (!brand) return '?'
+  return brand.trim().charAt(0).toUpperCase()
+}
+
 // 操作日志「变更字段」中文标签（H-01：自 OperationLog.vue 移入，集中管理）。
 // 覆盖 DCIM 常用字段；未命中的 key 由调用方退化为可读原文。
 export const LOG_FIELD_LABELS = {

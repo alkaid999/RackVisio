@@ -113,50 +113,72 @@
       </template>
     </div>
 
-    <!-- 表格视图：虚拟滚动表（选择列 + 行窗口化），大批量机柜下 DOM 有界、滚动流畅 -->
+    <!-- 表格视图：标准表格（与硬件 / 机房列表一致；选择列 + 批量操作保留） -->
     <div v-else>
-      <VirtualTable
-        :columns="columns"
-        :rows="racks"
-        :row-height="52"
-        :height="560"
-        key-field="id"
-        :selectable="canEdit"
-        :selected-keys="[...selected]"
-        :all-selected="allPageSelected"
-        :indeterminate="allPageIndeterminate"
-        :loading="loading"
-        :row-class="(row) => (isSelected(row.id) ? 'bg-primary/5' : '')"
-        @toggle-row="toggleRow"
-        @toggle-all="toggleAllPage"
-      >
-        <template #row="{ row }">
-          <div class="vt-cell px-3">
-            <button class="font-medium text-primary hover:underline" @click="goRack(row.id)">{{ row.name }}</button>
-          </div>
-          <div class="vt-cell px-3 text-muted-foreground">{{ row.column_code }} / {{ row.code }}</div>
-          <div class="vt-cell px-3 text-muted-foreground">{{ row.rack_group || '—' }}</div>
-          <div class="vt-cell px-3 text-muted-foreground">{{ row.room_name || '—' }}</div>
-          <div class="vt-cell px-3 text-muted-foreground">{{ row.used_u }} / {{ row.total_u }}U</div>
-          <div class="vt-cell px-3">
-            <div class="h-2.5 w-full overflow-hidden rounded-full bg-muted">
-              <div class="h-full rounded-full" :style="{ width: fillPct(row) + '%', backgroundColor: capacityColor(row.used_u / row.total_u) }" />
-            </div>
-          </div>
-          <div class="vt-cell px-3">
-            <div class="flex items-center gap-2">
-              <div class="h-2.5 flex-1 overflow-hidden rounded-full bg-muted">
-                <div class="h-full rounded-full" :style="{ width: powerPct(row) + '%', backgroundColor: powerColor(row) }" />
-              </div>
-              <span class="w-9 shrink-0 text-right text-xs text-muted-foreground">{{ powerPct(row) + '%' }}</span>
-            </div>
-          </div>
-          <div class="vt-cell px-3"><StatusBadge type="rack" :value="row.status" /></div>
-          <div class="vt-cell flex justify-end gap-1 pr-3">
-            <EntityActions :show-edit="canEdit" :show-delete="canEdit" @view="() => goRack(row.id)" @edit="() => onEdit(row)" @delete="() => onDelete(row)" />
-          </div>
-        </template>
-      </VirtualTable>
+      <div v-if="loading" class="flex justify-center py-16">
+        <Spinner class="h-6 w-6 text-primary" />
+      </div>
+      <template v-else>
+        <div v-if="!racks.length">
+          <EmptyState title="暂无机柜数据" />
+        </div>
+        <Table v-else class="table-fixed w-full">
+          <TableHeader>
+            <TableRow>
+              <TableHead v-if="canEdit" class="w-10">
+                <Checkbox
+                  :model-value="allPageSelected"
+                  :indeterminate="allPageIndeterminate"
+                  aria-label="全选本页"
+                  @update:model-value="(v) => toggleAllPage(v)"
+                />
+              </TableHead>
+              <TableHead class="w-36">名称</TableHead>
+              <TableHead class="w-28">列/编号</TableHead>
+              <TableHead class="w-20">分组</TableHead>
+              <TableHead class="w-28">所属机房</TableHead>
+              <TableHead class="w-20">容量</TableHead>
+              <TableHead class="w-28">使用率</TableHead>
+              <TableHead class="w-28">功率</TableHead>
+              <TableHead class="w-20">状态</TableHead>
+              <TableHead class="w-28 text-right">操作</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            <TableRow v-for="row in racks" :key="row.id" :class="isSelected(row.id) ? 'bg-primary/5' : ''">
+              <TableCell v-if="canEdit">
+                <Checkbox :model-value="isSelected(row.id)" aria-label="选择行" @update:model-value="() => toggleRow(row.id)" />
+              </TableCell>
+              <TableCell>
+                <button class="block w-full truncate font-medium text-primary hover:underline" @click="goRack(row.id)">{{ row.name }}</button>
+              </TableCell>
+              <TableCell class="text-muted-foreground"><span class="block truncate">{{ row.column_code }} / {{ row.code }}</span></TableCell>
+              <TableCell class="text-muted-foreground"><span class="block truncate">{{ row.rack_group || '—' }}</span></TableCell>
+              <TableCell class="text-muted-foreground"><span class="block truncate">{{ row.room_name || '—' }}</span></TableCell>
+              <TableCell class="text-muted-foreground">{{ row.used_u }} / {{ row.total_u }}U</TableCell>
+              <TableCell>
+                <div class="h-2.5 w-full overflow-hidden rounded-full bg-muted">
+                  <div class="h-full rounded-full" :style="{ width: fillPct(row) + '%', backgroundColor: capacityColor(row.used_u / row.total_u) }" />
+                </div>
+              </TableCell>
+              <TableCell>
+                <div class="flex items-center gap-2">
+                  <div class="h-2.5 flex-1 overflow-hidden rounded-full bg-muted">
+                    <div class="h-full rounded-full" :style="{ width: powerPct(row) + '%', backgroundColor: powerColor(row) }" />
+                  </div>
+                  <span class="w-9 shrink-0 text-right text-xs text-muted-foreground">{{ powerPct(row) + '%' }}</span>
+                </div>
+              </TableCell>
+              <TableCell><StatusBadge type="rack" :value="row.status" /></TableCell>
+              <TableCell class="text-right">
+                <div class="flex justify-end gap-1">
+                  <EntityActions :show-edit="canEdit" :show-delete="canEdit" @view="() => goRack(row.id)" @edit="() => onEdit(row)" @delete="() => onDelete(row)" />
+                </div>
+              </TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
+      </template>
     </div>
 
     <!-- 分页（卡片/表格共用，跟随当前视图模式每页条数） -->
@@ -210,7 +232,13 @@ import Select from '@/components/ui/select.vue'
 import SelectTrigger from '@/components/ui/select-trigger.vue'
 import SelectContent from '@/components/ui/select-content.vue'
 import SelectItem from '@/components/ui/select-item.vue'
-import VirtualTable from '@/components/common/VirtualTable.vue'
+import Table from '@/components/ui/table.vue'
+import TableHeader from '@/components/ui/table-header.vue'
+import TableBody from '@/components/ui/table-body.vue'
+import TableRow from '@/components/ui/table-row.vue'
+import TableHead from '@/components/ui/table-head.vue'
+import TableCell from '@/components/ui/table-cell.vue'
+import Checkbox from '@/components/ui/checkbox.vue'
 import EmptyState from '@/components/ui/empty-state.vue'
 import Spinner from '@/components/ui/spinner.vue'
 import ListPager from '@/components/common/ListPager.vue'
@@ -247,7 +275,7 @@ const { filter, clear } = usePersistentFilter(filterKey, () => ({ keyword: '', r
 const viewMode = ref('card')
 // 分页：卡片每页 12，表格每页 50（服务端分页，配合虚拟滚动窗口化渲染）。
 const page = ref(1)
-const pageSize = computed(() => (viewMode.value === 'card' ? 12 : 50))
+const pageSize = computed(() => (viewMode.value === 'card' ? 12 : 20))
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize.value)))
 function setView(mode) {
   if (viewMode.value === mode) return
@@ -257,19 +285,6 @@ function setView(mode) {
   page.value = 1
   load()
 }
-// 机柜列表表格固定列（移除「显示字段」配置功能）；附带列宽供 VirtualTable 推导 grid 模板。
-const rackColumns = [
-  { key: 'name', label: '名称', width: 'minmax(140px, 1.4fr)' },
-  { key: 'col_code', label: '列/编号', width: '10rem' },
-  { key: 'rack_group', label: '分组', width: '8rem' },
-  { key: 'room_name', label: '所属机房', width: '10rem' },
-  { key: 'capacity', label: '容量', width: '8rem' },
-  { key: 'usage', label: '使用率', width: 'minmax(120px, 1fr)' },
-  { key: 'power', label: '功率', width: 'minmax(140px, 1fr)' },
-  { key: 'status', label: '状态', width: '100px' },
-  { key: 'actions', label: '操作', width: '8rem', align: 'right' },
-]
-const columns = rackColumns
 const rackFormVisible = ref(false)
 const formMode = ref('create')
 const editRackId = ref('')

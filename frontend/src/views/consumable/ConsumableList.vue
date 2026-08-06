@@ -106,11 +106,12 @@
               <div class="flex justify-between"><span>分类</span><span class="text-foreground">{{ item.category_name || '—' }}</span></div>
               <div class="flex justify-between"><span>规格</span><span class="text-foreground">{{ item.spec || '—' }}</span></div>
             </div>
-            <div class="mt-2.5 flex flex-wrap justify-end gap-1 border-t border-border pt-2.5">
-              <Button variant="ghost" size="sm" @click.stop="openHistory(item)"><History class="h-3.5 w-3.5" />历史</Button>
-              <Button v-if="canEdit" variant="ghost" size="sm" @click.stop="openStock(item)"><ArrowLeftRight class="h-3.5 w-3.5" />变动</Button>
-              <Button v-if="canEdit" variant="ghost" size="sm" @click.stop="openEdit(item.id)"><Pencil class="h-3.5 w-3.5" />编辑</Button>
-              <Button v-if="canEdit" variant="ghost" size="sm" class="text-destructive hover:bg-destructive/10" @click.stop="onDelete(item)"><Trash2 class="h-3.5 w-3.5" />删除</Button>
+            <!-- 操作区：纯图标单行（紧凑排列，不换行；与表格视图 EntityActions 图标风格一致） -->
+            <div class="mt-2 flex items-center justify-end gap-0.5 border-t border-border pt-2">
+              <Button variant="ghost" size="icon-sm" title="变动历史" @click.stop="openHistory(item)"><History class="h-4 w-4" /></Button>
+              <Button v-if="canEdit" variant="ghost" size="icon-sm" title="库存变动" @click.stop="openStock(item)"><ArrowLeftRight class="h-4 w-4" /></Button>
+              <Button v-if="canEdit" variant="ghost" size="icon-sm" title="编辑" @click.stop="openEdit(item.id)"><Pencil class="h-4 w-4" /></Button>
+              <Button v-if="canEdit" variant="ghost" size="icon-sm" title="删除" class="text-destructive hover:bg-destructive/10" @click.stop="onDelete(item)"><Trash2 class="h-4 w-4" /></Button>
             </div>
           </Card>
         </div>

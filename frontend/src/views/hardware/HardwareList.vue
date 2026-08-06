@@ -93,37 +93,65 @@
         </div>
         <div v-else class="grid-cards">
           <Card v-for="item in store.items" :key="item.id" hover class="group">
-            <div class="mb-3 flex items-start justify-between gap-2">
-              <div class="min-w-0">
-                <span class="block truncate text-base font-semibold text-foreground">{{ item.name }}</span>
-                <span v-if="item.sn" class="mt-0.5 block truncate font-mono text-xs text-muted-foreground">SN: {{ item.sn }}</span>
-              </div>
+            <!-- 标题行：名称 + 类型徽章（品牌移入信息区，取消圆标） -->
+            <div class="flex items-center justify-between gap-2">
+              <span class="truncate text-base font-semibold text-foreground">{{ item.name }}</span>
               <span
                 class="shrink-0 rounded-full border px-2 py-0.5 text-xs font-medium"
                 :style="typeBadgeStyle(item.type_id)"
               >{{ item.type_name }}</span>
             </div>
-            <div class="mb-3 flex items-center gap-1.5">
-              <span
-                class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium"
-                :style="{ backgroundColor: (HARDWARE_STATUS_COLORS[item.status] || '#909399') + '22', color: HARDWARE_STATUS_COLORS[item.status] || '#909399' }"
-              >
-                <span class="h-1.5 w-1.5 rounded-full" :style="{ backgroundColor: HARDWARE_STATUS_COLORS[item.status] || '#909399' }"></span>
-                {{ item.status }}
-              </span>
-              <span v-if="item.status === '已安装' && item.assigned_device_name" class="truncate text-xs text-muted-foreground">
-                于 {{ item.assigned_device_name }}
-              </span>
+
+            <!-- 信息区：每行「小图标 + 文本」（与机柜 / 设备列表卡片一致） -->
+            <div class="mt-2 space-y-1.5 text-xs text-muted-foreground">
+              <div class="flex items-center gap-1">
+                <Factory class="h-3.5 w-3.5 shrink-0" />
+                <span class="truncate">品牌：{{ item.brand || '—' }}</span>
+              </div>
+              <div class="flex items-center gap-1">
+                <Package class="h-3.5 w-3.5 shrink-0" />
+                <span class="truncate">分类：{{ item.category_name || '—' }}</span>
+              </div>
+              <div class="flex items-center gap-1">
+                <Activity class="h-3.5 w-3.5 shrink-0" />
+                <span class="truncate">
+                  状态：{{ item.status || '—' }}
+                  <button
+                    v-if="item.status === '已安装' && item.assigned_device_id"
+                    class="ml-0.5 inline-flex items-center gap-0.5 font-medium text-primary hover:underline"
+                    :title="`查看设备 ${item.assigned_device_name || ''}`"
+                    @click.stop="goDevice(item.assigned_device_id)"
+                  ><HardDrive class="h-3 w-3 shrink-0" />{{ item.assigned_device_name || '设备' }}</button>
+                </span>
+              </div>
+              <div class="flex items-center gap-1">
+                <Ruler class="h-3.5 w-3.5 shrink-0" />
+                <span class="truncate">规格 / 型号：{{ item.spec || '—' }}</span>
+              </div>
+              <div class="flex items-center gap-1">
+                <Barcode class="h-3.5 w-3.5 shrink-0" />
+                <span class="truncate font-mono">SN：{{ item.sn || '—' }}</span>
+                <button
+                  v-if="item.sn"
+                  class="ml-auto shrink-0 text-muted-foreground/60 transition-colors hover:text-primary"
+                  title="复制 SN"
+                  @click.stop="copySn(item.sn)"
+                ><Copy class="h-3 w-3" /></button>
+              </div>
             </div>
-            <div class="space-y-1.5 text-sm text-muted-foreground">
-              <div class="flex justify-between"><span>品牌</span><span class="text-foreground">{{ item.brand || '—' }}</span></div>
-              <div class="flex justify-between"><span>分类</span><span class="text-foreground">{{ item.category_name || '—' }}</span></div>
-              <div class="flex justify-between"><span>规格</span><span class="text-foreground">{{ item.spec || '—' }}</span></div>
-            </div>
-            <div class="mt-2.5 flex flex-wrap justify-end gap-1 border-t border-border pt-2.5">
-              <Button variant="ghost" size="sm" @click.stop="openHistory(item)"><History class="h-3.5 w-3.5" />历史</Button>
-              <Button v-if="canEdit" variant="ghost" size="sm" @click.stop="openEdit(item.id)"><Pencil class="h-3.5 w-3.5" />编辑</Button>
-              <Button v-if="canEdit" variant="ghost" size="sm" class="text-destructive hover:bg-destructive/10" @click.stop="onDelete(item)"><Trash2 class="h-3.5 w-3.5" />删除</Button>
+
+            <!-- 底部操作：图标 + 文字（与机柜 / 设备列表一致），历史走 extra 动作 -->
+            <div class="mt-2.5 flex justify-end gap-1 border-t border-border pt-2.5">
+              <EntityActions
+                variant="full"
+                :extra-actions="rowExtraActions(item)"
+                :show-view="false"
+                :show-edit="canEdit"
+                :show-delete="canEdit"
+                @view="openHistory(item)"
+                @edit="openEdit(item.id)"
+                @delete="onDelete(item)"
+              />
             </div>
           </Card>
         </div>
@@ -134,42 +162,70 @@
         <div v-if="!store.items.length">
           <EmptyState :icon="Cpu" title="暂无硬件" />
         </div>
-        <Table v-else>
+        <Table v-else class="table-fixed w-full">
           <TableHeader>
             <TableRow>
-              <TableHead>名称</TableHead>
-              <TableHead>类型</TableHead>
-              <TableHead>分类</TableHead>
-              <TableHead>品牌</TableHead>
-              <TableHead>SN 号</TableHead>
-              <TableHead>规格</TableHead>
-              <TableHead>状态</TableHead>
-              <TableHead class="w-44 text-right">操作</TableHead>
+              <TableHead class="w-36">名称</TableHead>
+              <TableHead class="w-48">类型 / 分类</TableHead>
+              <TableHead class="w-32">品牌</TableHead>
+              <TableHead class="w-28">SN 号</TableHead>
+              <TableHead class="w-32">规格 / 型号</TableHead>
+              <TableHead class="w-36">状态 / 所属设备</TableHead>
+              <TableHead class="w-32 text-right">操作</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             <TableRow v-for="item in store.items" :key="item.id">
               <TableCell>
-                <button class="font-medium text-primary hover:underline" @click="openHistory(item)">{{ item.name }}</button>
+                <!-- 名称单独（不与规格合并，与卡片一致） -->
+                <button class="block w-full truncate font-medium text-primary hover:underline" @click="openHistory(item)">
+                  {{ item.name }}
+                </button>
               </TableCell>
               <TableCell>
-                <span
-                  class="shrink-0 rounded-full border px-2 py-0.5 text-xs font-medium"
-                  :style="typeBadgeStyle(item.type_id)"
-                >{{ item.type_name }}</span>
+                <!-- 类型徽章 + 分类徽章（灰底次级）；table-fixed 下分类长名 truncate 防溢出 -->
+                <div class="flex items-center gap-1">
+                  <span
+                    class="shrink-0 rounded-full border px-2 py-0.5 text-xs font-medium"
+                    :style="typeBadgeStyle(item.type_id)"
+                  >{{ item.type_name }}</span>
+                  <span class="max-w-[5rem] truncate rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">{{ item.category_name || '—' }}</span>
+                </div>
               </TableCell>
-              <TableCell class="text-muted-foreground">{{ item.category_name || '—' }}</TableCell>
-              <TableCell class="text-muted-foreground">{{ item.brand || '—' }}</TableCell>
-              <TableCell class="font-mono text-muted-foreground">{{ item.sn || '—' }}</TableCell>
-              <TableCell class="text-muted-foreground">{{ item.spec || '—' }}</TableCell>
               <TableCell>
-                <span
-                  class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium"
-                  :style="{ backgroundColor: (HARDWARE_STATUS_COLORS[item.status] || '#909399') + '22', color: HARDWARE_STATUS_COLORS[item.status] || '#909399' }"
-                >
-                  <span class="h-1.5 w-1.5 rounded-full" :style="{ backgroundColor: HARDWARE_STATUS_COLORS[item.status] || '#909399' }"></span>
-                  {{ item.status }}
+                <span v-if="item.brand" class="block min-w-0 max-w-[7rem] truncate text-muted-foreground">{{ item.brand }}</span>
+                <span v-else class="text-muted-foreground">—</span>
+              </TableCell>
+              <TableCell>
+                <span v-if="item.sn" class="flex items-center gap-1">
+                  <span class="block min-w-0 truncate font-mono text-muted-foreground">{{ item.sn }}</span>
+                  <button
+                    class="shrink-0 text-muted-foreground/60 transition-colors hover:text-primary"
+                    title="复制 SN"
+                    @click="copySn(item.sn)"
+                  ><Copy class="h-3.5 w-3.5" /></button>
                 </span>
+                <span v-else class="text-muted-foreground">—</span>
+              </TableCell>
+              <TableCell>
+                <span class="block w-full truncate text-muted-foreground">{{ item.spec || '—' }}</span>
+              </TableCell>
+              <TableCell>
+                <div class="flex items-center gap-1.5">
+                  <span
+                    class="inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium"
+                    :style="{ backgroundColor: (HARDWARE_STATUS_COLORS[item.status] || '#909399') + '22', color: HARDWARE_STATUS_COLORS[item.status] || '#909399' }"
+                  >
+                    <span class="h-1.5 w-1.5 rounded-full" :style="{ backgroundColor: HARDWARE_STATUS_COLORS[item.status] || '#909399' }"></span>
+                    {{ item.status }}
+                  </span>
+                  <button
+                    v-if="item.status === '已安装' && item.assigned_device_id"
+                    class="inline-flex max-w-[5rem] items-center gap-0.5 truncate text-xs font-medium text-primary hover:underline"
+                    :title="`查看设备 ${item.assigned_device_name || ''}`"
+                    @click="goDevice(item.assigned_device_id)"
+                  ><HardDrive class="h-3 w-3 shrink-0" />{{ item.assigned_device_name || '设备' }}</button>
+                </div>
               </TableCell>
               <TableCell class="text-right">
                 <div class="flex justify-end gap-1">
@@ -201,9 +257,11 @@
 
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import {
   LayoutGrid, List, Plus, Cpu, Search, Filter, Undo2,
-  History, Pencil, Trash2, Layers,
+  History, Layers, Copy, HardDrive,
+  Package, Ruler, Barcode, Activity, Factory,
 } from 'lucide-vue-next'
 import { useHardwareStore } from '@/stores/hardware'
 import { useAuthStore } from '@/stores/auth'
@@ -239,8 +297,35 @@ import SelectItem from '@/components/ui/select-item.vue'
 
 const store = useHardwareStore()
 const auth = useAuthStore()
+const router = useRouter()
 const { success } = useToast()
 const { confirm } = useConfirm()
+
+// 跳转设备详情（硬件列表「所属设备」联动）。
+function goDevice(deviceId) {
+  router.push(`/devices/${deviceId}`)
+}
+// 复制 SN：优先 Clipboard API，http 非安全上下文回退 execCommand 临时 textarea。
+async function copySn(sn) {
+  if (!sn) return
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(sn)
+    } else {
+      const ta = document.createElement('textarea')
+      ta.value = sn
+      ta.style.position = 'fixed'
+      ta.style.opacity = '0'
+      document.body.appendChild(ta)
+      ta.select()
+      document.execCommand('copy')
+      document.body.removeChild(ta)
+    }
+    success('SN 已复制')
+  } catch (e) {
+    // 复制失败静默（拦截器不提示，避免打扰）
+  }
+}
 
 // 硬件类型配色基于「全量类型有序列表」统一计算（与耗材独立映射，避免串色）。
 watch(
@@ -261,7 +346,7 @@ const { filter, clear } = usePersistentFilter('HardwareList', () => ({
 const viewMode = ref('card')
 
 const page = ref(1)
-const pageSize = computed(() => (viewMode.value === 'card' ? 12 : 10))
+const pageSize = computed(() => (viewMode.value === 'card' ? 12 : 20))
 const totalPages = computed(() => Math.max(1, Math.ceil(store.total / pageSize.value)))
 
 const typeSelected = computed(() => filter.typeId && filter.typeId !== SELECT_ALL)
