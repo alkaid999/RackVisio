@@ -14,13 +14,14 @@ from __future__ import annotations
 
 from typing import Optional
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import utcnow
 from app.core.enums import HardwareOpType, HardwareStatus
 from app.core.exceptions import ConflictError, NotFoundError, ValidationError
 from app.models.device import Device
-from app.models.hardware import HardwareItem
+from app.models.hardware import HardwareCategory, HardwareItem
 from app.repositories.device_repo import DeviceRepository
 from app.repositories.hardware_repo import (
     HardwareCategoryRepository,
@@ -33,6 +34,7 @@ from app.schemas.hardware import (
     HardwareCategoryCreate,
     HardwareCategoryOut,
     HardwareCategoryUpdate,
+    HardwareImportItem,
     HardwareItemCreate,
     HardwareItemOut,
     HardwareItemUpdate,
@@ -41,6 +43,7 @@ from app.schemas.hardware import (
     HardwareTypeOut,
     HardwareTypeUpdate,
 )
+from app.schemas.common import ImportFailure, ImportResult
 
 
 class HardwareService:
@@ -160,6 +163,61 @@ class HardwareService:
         await self.session.commit()
         obj = await self.item_repo.get(obj.id)
         return await self._item_out(obj)
+
+    async def import_hardwares(self, items: list[dict], operator: Optional[str] = None) -> ImportResult:
+        """批量导入硬件（与机柜/设备导入一致）：类型/分类按**名称**定位。
+
+        逐行 ``HardwareImportItem`` 校验 + 复用 create_item（含 SN 唯一性与「建档入库」
+        留痕、行内独立 commit）；单行失败仅计入 failures、不波及其余行。
+        返回成功条数与失败明细（供前端展示「成功 N / 失败 M」）。
+        """
+        result = ImportResult()
+        types = await self.type_repo.list()
+        type_by_name = {t.name: t for t in types}
+        # 全量分类按 (type_id, name) 建映射，避免逐行查询。
+        cats = (
+            await self.session.execute(select(HardwareCategory))
+        ).scalars().all()
+        cat_by_key = {(c.type_id, c.name): c for c in cats}
+
+        for idx, item in enumerate(items):
+            row = idx + 1
+            try:
+                data = HardwareImportItem.model_validate(item)
+            except Exception as exc:
+                result.failures.append(ImportFailure(row=row, errors=[f"字段校验失败：{exc}"]))
+                continue
+            t = type_by_name.get(data.type_name)
+            if t is None:
+                result.failures.append(ImportFailure(row=row, errors=[f"类型「{data.type_name}」不存在（请先在类型管理页创建）"]))
+                continue
+            c = cat_by_key.get((t.id, data.category_name))
+            if c is None:
+                result.failures.append(
+                    ImportFailure(
+                        row=row,
+                        errors=[f"分类「{data.category_name}」不存在于类型「{data.type_name}」"],
+                    )
+                )
+                continue
+            try:
+                await self.create_item(
+                    HardwareItemCreate(
+                        type_id=t.id,
+                        category_id=c.id,
+                        name=data.name,
+                        brand=data.brand,
+                        sn=data.sn,
+                        spec=data.spec,
+                        remark=data.remark,
+                    ),
+                    operator=operator,
+                )
+                result.created += 1
+            except Exception as exc:
+                # 冲突（SN 重复）/ 校验失败等：仅记该行失败，继续后续行。
+                result.failures.append(ImportFailure(row=row, errors=[f"导入失败：{exc}"]))
+        return result
 
     async def get_item(self, item_id: str) -> HardwareItemOut:
         obj = await self._require_item(item_id)

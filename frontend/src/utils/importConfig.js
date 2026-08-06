@@ -187,6 +187,32 @@ export function templateColumns(config) {
   }))
 }
 
+// 硬件导入/导出配置（独立个体台账；类型/分类按名称定位，与后端 HardwareImportItem 一致）。
+export const hardwareImportConfig = {
+  module: 'hardware',
+  title: '硬件',
+  fields: [
+    { key: 'name', label: '名称', required: true, hint: '硬件名称，如 32GB DDR4 内存条' },
+    { key: 'type_name', label: '类型', required: true, hint: '硬件类型名称（内存条 / CPU 处理器 / 电源模块…）' },
+    { key: 'category_name', label: '分类', required: true, hint: '该类型下的分类名称（DDR4 ECC…）' },
+    { key: 'brand', label: '品牌', required: false },
+    { key: 'sn', label: 'SN 号', required: false, hint: '建议填写；非空时全库唯一' },
+    { key: 'spec', label: '规格 / 型号', required: false },
+    { key: 'remark', label: '备注', required: false },
+  ],
+  // 导出列：与后端 HardwareItemOut 字段对齐（类型/分类带名称，便于回导）。
+  exportColumns: [
+    { key: 'name', label: '名称' },
+    { key: 'type_name', label: '类型' },
+    { key: 'category_name', label: '分类' },
+    { key: 'brand', label: '品牌' },
+    { key: 'sn', label: 'SN 号' },
+    { key: 'spec', label: '规格 / 型号' },
+    { key: 'status', label: '状态' },
+    { key: 'remark', label: '备注' },
+  ],
+}
+
 // 前端预校验：检查每行的必填字段是否为空（后端仍会做完整校验）。
 // 返回 [{ row, errors:[string] }]，row 为 1-based 数据行号。
 export function validateRequired(rows, config) {

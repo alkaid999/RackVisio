@@ -88,6 +88,32 @@ class HardwareItemUpdate(BaseModel):
     remark: Optional[str] = None
 
 
+class HardwareImportItem(BaseModel):
+    """硬件批量导入单行（与机柜/设备导入一致：按类型/分类**名称**定位，贴合表格用户）。
+
+    导入行 = 建库快照：建档即「在库」，SN 非空时全库唯一（与 create_item 规则一致）。
+    逐行 Pydantic 校验在 service 内完成，单行非法仅计入 failures、不波及其余行。
+    """
+
+    name: str = Field(..., min_length=1, max_length=128)
+    type_name: str = Field(..., min_length=1, max_length=64, description="硬件类型名称（如 内存条 / CPU 处理器）")
+    category_name: str = Field(..., min_length=1, max_length=64, description="分类名称（如 DDR4 ECC）")
+    brand: Optional[str] = Field(default=None, max_length=64)
+    sn: Optional[str] = Field(default=None, max_length=64)
+    spec: Optional[str] = Field(default=None, max_length=128)
+    remark: Optional[str] = None
+
+
+class HardwareImportRowsRequest(BaseModel):
+    """硬件批量导入请求体：前端解析文件为行后，以 JSON 数组提交。
+
+    注：items 声明为 list[dict]，**不在请求级做逐行强约束校验**，
+    避免单行非法触发整批 422（与机柜导入一致）。
+    """
+
+    items: list[dict]
+
+
 class HardwareItemOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

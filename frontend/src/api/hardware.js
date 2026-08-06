@@ -52,6 +52,14 @@ export default {
   removeItem(id) {
     return http.delete(`/hardwares/items/${id}`)
   },
+  // 导出（按筛选条件导出全部，不分页）。data = [HardwareItemOut]
+  exportAll(params) {
+    return http.get('/hardwares/export', { params })
+  },
+  // 批量导入（前端解析后的 JSON 行）。payload = { items: [HardwareImportItem] }。data = ImportResult
+  import(items) {
+    return http.post('/hardwares/import', { items })
+  },
   // ===== 变动历史 =====
   itemRecords(id, params) {
     return http.get(`/hardwares/items/${id}/records`, { params })

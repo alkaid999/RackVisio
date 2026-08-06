@@ -24,7 +24,21 @@
             <List class="h-4 w-4" />表格
           </button>
         </div>
-        <Button v-if="canEdit" class="ml-auto" @click="openCreate"><Plus class="h-4 w-4" />新建硬件</Button>
+        <!-- 导出（保留当前筛选条件，与机柜/机房一致） -->
+        <DropdownMenu>
+          <template #trigger>
+            <Button variant="outline" :loading="exporting">
+              <Download class="h-4 w-4" />导出<ChevronDown class="h-4 w-4" />
+            </Button>
+          </template>
+          <DropdownMenuContent align="end" class="w-40">
+            <DropdownMenuItem @click="onExport('xlsx')"><FileSpreadsheet class="h-4 w-4" />Excel (.xlsx)</DropdownMenuItem>
+            <DropdownMenuItem @click="onExport('csv')"><FileText class="h-4 w-4" />CSV (.csv)</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <!-- 导入（需 hardware:edit） -->
+        <Button v-if="canEdit" variant="outline" @click="importVisible = true"><Upload class="h-4 w-4" />导入</Button>
+        <Button v-if="canEdit" @click="openCreate"><Plus class="h-4 w-4" />新建硬件</Button>
       </div>
     </div>
 
@@ -78,6 +92,14 @@
           <Button variant="outline" @click="resetFilter"><Undo2 class="h-4 w-4" />重置</Button>
         </div>
       </div>
+    </div>
+
+    <!-- 批量操作条：仅表格模式支持批量删除（与机柜/机房列表一致） -->
+    <div v-if="canEdit && viewMode === 'table' && selected.size" class="batch-bar">
+      <span class="batch-count">已选 <b>{{ selected.size }}</b> 项</span>
+      <Button size="sm" variant="destructive" @click="batchDelete"><Trash2 class="h-4 w-4" />批量删除</Button>
+      <Button size="sm" variant="ghost" @click="toggleAllPage(true)">全选本页</Button>
+      <Button size="sm" variant="ghost" @click="clearSelection">取消选择</Button>
     </div>
 
     <!-- 加载态 -->
@@ -165,6 +187,14 @@
         <Table v-else class="table-fixed w-full">
           <TableHeader>
             <TableRow>
+              <TableHead v-if="canEdit" class="w-10">
+                <Checkbox
+                  :model-value="allPageSelected"
+                  :indeterminate="allPageIndeterminate"
+                  aria-label="全选本页"
+                  @update:model-value="(v) => toggleAllPage(v)"
+                />
+              </TableHead>
               <TableHead class="w-36">名称</TableHead>
               <TableHead class="w-48">类型 / 分类</TableHead>
               <TableHead class="w-32">品牌</TableHead>
@@ -175,7 +205,10 @@
             </TableRow>
           </TableHeader>
           <TableBody>
-            <TableRow v-for="item in store.items" :key="item.id">
+            <TableRow v-for="item in store.items" :key="item.id" :class="isSelected(item.id) ? 'bg-primary/5' : ''">
+              <TableCell v-if="canEdit">
+                <Checkbox :model-value="isSelected(item.id)" aria-label="选择行" @update:model-value="() => toggleRow(item.id)" />
+              </TableCell>
               <TableCell>
                 <!-- 名称单独（不与规格合并，与卡片一致） -->
                 <button class="block w-full truncate font-medium text-primary hover:underline" @click="openHistory(item)">
@@ -252,6 +285,13 @@
     <HardwareForm v-model:visible="formVisible" :mode="formMode" :item-id="formItemId" @saved="load" />
     <!-- 变动历史弹窗 -->
     <HardwareHistoryDialog v-model:visible="historyVisible" :item="historyItem" />
+    <!-- 批量导入弹窗（与 DataImportDialog v-model:visible 绑定；与机柜/机房一致） -->
+    <DataImportDialog
+      v-model:visible="importVisible"
+      :config="hardwareImportConfig"
+      :import-fn="(items) => hardwareApi.import(items)"
+      @imported="load"
+    />
   </div>
 </template>
 
@@ -262,7 +302,9 @@ import {
   LayoutGrid, List, Plus, Cpu, Search, Filter, Undo2,
   History, Layers, Copy, HardDrive,
   Package, Ruler, Barcode, Activity, Factory,
+  Download, Upload, ChevronDown, FileSpreadsheet, FileText, Trash2,
 } from 'lucide-vue-next'
+import hardwareApi from '@/api/hardware'
 import { useHardwareStore } from '@/stores/hardware'
 import { useAuthStore } from '@/stores/auth'
 import HardwareForm from '@/views/hardware/HardwareForm.vue'
@@ -271,6 +313,8 @@ import { useToast } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
 import { usePersistentFilter } from '@/composables/usePersistentFilter'
 import { backToValidPage } from '@/composables/useListReload'
+import { exportData } from '@/utils/excel'
+import { hardwareImportConfig } from '@/utils/importConfig'
 import {
   SELECT_ALL, toFilterParam,
   HARDWARE_STATUS_OPTIONS, HARDWARE_STATUS_COLORS,
@@ -286,10 +330,15 @@ import TableBody from '@/components/ui/table-body.vue'
 import TableRow from '@/components/ui/table-row.vue'
 import TableHead from '@/components/ui/table-head.vue'
 import TableCell from '@/components/ui/table-cell.vue'
+import Checkbox from '@/components/ui/checkbox.vue'
 import Spinner from '@/components/ui/spinner.vue'
 import EmptyState from '@/components/ui/empty-state.vue'
 import ListPager from '@/components/common/ListPager.vue'
 import EntityActions from '@/components/common/EntityActions.vue'
+import DataImportDialog from '@/components/common/DataImportDialog.vue'
+import DropdownMenu from '@/components/ui/dropdown-menu.vue'
+import DropdownMenuContent from '@/components/ui/dropdown-menu-content.vue'
+import DropdownMenuItem from '@/components/ui/dropdown-menu-item.vue'
 import Select from '@/components/ui/select.vue'
 import SelectTrigger from '@/components/ui/select-trigger.vue'
 import SelectContent from '@/components/ui/select-content.vue'
@@ -402,6 +451,82 @@ const formMode = ref('create')
 const formItemId = ref('')
 const historyVisible = ref(false)
 const historyItem = ref(null)
+const importVisible = ref(false)
+
+// ===== 批量选择（仅表格模式，与机柜/机房列表一致）=====
+const selected = ref(new Set())
+function isSelected(id) {
+  return selected.value.has(id)
+}
+function toggleRow(id) {
+  const next = new Set(selected.value)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  selected.value = next
+}
+function toggleAllPage(v) {
+  const next = new Set(selected.value)
+  const ids = store.items.map((i) => i.id)
+  if (v) ids.forEach((id) => next.add(id))
+  else ids.forEach((id) => next.delete(id))
+  selected.value = next
+}
+function clearSelection() {
+  selected.value = new Set()
+}
+const allPageSelected = computed(() => store.items.length > 0 && store.items.every((i) => selected.value.has(i.id)))
+const allPageIndeterminate = computed(() => {
+  const n = store.items.filter((i) => selected.value.has(i.id)).length
+  return n > 0 && n < store.items.length
+})
+// 批量删除：对选中硬件逐个调用删除接口（含 confirm 确认流程，与机柜/机房一致）。
+async function batchDelete() {
+  if (!selected.value.size) return
+  const ids = [...selected.value]
+  const ok = await confirm({
+    title: '批量删除硬件',
+    description: `确认删除选中的 ${ids.length} 件硬件？其全部变动记录将一并删除，此操作不可撤销。`,
+    variant: 'danger',
+    confirmText: '删除',
+    cancelText: '取消',
+  })
+  if (!ok) return
+  try {
+    const results = await Promise.allSettled(ids.map((id) => hardwareApi.removeItem(id)))
+    const failed = results.filter((r) => r.status === 'rejected').length
+    if (failed === 0) success(`已删除 ${ids.length} 件硬件`)
+    else success(`已删除 ${ids.length - failed} 件，失败 ${failed} 件`)
+    clearSelection()
+    await load()
+  } catch (e) {
+    // Promise.allSettled 不会 reject，此处仅兜底
+  }
+}
+
+// ===== 导出 / 导入（与机柜/机房列表一致）=====
+const exporting = ref(false)
+async function onExport(type) {
+  exporting.value = true
+  try {
+    const rows = await hardwareApi.exportAll({
+      type_id: toFilterParam(filter.typeId),
+      category_id: toFilterParam(filter.categoryId),
+      status: toFilterParam(filter.status),
+      keyword: filter.keyword || undefined,
+    })
+    await exportData({
+      rows,
+      columns: hardwareImportConfig.exportColumns,
+      filename: '硬件列表',
+      type,
+    })
+    success('导出成功')
+  } catch (e) {
+    // 导出失败由统一拦截器提示
+  } finally {
+    exporting.value = false
+  }
+}
 
 function openCreate() {
   formMode.value = 'create'
@@ -452,5 +577,25 @@ onMounted(async () => {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 16px;
+}
+/* 批量操作条（与机柜/机房/设备列表一致） */
+.batch-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  border-radius: 12px;
+  border: 1px solid hsl(var(--destructive) / 0.3);
+  background: hsl(var(--destructive) / 0.08);
+  animation: slide-in-up 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.batch-count {
+  font-size: 13px;
+  color: var(--muted-foreground);
+}
+.batch-count b {
+  color: var(--foreground);
+  font-weight: 600;
 }
 </style>

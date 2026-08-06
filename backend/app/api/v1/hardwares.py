@@ -27,12 +27,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_db
 from app.core.rbac import get_current_user, require_permission
-from app.schemas.common import ok, paginated
+from app.schemas.common import ImportResult, ok, paginated
 from app.schemas.hardware import (
     DeviceHardwareAssignRequest,
     HardwareCategoryCreate,
     HardwareCategoryOut,
     HardwareCategoryUpdate,
+    HardwareImportRowsRequest,
     HardwareItemCreate,
     HardwareItemOut,
     HardwareItemUpdate,
@@ -43,6 +44,7 @@ from app.schemas.hardware import (
     ReorderRequest,
 )
 from app.services.hardware_service import HardwareService
+from app.api.v1.streaming import _batched, export_json_stream
 
 
 def _operator(payload: dict) -> Optional[str]:
@@ -178,6 +180,46 @@ async def list_items(
         status=status, keyword=keyword,
     )
     return paginated(items, total, page, size)
+
+
+@router.get("/export", dependencies=[Depends(require_permission("hardware:view"))])
+async def export_hardwares(
+    db: AsyncSession = Depends(get_db),
+    type_id: Optional[str] = None,
+    category_id: Optional[str] = None,
+    status: Optional[str] = None,
+    keyword: Optional[str] = None,
+):
+    """按当前筛选条件导出全部硬件（不分页，与机柜/机房导出一致）。
+
+    分批查询 + 流式 JSON 传输（响应体格式与 ok() 一致，前端零改动）。
+    """
+    svc = HardwareService(db)
+
+    async def fetch(page: int, size: int):
+        items, total = await svc.list_items(
+            page=page, size=size, type_id=type_id, category_id=category_id,
+            status=status, keyword=keyword,
+        )
+        return [r.model_dump() for r in items], total
+
+    return export_json_stream(_batched(fetch))
+
+
+@router.post("/import", dependencies=[Depends(require_permission("hardware:edit"))])
+async def import_hardwares(
+    payload: HardwareImportRowsRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """批量导入硬件：前端解析文件为 JSON 行后提交，后端逐行校验并创建。
+
+    须注册在 ``/items`` 相关通配路由之前不冲突（路径独立），
+    类型/分类按名称定位；单行失败仅计入 failures、不波及其余行。
+    """
+    svc = HardwareService(db)
+    result = await svc.import_hardwares(payload.items, operator=_operator(current_user))
+    return ok(ImportResult.model_validate(result))
 
 
 @router.post("/items", dependencies=[Depends(require_permission("hardware:edit"))])
