@@ -327,7 +327,7 @@
 </template>
 
 <script setup>
-import { computed, ref, onMounted } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useToast } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
@@ -388,7 +388,9 @@ const route = useRoute()
 const router = useRouter()
 const store = useDeviceStore()
 const auth = useAuthStore()
-const deviceId = route.params.id
+// FIX：deviceId.value 必须响应式——从设备详情跳到对端设备详情时 Vue Router 复用同一组件实例
+// （仅 params 变化、不重挂载），一次性常量会导致页面仍展示旧（本端）设备数据。
+const deviceId = computed(() => route.params.id)
 // 编辑 / 删除设备、添加接口、上下架记录写操作均需 device:edit；建链 / 编辑链路 / 断开需 link:edit。
 const canEdit = computed(() => auth.hasPermission('device:edit'))
 const canEditLink = computed(() => auth.hasPermission('link:edit'))
@@ -470,7 +472,7 @@ function goRoom() {
 async function fetchLinks() {
   linkLoading.value = true
   try {
-    const r = await linkApi.byDevice(deviceId)
+    const r = await linkApi.byDevice(deviceId.value)
     links.value = Array.isArray(r) ? r : []
   } catch (e) {
     links.value = []
@@ -505,7 +507,7 @@ function toLinkDetail(lk) {
   const isHalf = !lk.peer_device_id
   return {
     id: lk.link_id,
-    source_device_id: deviceId,
+    source_device_id: deviceId.value,
     source_device_name: device.value?.name || '',
     source_interface_id: lk.local_interface_id,
     source_interface_name: lk.local_interface_name,
@@ -532,7 +534,7 @@ function onLinkSaved() {
 async function fetchInterfaces() {
   panelLoading.value = true
   try {
-    interfaces.value = await interfaceApi.list(deviceId)
+    interfaces.value = await interfaceApi.list(deviceId.value)
   } catch (e) {
     interfaces.value = []
   } finally {
@@ -594,7 +596,7 @@ async function onDetailDelete(iface) {
 }
 // 编辑设备后刷新详情，并重新获取（可能变更的）所属机柜名称。
 async function onDeviceSaved() {
-  await store.fetchOne(deviceId)
+  await store.fetchOne(deviceId.value)
   if (device.value.current_rack_id) {
     const rack = await rackApi.get(device.value.current_rack_id).catch(() => null)
     if (rack) rackName.value = `${rack.name}`
@@ -609,7 +611,7 @@ function goBack() {
 // —— 上架记录编辑 / 删除 ——
 async function reloadHistory() {
   try {
-    const r = await deviceApi.mountHistory(deviceId)
+    const r = await deviceApi.mountHistory(deviceId.value)
     mountEvents.value = Array.isArray(r) ? r : []
     mountPage.value = 1
     unmountPage.value = 1
@@ -675,7 +677,7 @@ async function onDelete() {
   })
   if (!ok) return
   try {
-    await deviceApi.remove(deviceId)
+    await deviceApi.remove(deviceId.value)
     success('删除成功')
     router.back()
   } catch (e) {
@@ -683,10 +685,20 @@ async function onDelete() {
   }
 }
 
-onMounted(async () => {
+// FIX：设备详情加载统一走 loadDetail——监听路由参数变化（immediate 覆盖首次进入）。
+// 修复「链路点对端设备 → 组件复用不刷新 → 仍显示本端」：/devices/A → /devices/B 时
+// Vue Router 复用同一组件实例（仅 params 变化），onMounted 不会再次触发，必须 watch。
+async function loadDetail(id) {
+  if (!id) return
+  // 切设备时先清空旧状态，避免渲染残留（旧数据闪一下本端）。
+  device.value = null
+  links.value = []
+  interfaces.value = []
+  mountEvents.value = []
+  rackName.value = ''
   // 上下架记录流水：独立请求，尽早并行拉取。
   deviceApi
-    .mountHistory(deviceId)
+    .mountHistory(id)
     .then((r) => {
       mountEvents.value = Array.isArray(r) ? r : []
       mountPage.value = 1
@@ -699,13 +711,15 @@ onMounted(async () => {
   fetchInterfaces()
   // 设备视角链路：并行拉取（钻取层）。
   fetchLinks()
-  await store.fetchOne(deviceId)
+  await store.fetchOne(id)
   // 拉取所属机柜名称（非上架设备无需拉取）。
   if (device.value.current_rack_id) {
     const rack = await rackApi.get(device.value.current_rack_id).catch(() => null)
     if (rack) rackName.value = `${rack.name}`
   }
-})
+}
+
+watch(() => route.params.id, (id) => loadDetail(id), { immediate: true })
 </script>
 
 <style scoped>

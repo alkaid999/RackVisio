@@ -215,7 +215,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useRackStore } from '@/stores/rack'
 import { useAuthStore } from '@/stores/auth'
@@ -255,7 +255,7 @@ const store = useRackStore()
 const auth = useAuthStore()
 const { success, error } = useToast()
 const { confirm } = useConfirm()
-const rackId = route.params.id
+const rackId = computed(() => route.params.id)
 // 机柜相关写操作（上架 / 编辑 / 删除 / 下架）均需 rack:edit；只读用户隐藏全部写按钮与拖拽上架交互。
 const canEdit = computed(() => auth.hasPermission('rack:edit'))
 
@@ -350,7 +350,7 @@ async function confirmMount() {
   }
   mounting.value = true
   try {
-    await store.mount(rackId, { device_id: mountForm.value.device_id, start_u: Number(mountForm.value.start_u) })
+    await store.mount(rackId.value, { device_id: mountForm.value.device_id, start_u: Number(mountForm.value.start_u) })
     success('上架成功')
     mountVisible.value = false
     await refreshAll()
@@ -367,7 +367,7 @@ async function onDropMount({ device_id, start_u }) {
   const dev = candidates.value.find((d) => d.id === device_id)
   mounting.value = true
   try {
-    await store.mount(rackId, { device_id, start_u })
+    await store.mount(rackId.value, { device_id, start_u })
     success(`已将「${dev?.name || '设备'}」上架到 ${start_u}U`)
     await refreshAll()
   } catch (e) {
@@ -382,7 +382,7 @@ async function quickMount(dev) {
   if (!ensureMountable()) return
   mounting.value = true
   try {
-    await store.mount(rackId, { device_id: dev.id, start_u: 1 })
+    await store.mount(rackId.value, { device_id: dev.id, start_u: 1 })
     success(`已将「${dev.name}」上架到 U1`)
     await refreshAll()
   } catch (e) {
@@ -408,7 +408,7 @@ async function onUnmountId(id) {
   })
   if (!ok) return
   try {
-    await store.unmount(rackId, { device_id: id })
+    await store.unmount(rackId.value, { device_id: id })
     success('下架成功')
     await refreshAll()
   } catch (e) {
@@ -432,14 +432,14 @@ function goBack() {
 }
 async function refreshAll() {
   await Promise.all([
-    store.fetchOne(rackId),
-    store.fetchDevices(rackId),
-    store.fetchUMap(rackId),
-    store.fetchCandidates(rackId),
+    store.fetchOne(rackId.value),
+    store.fetchDevices(rackId.value),
+    store.fetchUMap(rackId.value),
+    store.fetchCandidates(rackId.value),
   ])
 }
 async function onRackSaved() {
-  await Promise.all([store.fetchOne(rackId), store.fetchUMap(rackId)])
+  await Promise.all([store.fetchOne(rackId.value), store.fetchUMap(rackId.value)])
 }
 async function onDelete() {
   const ok = await confirm({
@@ -450,7 +450,7 @@ async function onDelete() {
   })
   if (!ok) return
   try {
-    await store.remove(rackId)
+    await store.remove(rackId.value)
     success('删除成功')
     router.push('/racks')
   } catch (e) {
@@ -458,14 +458,21 @@ async function onDelete() {
   }
 }
 
-onMounted(async () => {
-  try {
-    await store.fetchOne(rackId)
-    await Promise.all([store.fetchDevices(rackId), store.fetchUMap(rackId), store.fetchCandidates(rackId)])
-  } finally {
-    loading.value = false
-  }
-})
+// FIX：与设备/机房详情一致——路由参数变化（同组件复用）时重新加载，避免显示旧机柜。
+watch(
+  () => route.params.id,
+  async (id) => {
+    if (!id) return
+    loading.value = true
+    try {
+      await store.fetchOne(id)
+      await Promise.all([store.fetchDevices(id), store.fetchUMap(id), store.fetchCandidates(id)])
+    } finally {
+      loading.value = false
+    }
+  },
+  { immediate: true }
+)
 </script>
 
 <style scoped>

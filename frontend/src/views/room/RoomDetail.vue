@@ -66,7 +66,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Map, MapPin, ArrowRight, Pencil, Trash2, ChevronLeft, Heading, Hash, Tag, Building2, Layers, Signal, ClipboardList, BarChart3, LayoutGrid } from 'lucide-vue-next'
 import { useRoomStore } from '@/stores/room'
@@ -86,7 +86,7 @@ const router = useRouter()
 const store = useRoomStore()
 const { success } = useToast()
 const { confirm } = useConfirm()
-const roomId = route.params.id
+const roomId = computed(() => route.params.id)
 const auth = useAuthStore()
 // 编辑机房需 room:edit。机柜的增删改由全局「机柜列表」按 rack:edit 自行判断，本页不再内嵌机柜操作。
 const canEditRoom = computed(() => auth.hasPermission('room:edit'))
@@ -107,11 +107,11 @@ function goBack() {
 }
 // 平面图内机柜位置 / 状态变更后，刷新本页容量统计，保持数据一致
 function onPlanUpdated() {
-  store.fetchStats(roomId)
+  store.fetchStats(roomId.value)
 }
 // 机房信息变更后刷新详情与统计
 async function onRoomSaved() {
-  await Promise.all([store.fetchOne(roomId), store.fetchStats(roomId)])
+  await Promise.all([store.fetchOne(roomId.value), store.fetchStats(roomId.value)])
 }
 // 删除机房：物理删除，需 room:edit 权限。删除前后端均校验机房内不得有已上架设备（有设备则拦截，需先下架）；空机柜随机房一并删除。
 async function onDeleteRoom() {
@@ -123,7 +123,7 @@ async function onDeleteRoom() {
   })
   if (!ok) return
   try {
-    await store.remove(roomId)
+    await store.remove(roomId.value)
     success('删除成功')
     router.push('/rooms')
   } catch (e) {
@@ -131,12 +131,19 @@ async function onDeleteRoom() {
   }
 }
 
-onMounted(async () => {
-  try {
-    await store.fetchOne(roomId)
-    await Promise.all([store.fetchStats(roomId)])
-  } finally {
-    loading.value = false
-  }
-})
+// FIX：与设备详情一致——路由参数变化（同组件复用）时重新加载，避免显示旧机房。
+watch(
+  () => route.params.id,
+  async (id) => {
+    if (!id) return
+    loading.value = true
+    try {
+      await store.fetchOne(id)
+      await Promise.all([store.fetchStats(id)])
+    } finally {
+      loading.value = false
+    }
+  },
+  { immediate: true }
+)
 </script>
